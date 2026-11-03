@@ -161,6 +161,15 @@ if (CFG.times && CFG.times.length === LEGACY_TIMES.length &&
 
 // ------------------------------------------------------------------ 工具
 
+/** 绑定事件，元素不在就跳过。
+ *  空教室页与考试视图 2026-11-03 已按用户要求删除，但绑定语句还留在原地；
+ *  直接 $('rmGo').addEventListener 会在加载时抛 null 并让**整份 app.js 罢工**
+ *  （症状：页面白屏、控制台只说 switchTab 未定义）。 */
+function boundEl(id, ev, fn) {
+  const el = typeof $ === 'function' ? $(id) : null;
+  if (el) el.addEventListener(ev, fn);
+}
+
 const $ = (id) => document.getElementById(id);
 const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
 
@@ -612,12 +621,12 @@ function visibleDays() {
    那是别的学校的内容，整块删除，不保留占位。
    公告仍在「功能」页里（见 SUB_PARENT.notice），抓到本校公告源后再说要不要升格。 */
 const TABS = ['schedule', 'exams', 'campus', 'me'];
-const SUBPAGES = ['calendar', 'rooms', 'accounts', 'notice'];
+const SUBPAGES = ['calendar', 'accounts', 'notice'];
+/* 2026-11-03：用户明确「空教室直接删了」——页面与入口一并移除。 */
 /* 子页是从哪个 tab 进去的 —— 返回时回那里，底部也要高亮那一个。
    原来只有校历/空教室两个、都挂在课表下，所以写死成 'schedule'；
    0.14.0 的「账号管理」是从「我的」进去的，再写死就会高亮错 tab。 */
-const SUB_PARENT = { calendar: 'schedule', rooms: 'schedule',
-                      accounts: 'me', notice: 'campus' };
+const SUB_PARENT = { calendar: 'schedule', accounts: 'me', notice: 'campus' };
 
 /* 当前真正在显示哪一页。
    🔴 不能拿 `.tab.active` 反推：子页亮的是「课表」，在空教室页按返回
@@ -632,7 +641,7 @@ function switchTab(name) {
   CUR_PAGE = name;
   const hl = SUB_PARENT[name] || name;
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === hl));
-  if (name === 'exams') { renderExamView(); renderExams(); renderGrades(); cxEnter(); }
+  if (name === 'exams') { renderExamView(); renderGrades(); cxEnter(); }
   if (name === 'me') renderMe();
   if (name === 'accounts') renderAccounts();
   // 功能：这一页现在只剩门户（一卡通/办事）+ 公告入口，画本机缓存那份就够。
@@ -2119,9 +2128,7 @@ document.addEventListener('visibilitychange', () => {
 /* 空教室和校历是课表页的「子页」（底部固定 5 个 tab 之后收进来的）。
    进出都走 switchTab —— 不要自己改 hidden，否则 CUR_PAGE、底部高亮、
    系统返回键三处会互相打架。 */
-$('wkRooms').addEventListener('click', () => switchTab('rooms'));
 $('calBack').addEventListener('click', () => switchTab('schedule'));
-$('rmBack').addEventListener('click', () => switchTab('schedule'));
 
 // ------------------------------------------------------------------ 成绩
 
@@ -2204,6 +2211,141 @@ function renderGpaTrend(g) {
 function scoreNum(c) {
   const n = parseFloat(c.final || c.score);
   return isNaN(n) ? NaN : n;
+}
+
+/* ---------------- 课程（2026-11-03 新增，取代原来的「考试」视图） ----------------
+ * 数据只用已经同步下来的课表 —— 不额外发请求，切过去就是秒开。
+ *
+ * 为什么要按课程名聚合：课表里同一门课会拆成好几条（不同星期/不同教室/
+ * 不同周次，比如「计算机网络」单周在时-415、双周在资-115），
+ * 直接铺开会让人以为选了七八门同一门课。
+ *
+ * ⚠️ 用户设想里有一条「哪些科目有学习通对应内容，在后面做个小标注」——
+ *    这需要超星那边接通并知道每门课对应哪门课，现在做不到（fid 都还没配）。
+ *    所以这里**不放假标签**：宁可没有，也不能标错。等学习通接通再加。
+ */
+function courseGroups() {
+  const rows = ((DATA && DATA.courses) || []).filter(isSlotCourse);
+  const map = new Map();
+  rows.forEach((c) => {
+    const key = String(c.name || '').trim();
+    if (!key) return;
+    let g = map.get(key);
+    if (!g) {
+      g = { name: key, teachers: [], rooms: [], weeks: new Set(), slots: [] };
+      map.set(key, g);
+    }
+    String(c.teacher || '').split(/[,，、]/).forEach((t) => {
+      const v = t.trim();
+      if (v && g.teachers.indexOf(v) < 0) g.teachers.push(v);
+    });
+    roomList(c.room).forEach((r) => {
+      if (r && g.rooms.indexOf(r) < 0) g.rooms.push(r);
+    });
+    (c.weeks || []).forEach((w) => g.weeks.add(w));
+    (c.slots || []).forEach((sl) => {
+      if (!g.slots.some((x) => x.day === sl.day && x.period === sl.period)) g.slots.push(sl);
+    });
+  });
+  return Array.from(map.values()).map((g) => {
+    const ws = Array.from(g.weeks).sort((a, b) => a - b);
+    g.weeks = ws;
+    g.slots.sort((a, b) => (a.day - b.day) || (a.period - b.period));
+    return g;
+  }).sort((a, b) => (a.slots[0] ? a.slots[0].day - (b.slots[0] ? b.slots[0].day : 0) : 0));
+}
+
+/** 时段 → 「周二 1-2 节」。连续节次收成区间，别把 1,2,3,4 平铺。 */
+function slotText(g) {
+  const byDay = new Map();
+  g.slots.forEach((s) => {
+    if (!byDay.has(s.day)) byDay.set(s.day, []);
+    byDay.get(s.day).push(s.period + 1);
+  });
+  const out = [];
+  Array.from(byDay.keys()).sort((a, b) => a - b).forEach((d) => {
+    const ps = byDay.get(d).sort((a, b) => a - b);
+    const ranges = [];
+    let s0 = ps[0], prev = ps[0];
+    for (let i = 1; i <= ps.length; i++) {
+      const cur = ps[i];
+      if (cur !== prev + 1) {
+        ranges.push(s0 === prev ? String(s0) : s0 + '-' + prev);
+        s0 = cur;
+      }
+      prev = cur;
+    }
+    out.push('周' + DAY_CN[d] + ' ' + ranges.join('、') + ' 节');
+  });
+  return out.join(' · ');
+}
+
+/** 周次 → 人话。
+ *  · 等差（步长 1 或 2）压成区间：「1-16 周」「2-16 周（双周）」
+ *  · 其它情况列区间：「7、11、15 周」
+ *  🔴 别乱贴「单周/双周」：7、11、15 全是奇数，但 9 周、13 周并没有课，
+ *     标成「单周」就是假话。只有**连续的**奇/偶数列才配这个标签。 */
+function weeksText(ws) {
+  if (!ws.length) return '';
+  if (ws.length === 1) return '第 ' + ws[0] + ' 周';
+  const step = ws[1] - ws[0];
+  const uniform = (step === 1 || step === 2) &&
+    ws.every((w, i) => i === 0 || w - ws[i - 1] === step);
+  if (uniform) {
+    const tail = step === 2 ? (ws[0] % 2 === 1 ? '（单周）' : '（双周）') : '';
+    return ws[0] + '-' + ws[ws.length - 1] + ' 周' + tail;
+  }
+  const ranges = [];
+  let s0 = ws[0], prev = ws[0];
+  for (let i = 1; i <= ws.length; i++) {
+    const cur = ws[i];
+    if (cur !== prev + 1) {
+      ranges.push(s0 === prev ? String(s0) : s0 + '-' + prev);
+      s0 = cur;
+    }
+    prev = cur;
+  }
+  return ranges.join('、') + ' 周';
+}
+
+function renderCourses() {
+  const list = courseGroups();
+  const hasData = list.length > 0;
+  $('coEmpty').hidden = hasData;
+  $('coBody').hidden = !hasData;
+  if (!hasData) {
+    const bound = !!(DATA && DATA.profile && DATA.profile.studentId) || BOUND;
+    $('coEmptyTitle').textContent = bound ? '这学期没有排课' : '还没有课程';
+    $('coEmptyText').textContent = bound
+      ? '教务系统里这一学期的课表是空的。如果不对，去「我的 → 同步教务处数据」再拉一次。'
+      : '绑定教务处账号后会自动同步一次。';
+    $('goBind4').hidden = bound;
+    return;
+  }
+  const credits = (DATA.profile && DATA.profile.credits) || '';
+  const term = (curTT() && curTT().semester) || '';
+  $('coSummary').innerHTML =
+    '<div class="cosum-row">' +
+      '<div><b>' + list.length + '</b><span>门课</span></div>' +
+      (credits ? '<div><b>' + esc(credits) + '</b><span>学分</span></div>' : '') +
+      '<div><b>' + list.reduce((n, g) => n + g.slots.length, 0) + '</b><span>个时段</span></div>' +
+    '</div>' +
+    (term ? '<p class="cosum-term">' + esc(term) + '</p>' : '') +
+    '<p class="cosum-note">按「周几」排序。同一门课在不同教室/不同周次上，会合并成一条。</p>';
+
+  $('coList').innerHTML = list.map((g) => {
+    const meta1 = [g.teachers.join(' / '), g.rooms.join(' / ')].filter(Boolean).join(' · ');
+    const meta2 = [slotText(g), weeksText(g.weeks)].filter(Boolean).join(' · ');
+    return '<div class="courseitem">' +
+      '<i class="ci-bar c' + colorSlot(g.name) + '"></i>' +
+      '<div class="ci-main">' +
+        '<div class="ci-name">' + esc(g.name) + '</div>' +
+        (meta1 ? '<div class="ci-meta">' + esc(meta1) + '</div>' : '') +
+        (meta2 ? '<div class="ci-meta dim">' + esc(meta2) + '</div>' : '') +
+      '</div>' +
+      '<div class="ci-n">' + g.slots.length + '<span>节/周</span></div>' +
+    '</div>';
+  }).join('');
 }
 
 function renderGrades() {
@@ -2833,7 +2975,7 @@ function addExamToCalendar(ev) {
 }
 
 /** 列表里的按钮是每次重画出来的，所以用事件委托，只绑一次。 */
-$('exList').addEventListener('click', (e) => {
+boundEl('exList', 'click', (e) => {
   if (!e.target.closest) return;
   // 0.35.0：已考完那一段默认是收着的，点一下展开（再点收起）
   if (e.target.closest('#exFold')) {
@@ -2934,8 +3076,10 @@ function renderExamChips(terms) {
  * 🔴 选中的视图记进 CFG（`examView`）：连着看成绩的那几天，
  *    不该每次进来都先点一下「成绩」。默认是「学习通」。
  */
-const EX_VIEWS = ['cx', 'exam', 'grade', 'credit'];
-const EX_HEAD = { cx: '学习', exam: '考试', grade: '成绩', credit: '学分' };
+// 2026-11-03：用户要求「把原本考试那一页改成课程」。考试数据本校还没抓，
+// 摆着一个空页不如换成每天都会看的课程清单。
+const EX_VIEWS = ['cx', 'course', 'grade', 'credit'];
+const EX_HEAD = { cx: '学习', course: '课程', grade: '成绩', credit: '学分' };
 
 function renderExamView() {
   const v = EX_VIEWS.indexOf(CFG.examView) >= 0 ? CFG.examView : 'cx';
@@ -2948,6 +3092,7 @@ function renderExamView() {
     b.classList.toggle('on', b.dataset.view === v);
   });
   if (v === 'cx') cxPaint();
+  if (v === 'course') renderCourses();
   if (v === 'grade') renderGrades();
   if (v === 'credit') renderCredit();
 }
@@ -2966,6 +3111,10 @@ $('exSeg').querySelectorAll('.seg-btn').forEach((b) => {
 });
 
 function renderExams() {
+  // 🔴 2026-11-03 用户明确「考试那里直接删了」⇒ 视图和 DOM 都移除了。
+  //    函数保留成空跑：同步后仍有几处会调用它来「顺手刷新一下」，
+  //    删函数会连带把那些调用点弄崩。没有 DOM 就直接返回。
+  if (!$('exList')) return;
   const ex = (DATA && DATA.exams) || null;
   const curId = (ex && ex.semesterId) || '';
   const terms = examTerms();
@@ -3471,7 +3620,7 @@ function renderRoomFilter() {
     box.innerHTML = '<div class="rmfilter-err">筛选项没取到：' +
       esc(ROOM.optsErr || '未知原因') + '。直接查也能用，只是不能按楼筛。</div>' +
       '<button class="btn block" id="rmOptsRetry">重试</button>';
-    $('rmOptsRetry').addEventListener('click', () => loadRoomOptions(true));
+    boundEl('rmOptsRetry', 'click', () => loadRoomOptions(true));
     return;
   }
 
@@ -3497,14 +3646,14 @@ function renderRoomFilter() {
   const o = ROOM.opts;
   const anyGroup = (list) => [{ items: [{ id: '', name: '不限' }].concat(list || []) }];
 
-  $('rmCampus').addEventListener('click', async () => {
+  boundEl('rmCampus', 'click', async () => {
     const v = await openPick('校区', '先选校区，教学楼是全校的', anyGroup(o.campuses), ROOM.campusId);
     if (v === null || v === ROOM.campusId) return;
     ROOM.campusId = v;
     roomChanged();
   });
 
-  $('rmBuilding').addEventListener('click', async () => {
+  boundEl('rmBuilding', 'click', async () => {
     const v = await openPick('教学楼', '按楼号排；南区和各区字母楼放在「其他」',
       roomBuildingGroups(o.buildings), ROOM.buildingId);
     if (v === null || v === ROOM.buildingId) return;
@@ -3512,19 +3661,19 @@ function renderRoomFilter() {
     roomChanged();
   });
 
-  $('rmType').addEventListener('click', async () => {
+  boundEl('rmType', 'click', async () => {
     const v = await openPick('教室类型', '', anyGroup(o.types), ROOM.typeId);
     if (v === null || v === ROOM.typeId) return;
     ROOM.typeId = v;
     roomChanged();
   });
 
-  $('rmSeats').addEventListener('change', () => {
+  boundEl('rmSeats', 'change', () => {
     // 只留数字：服务端认的是纯数字，输个「50人」过去它会当没填。
     ROOM.seats = String($('rmSeats').value || '').replace(/\D/g, '');
     roomChanged();
   });
-  $('rmName').addEventListener('change', () => {
+  boundEl('rmName', 'change', () => {
     ROOM.name = String($('rmName').value || '').trim();
     roomChanged();
   });
@@ -3654,6 +3803,8 @@ function renderRoomResult() {
 }
 
 function renderRooms() {
+  // 同上：空教室页已删（用户 2026-11-03），没 DOM 就什么都不做。
+  if (!$('rmDate')) return;
   const bound = !!(DATA && DATA.profile && DATA.profile.studentId);
   $('rmEmpty').hidden = bound;
   $('rmMain').hidden = !bound;
@@ -4731,7 +4882,9 @@ function cxPaintLogin() {
 // 「练习」是 0.39.0 加的：随堂练习（type 42）和互动练习（68）以前落在「其他」里，
 // 和「白板 / 教案 / PDF 文档」挤同一格 —— 那格是垃圾桶，真正的任务淹在里面
 // 等于没提示。用户 2026-11-01 原话：「还很容易错过作业和考试，还有随堂练习」。
-const CX_KINDS = ['work', 'exam', 'quiz', 'sign', 'topic', 'notice', 'other'];
+// 2026-11-03 用户要求：作业放最前，签到第二 —— 这两个是天天要看的，
+// 考试/练习一学期才几次，排后面。
+const CX_KINDS = ['work', 'sign', 'exam', 'quiz', 'topic', 'notice', 'other'];
 const CX_KIND_NAME = {
   work: '作业', exam: '考试', quiz: '练习', sign: '签到',
   topic: '讨论', notice: '通知', other: '其他',
@@ -6270,29 +6423,30 @@ $('btnClearCache').addEventListener('click', async () => {
 
 $('goBind').addEventListener('click', () => switchTab('me'));
 $('goBind2').addEventListener('click', () => switchTab('me'));
-$('goBind3').addEventListener('click', () => switchTab('me'));
+boundEl('goBind3', 'click', () => switchTab('me'));
 $('goBind4').addEventListener('click', () => switchTab('me'));
-$('goBind5').addEventListener('click', () => switchTab('me'));
-$('exRetry').addEventListener('click', () => {
+$('goBind4').addEventListener('click', () => switchTab('me'));
+boundEl('goBind5', 'click', () => switchTab('me'));
+boundEl('exRetry', 'click', () => {
   const sid = examTerm;
   delete EXAM_ERR[sid];
   loadExamTerm(sid);
 });
 
 // -- 空闲教室
-$('rmGo').addEventListener('click', () => queryRooms());
-$('rmRefresh').addEventListener('click', () => {
+boundEl('rmGo', 'click', () => queryRooms());
+boundEl('rmRefresh', 'click', () => {
   if (!DATA) { toast('先绑定账号'); return; }
   queryRooms();
 });
-$('rmRetry').addEventListener('click', () => queryRooms());
-$('rmFilterRow').addEventListener('click', () => {
+boundEl('rmRetry', 'click', () => queryRooms());
+boundEl('rmFilterRow', 'click', () => {
   ROOM.filterOpen = !ROOM.filterOpen;
   renderRoomFilter();
   // 展开的时候顺手把筛选项拉回来（上次可能因为没网失败了）
   if (ROOM.filterOpen && !ROOM.opts) loadRoomOptions();
 });
-$('rmDate').addEventListener('change', () => {
+boundEl('rmDate', 'change', () => {
   const v = $('rmDate').value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;   // 用户点了取消
   if (v === ROOM.date) return;

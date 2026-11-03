@@ -49,7 +49,7 @@
     jw: {
       base: 'https://jw.shengda.edu.cn:8090',
       cas_service: 'http://jw.shengda.edu.cn:8090/caslogin',
-      home_path: '/frame/homes.html',
+      home_path: '/frame/homes.action',
       menu_context_path: '/frame/normalusemenu/getBreadcrumbsInfoNew.action',
       droplist_path: '/frame/droplist/getDropLists.action',
       term_path: '/jw/common/showYearTerm.action',
@@ -1010,7 +1010,13 @@
   /** 唯一出口：写端点特征 URL 一律拒绝发出。 */
   async function kingoReq(method, url, body, referer, headers) {
     if (WRITE_RE.test(url)) throw new EamsError('达小助是只读客户端，该操作(写)不被允许');
-    return http(method, url, body || '', referer || '', Math.round((CFG.jw.polite_delay_sec || 0.35) * 1000), headers);
+    // 🔴 浏览器对同源 POST 一律带 Origin + Referer（HAR 实测）。
+    //    少这两个头时青果可能回「无效访问请求」——它按来源页判菜单上下文。
+    var h = {};
+    for (var k in (headers || {})) h[k] = headers[k];
+    if (h.Origin == null) h.Origin = cfgUrl(CFG.jw.base);
+    if (!referer) referer = CFG.jw.home_path;
+    return http(method, url, body || '', referer, Math.round((CFG.jw.polite_delay_sec || 0.35) * 1000), h);
   }
 
   /** CAS 票据 cookie 读取：先问原生 java.net 罐，再兜 WebView 罐。 */
@@ -1083,8 +1089,16 @@
     var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + path, '', CFG.jw.home_path);
     var ctx = kingoJson(r.body);
     if (!ctx || !ctx.xn) {
-      kingoGuard(r.body, '学期上下文');
-      throw new EamsError('学期上下文没取到（响应不是预期 JSON）');
+      // 带上 HTTP 状态和响应长度：没有这两个数，
+      // 「没打开」和「返回了别的东西」在用户那里长得一模一样。
+      var detail = '（HTTP ' + (r.status || '?') + ' · ' + String(r.body || '').length +
+                   ' 字节 · 会话Cookie:' + (kingoCk('JSESSIONID') ? '有' : '没有') + '）';
+      try {
+        kingoGuard(r.body, '学期上下文');
+      } catch (e) {
+        throw new EamsError(e.message + detail, e.kind);
+      }
+      throw new EamsError('学期上下文没取到' + detail + '，内容不是预期 JSON');
     }
     kingoCtx = ctx;
     return ctx;
@@ -1657,8 +1671,10 @@
     var path = conf.path || '';
     if (!path) throw new EamsError('课表入口没配置（config 的 pages.timetable.path）');
     await ensureKingoSession();
-    await kingoMenu('timetable');
+    // 🔴 顺序必须和浏览器一致（HAR 实测）：首页 → showYearTerm → 菜单 → 目标页。
+    //    先设菜单上下文再调 showYearTerm，青果按「当前上下文」校验会回 1098。
     var ctx = await kingoContext();
+    await kingoMenu('timetable');
     var tpl = conf.params_b64 || 'xn={xn}&xq={xq}&xh={xh}';
     var raw = tpl.replace('{xn}', ctx.xn || '')
                  .replace('{xq}', ctx.xqM == null ? '0' : ctx.xqM)
@@ -1692,6 +1708,7 @@
     var rows;
     try {
       await ensureKingoSession();
+      await kingoContext();          // 同上：先拿学期上下文，再动菜单
       await kingoMenu('score');
       // 🔴 变量别叫 form：本文件顶层有个 form() 拼表单体的函数，重名会被遮蔽
       var formPage = await kingoReq('GET', cfgUrl(CFG.jw.base) + path +

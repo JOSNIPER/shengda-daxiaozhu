@@ -2720,3 +2720,54 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .rawrow:last-child { border-bottom: 0; }
 .rawk { display: inline-block; min-width: 74px; color: var(--muted); }
 .rawv { color: var(--ink); word-break: break-all; }
+
+/* ---------------- 课程页（2026-11-03 新增，取代原「考试」视图） ----------------
+   结构参考成绩页：顶部一张汇总卡 + 下面一条条列表。
+   左边那条竖色带用的是课表同一套 c1..cN 色板，让「课表上的颜色」
+   和「课程清单里的颜色」对得上——同一个名字永远同一个颜色。 */
+.cosum { padding: 4px 16px 0; }
+.cosum-row {
+  display: flex; align-items: flex-end; gap: 22px;
+  padding: 14px 16px; border-radius: var(--r-card);
+  background: var(--row-bg); border: .5px solid var(--line);
+}
+.cosum-row b {
+  display: block; font-size: 22px; font-weight: 700;
+  letter-spacing: -.5px; line-height: 1.1;
+}
+.cosum-row span { font-size: 11px; color: var(--sub); }
+.cosum-term { font-size: 12px; color: var(--sub); margin: 10px 4px 0; }
+.cosum-note { font-size: 11px; color: var(--ter); margin: 6px 4px 0; line-height: 1.6; }
+
+.colist {
+  margin: 12px 16px 0;
+  border-radius: var(--r-card); overflow: hidden;
+  background: var(--row-bg); border: .5px solid var(--line);
+}
+.courseitem {
+  display: flex; align-items: stretch; gap: 12px;
+  padding: 12px 14px 12px 0;
+  border-bottom: .5px solid var(--line);
+}
+.courseitem:last-child { border-bottom: 0; }
+/* 竖色带：贴左边、占满整条高度。用 border-radius 让两头圆一点，
+   但左边要贴着卡片边缘，所以只在右侧圆。 */
+.ci-bar {
+  flex: 0 0 4px; align-self: stretch;
+  border-radius: 0 3px 3px 0; margin: -12px 0;
+}
+.ci-main { flex: 1 1 auto; min-width: 0; }
+.ci-name {
+  font-size: 15px; font-weight: 500; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ci-meta {
+  font-size: 11px; color: var(--sub); margin-top: 3px; line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ci-meta.dim { color: var(--ter); }
+.ci-n {
+  flex: 0 0 auto; align-self: center; text-align: right;
+  font-size: 15px; font-weight: 600; color: var(--sub);
+}
+.ci-n span { display: block; font-size: 10px; font-weight: 400; color: var(--ter); }

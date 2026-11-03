@@ -54,15 +54,6 @@
         <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
       </button>
       <button class="wk-today" id="wkToday">今天</button>
-      <!-- 空教室从底部 tab 收进来（底部固定 5 个）。放这里而不是藏进「我的」：
-           找自习室和看课表是同一件事的两个方向 —— 「我这会儿有课吗 / 哪间空着」。
-           🔴 以前这里只有一个门图标，用户根本不知道那是干嘛的（用户原话：
-              「就一个图标，用户很难知道那是干嘛的」）⇒ 改成**图标 + 文字**。
-              图标负责「教室」的联想，文字负责说清楚。 -->
-      <button class="wk-btn wk-lab" id="wkRooms" aria-label="找空教室">
-        <svg viewBox="0 0 24 24"><path d="M5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M3 20h18"/><circle cx="14.6" cy="13" r="1"/></svg>
-        <span class="wk-lab-t">空教室</span>
-      </button>
       <!-- 视图切换以前是个网格图标 —— 网格能表示「周视图」，但表示不了
            「点一下会换一种」。改成直接写当前视图的一个字，点了就换，
            跟分段控件的习惯一致。 -->
@@ -146,7 +137,7 @@
          进去先看学习通，考试 / 成绩 / 学分是它的子选项。 -->
     <div class="seg" id="exSeg">
       <button class="seg-btn on" data-view="cx">学习通</button>
-      <button class="seg-btn" data-view="exam">考试</button>
+      <button class="seg-btn" data-view="course">课程</button>
       <button class="seg-btn" data-view="grade">成绩</button>
       <button class="seg-btn" data-view="credit">学分</button>
     </div>
@@ -159,33 +150,23 @@
       <div id="cxBody"></div>
     </div>
 
-    <!-- ---------------- 考试视图 ---------------- -->
-    <div class="scroll" id="exViewExam">
-      <!-- 选学期。放在 empty / body 两个分支**外面**：
-           某一学期没排考时列表是空的，chip 要是也跟着藏起来，
-           人就再也切不回别的学期了。 -->
-      <div class="chips" id="exChips" hidden></div>
-
-      <!-- 绑定后会把「他在读的每一学期」的考试都提前拉一遍，
-           这样切学期是瞬间出结果。这里只是把进度说出来 ——
-           不然用户会以为切过去那一下的等待是白等的。 -->
-      <div class="expf" id="exPrefetch" hidden></div>
-
-      <div class="exloading" id="exLoading" hidden>正在取这一学期的考试安排…</div>
-
-      <div class="empty" id="exEmpty" hidden>
+    <!-- ---------------- 课程视图（2026-11-03 新增，取代原来的「考试」） ----------------
+         用户原话：「把原本考试的那一页改成课程，打开之后显示本学期课程」。
+         数据只用已经拿到的课表（不额外请求），按课程名聚合成一张清单。
+         ⚠️ 「这门课有没有学习通内容」需要超星那边接通才能标 —— 现在只留位置，
+            不假装知道。-->
+    <div class="scroll" id="exViewCourse" hidden>
+      <div class="empty" id="coEmpty" hidden>
         <div class="empty-ico">
-          <svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-3.5L5 21V4a1 1 0 0 1 1-1z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M8 7h8M8 11h8"/></svg>
         </div>
-        <h2 id="exEmptyTitle">还没有考试安排</h2>
-        <p id="exEmptyText">绑定账号后会自动同步一次。</p>
-        <button class="btn primary" id="goBind3" hidden>去绑定</button>
-        <button class="btn" id="exRetry" hidden>再试一次</button>
+        <h2 id="coEmptyTitle">还没有课程</h2>
+        <p id="coEmptyText">绑定账号后会自动同步一次。</p>
+        <button class="btn primary" id="goBind4" hidden>去绑定</button>
       </div>
-
-      <div id="exBody" hidden>
-        <div class="exsum" id="exSummary"></div>
-        <div class="exlist" id="exList"></div>
+      <div id="coBody" hidden>
+        <div class="cosum" id="coSummary"></div>
+        <div class="colist" id="coList"></div>
       </div>
     </div>
 
@@ -336,83 +317,6 @@
   </section>
 
   <!-- ================= 空闲教室 ================= -->
-  <section class="page" id="page-rooms" hidden>
-    <header class="pagehead">
-      <button class="ghost-btn back" id="rmBack" aria-label="返回课表">
-        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
-      <h1>空闲教室</h1>
-      <button class="ghost-btn" id="rmRefresh" aria-label="重新查询">
-        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
-      </button>
-    </header>
-
-    <div class="scroll">
-      <div class="empty" id="rmEmpty" hidden>
-        <div class="empty-ico">
-          <svg viewBox="0 0 24 24"><path d="M5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M3 20h18"/><circle cx="14.6" cy="13" r="1"/></svg>
-        </div>
-        <h2>还没绑定教务处账号</h2>
-        <p>空教室是学校教务系统里的实时数据，要先绑定才能查。</p>
-        <button class="btn primary" id="goBind4">去绑定</button>
-      </div>
-
-      <div id="rmMain" hidden>
-        <!-- 查什么：日期 + 节次。这两项每次都会变，所以放在最上面，
-             而且只用点一下（chip），不让人去滚日期轮盘。 -->
-        <div class="card rmq">
-          <div class="rmq-row">
-            <span class="rmq-k">日期</span>
-            <div class="chips rmq-chips" id="rmDays"></div>
-          </div>
-          <div class="rmq-row">
-            <span class="rmq-k">节次</span>
-            <div class="chips rmq-chips" id="rmPeriods"></div>
-          </div>
-          <button class="btn primary block" id="rmGo">查询空闲教室</button>
-          <!-- 原生日期选择器：安卓 WebView 里点一下就是系统日历，
-               比自己做一套滚轮靠谱得多。放在按钮旁边看不见的地方，
-               由「其他」那个 chip 触发。 -->
-          <input type="date" id="rmDate" class="rmdate">
-        </div>
-
-        <!-- 筛选默认收起：绝大多数时候只想知道「这一节哪儿空着」，
-             三个下拉天天摆在最上面只会把结果挤到屏幕外。 -->
-        <div class="card">
-          <button class="row tap" id="rmFilterRow">
-            <span class="k">筛选</span>
-            <span class="rowend">
-              <span class="v muted" id="rmFilterSum">不限</span>
-              <svg class="rowico" id="rmFilterIco" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-            </span>
-          </button>
-          <div class="rmfilter" id="rmFilterBox" hidden></div>
-        </div>
-
-        <div class="rmloading" id="rmLoading" hidden>正在查空教室…</div>
-
-        <div class="card warncard" id="rmErrCard" hidden>
-          <h2>没查成</h2>
-          <p class="sub" id="rmErrText"></p>
-          <button class="btn block" id="rmRetry">再试一次</button>
-        </div>
-
-        <div class="empty rmfirst" id="rmFirst" hidden>
-          <h2>选好日期和节次，点查询</h2>
-        </div>
-
-        <div id="rmResult" hidden>
-          <div class="rmsum" id="rmSum"></div>
-          <!-- 容量是学校自己填的，四五百座那种明显不靠谱。一句话说清就够，
-               别解释我们为什么不知道（用户 2026-10-30：面向用户、极简）。 -->
-          <div class="rmnote">容量是学校系统里填的数，可能不准。</div>
-          <div class="rmnotice" id="rmNotice" hidden></div>
-          <div class="rmlist" id="rmList"></div>
-          <div class="rmtrunc" id="rmTrunc" hidden></div>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <!-- ================= 我的 ================= -->
   <!-- ================= 校园（智慧门户：一卡通 + 办事） =================

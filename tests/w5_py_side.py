@@ -21,7 +21,7 @@ CFG = {
             "tickets_path": "/v1/tickets", "kaptcha_path": "/kaptcha"},
     "jw": {"base": "http://127.0.0.1:%d" % PORT,
            "cas_service": "http://127.0.0.1:%d/caslogin" % PORT,
-           "home_path": "/frame/homes.html",
+           "home_path": "/frame/homes.action",
            "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
            "droplist_path": "/frame/droplist/getDropLists.action",
            "term_path": "/jw/common/showYearTerm.action",

@@ -37,7 +37,7 @@ CFG = {
             "tickets_path": "/v1/tickets", "kaptcha_path": "/kaptcha"},
     "jw": {"base": "http://127.0.0.1:%d" % PORT,
            "cas_service": "http://127.0.0.1:%d/caslogin" % PORT,
-           "home_path": "/frame/homes.html",
+           "home_path": "/frame/homes.action",
            "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
            "droplist_path": "/frame/droplist/getDropLists.action",
            "term_path": "/jw/common/showYearTerm.action",
@@ -206,7 +206,7 @@ def run_tests():
     ok9 = not hit9
     # 本校与 mock 的 host 必须照常放行（白名单是从 config 现算的）
     try:
-        c3._request("GET", c3._jw_url("/frame/homes.html"))
+        c3._request("GET", c3._jw_url("/frame/homes.action"))
     except EamsError as e:
         if "白名单" in str(e):
             ok9 = False

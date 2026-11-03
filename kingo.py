@@ -145,8 +145,14 @@ class KingoClient:
 
     def _jw_post(self, path, data=None, referer="", **kw):
         headers = kw.pop("headers", {}) or {}
+        # 浏览器对同源 POST 一律带 Origin + Referer（HAR 实测）。
+        # 少这两个头时青果可能回「无效访问请求」——它按来源页判上下文。
+        headers.setdefault("Origin", self.jw_base)
         if referer:
             headers.setdefault("Referer", self._jw_url(referer))
+        else:
+            headers.setdefault("Referer", self._jw_url(
+                self.cfg["jw"]["home_path"]))
         r = self._request("POST", self._jw_url(path), data=data or {}, headers=headers, **kw)
         r.encoding = "utf-8"
         return r
@@ -371,8 +377,18 @@ class KingoClient:
                           referer=self._jw_url(self.cfg["jw"]["home_path"]))
         j = tp._double_encoded_json(r.text) or {}
         if not j.get("xn"):
-            self._guard(self._body_text(r), "学期上下文")
-            raise EamsError("学期上下文没取到（响应不是预期 JSON）")
+            body = self._body_text(r)
+            # 失败时把 HTTP 状态和响应长度带上 —— 没有这两个数，
+            # 「没打开」和「返回了别的东西」在用户那里长得一模一样。
+            try:
+                self._guard(body, "学期上下文")
+            except EamsError as e:
+                raise EamsError("%s（HTTP %s · %d 字节 · 会话Cookie:%s）"
+                                % (e, r.status_code, len(r.content),
+                                   "有" if self._ck("JSESSIONID") else "没有"),
+                                kind=getattr(e, "kind", ""))
+            raise EamsError("学期上下文没取到（HTTP %s · %d 字节，内容不是预期 JSON）"
+                            % (r.status_code, len(r.content)))
         self._context = j
         self._context_loaded = True
         return self._context
@@ -471,6 +487,11 @@ class KingoClient:
         path = conf.get("path") or ""
         if not path:
             raise EamsError("课表入口没配置（config 的 pages.timetable.path）")
+        # 🔴 顺序必须和浏览器一致（HAR 实测）：
+        #   首页 → showYearTerm → 点菜单(getBreadcrumbs) → 目标页面。
+        #   先设菜单上下文再调 showYearTerm 的话，青果按「当前上下文」校验，
+        #   会直接回 1098「无效访问请求」——2026-11-03 真机上就是这么挂的。
+        self._term_context()
         self._menu_context("timetable")
         r = self._jw_get(path, params={"params": self._kbt_params()},
                          headers={"Referer": self._jw_url(
@@ -508,6 +529,7 @@ class KingoClient:
                     "error": "成绩入口没配置（config 的 pages.score）"}
         try:
             self.ensure_session()
+            self._term_context()          # 同上：先拿学期上下文，再动菜单
             self._menu_context("score")
             form = self._jw_get(path, params={"menucode": conf.get("menucode", "")},
                                 headers={"Referer": self._jw_url(

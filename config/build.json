@@ -10,7 +10,7 @@
   "jw": {
     "base": "http://__PC_IP__:8090",
     "cas_service": "http://__PC_IP__:8090/caslogin",
-    "home_path": "/frame/homes.html",
+    "home_path": "/frame/homes.action",
     "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
     "droplist_path": "/frame/droplist/getDropLists.action",
     "term_path": "/jw/common/showYearTerm.action",
