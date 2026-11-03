@@ -7245,6 +7245,11 @@ function renderCalendar() {
  */
 const CX_HOME = 'https://mooc2-ans.chaoxing.com/mooc2-ans/visit/interaction';
 
+// 🔴 达小助改造：本校（升达）智慧门户尚未适配 —— 后端 /api/portal/* 全部短路。
+//   置 false 时「功能」页的校园服务卡片显示「暂未接入」禁用态，不发探测请求。
+//   抓包确认本校用哪套门户系统、后端接好之后改 true，即恢复整套连接流程。
+const PORTAL_ADAPTED = false;
+
 const CAMPUS = {
   state: null,     // null=还没问过 / 'none' 没连 / 'ok' 已连 / 'expired' 过期了
   user: '',
@@ -7389,9 +7394,27 @@ function renderCampus() {
   const expired = CAMPUS.state === 'expired';
   const show = on || (expired && hasData);
 
+  // 🔴 达小助改造：升达智慧门户**还没适配**（后端 /api/portal/* 全部短路返回
+  //   「未适配本校系统」）。没适配就别摆一个点了必失败的「连接门户」按钮，
+  //   也别每进这一页就去打那个必然失败的探测请求（红线 20：不许把「没做」
+  //   显示成「能用」；也不许拿失败请求冒充「检查过了」）。抓包确认本校门户
+  //   系统后，把 PORTAL_ADAPTED 置 true 即可恢复下面这套郑航遗留的连接流程。
+  if (!PORTAL_ADAPTED) {
+    $('cpOff').hidden = false;
+    $('cpOn').hidden = true;
+    $('cpExpired').hidden = true;
+    $('cpOff').querySelector('h2').textContent = '校园服务尚未接入';
+    $('cpConnect').textContent = '暂未接入';
+    $('cpConnect').disabled = true;
+    // 卡片正文已经说了这件事，下面那行再写一遍就是同一屏两遍（噪声）——藏掉。
+    $('cpNote').hidden = true;
+    return;
+  }
+
   $('cpOff').hidden = show;
   $('cpOn').hidden = !show;
   $('cpExpired').hidden = !(expired && hasData);
+  $('cpNote').hidden = false;   // 上面未适配分支会藏它，这里恢复（PORTAL_ADAPTED 改回 true 时不留隐患）
 
   // 连上了、手里却一条数据都没有（典型情况：刚点过「清除本机缓存」）
   // ⇒ 进这一页时自己去取一次。否则会留一个「余额 —、没有明细」的空壳，
@@ -7545,6 +7568,10 @@ function renderCampus() {
  *     而消费记录和办事入口其实几小时前的完全够用。
  */
 async function loadCampus(force) {
+  // 🔴 达小助改造：门户未适配 ⇒ 一个 /api/portal/* 请求都不发。
+  //   后端已短路返回「未适配」，再打只是白跑一趟并可能被当成「检查过了」。
+  //   置 state='none' 让 renderCampus 走「暂未接入」分支（那里还会先拦一次）。
+  if (!PORTAL_ADAPTED) { CAMPUS.state = 'none'; renderCampus(); return; }
   if (CAMPUS.busy) return;
   CAMPUS.busy = true;
   try {
