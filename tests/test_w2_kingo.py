@@ -11,6 +11,10 @@
   T7 写端点护栏：saveElectiveCourse 等 URL 一律拒绝发出
   T8 未登录/配置缺失：报可操作错误，不编数据
   T9 域名硬白名单：非本校/非学习通的地址一律不发（W6 安全收口）
+  T10 不带验证码 ⇒ CODEFALSE（2026-11-03 事故回归）
+  T11 验证码错 ⇒ CODEFALSE，kind='code'（界面据此换图，且**不重试**）
+  T12 明文密码 ⇒ 服务端拒收（证明 RSA 加密真的生效了）
+  T13 失败原因翻译成人话，不再出现「登录没成功（200）」
 """
 import subprocess
 import sys
@@ -20,6 +24,7 @@ sys.path.insert(0, r"D:\xiangmu\daxiaozhu\app")
 sys.path.insert(0, r"D:\xiangmu\daxiaozhu\离线mock_ui跑通")
 
 import requests
+import cas_rsa
 import kingo
 from kingo import KingoClient, EamsError
 
@@ -65,6 +70,19 @@ def check(name, cond, detail=""):
         print("  FAIL  %s  %s" % (name, detail))
 
 
+def captcha_answer(c):
+    """取一张验证码，并从 mock 的**测试专用**端点拿答案（真实服务端没有这个端点）。"""
+    cap = c.captcha()
+    r = c.s.get("http://127.0.0.1:%d/mock/kaptcha-answer" % PORT,
+                params={"uid": cap["uid"]}, timeout=5)
+    return cap["uid"], (r.json().get("answer") or "")
+
+
+def login_ok(c, user="2024010101", pwd="mock-pass"):
+    uid, ans = captcha_answer(c)
+    c.login(user, pwd, code=ans, uid=uid)
+
+
 def main():
     srv = subprocess.Popen([sys.executable, MOCK, str(PORT)],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -80,7 +98,7 @@ def main():
 def run_tests():
     # ---- T1/T2 登录 + CASTGC 手种 + 会话全链路 ----
     c = KingoClient(config=CFG, session=requests.Session())
-    c.login("2024010101", "mock-pass")
+    login_ok(c)
     check("T1 登录后 CASTGC 由客户端手动种上(mock 不发 Set-Cookie)",
           "CASTGC" in c.s.cookies.get_dict(), c.s.cookies.get_dict())
     c.ensure_session()
@@ -120,7 +138,7 @@ def run_tests():
 
     # ---- T6 频控 vs 会话失效 ----
     c3 = KingoClient(config=CFG, session=requests.Session())
-    c3.login("2024010101", "mock-pass")
+    login_ok(c3)
     c3.ensure_session()
     hit = ""
     try:
@@ -178,6 +196,54 @@ def run_tests():
         msg8 = str(e)
     check("T8 tableId 未配置 → 报可操作错误而非编数据",
           "还没配置" in msg8, msg8)
+
+    # ---- T10 不带验证码（2026-11-03「登录没成功（200）」事故回归）----
+    #   学校 /loginType 的 isVerifyCode=1 ⇒ 第一次登录就要验证码。
+    #   以前这里不带，服务端回 CODEFALSE，界面只能说「登录没成功（200）」。
+    c10 = KingoClient(config=CFG, session=requests.Session())
+    msg10, kind10 = "", ""
+    try:
+        c10.login("2024010101", "mock-pass")
+    except EamsError as e:
+        msg10, kind10 = str(e), getattr(e, "kind", "")
+    check("T10 不带验证码 ⇒ CODEFALSE（且 kind=code 让界面换图）",
+          "CODEFALSE" in msg10 and kind10 == "code", msg10 or "(居然登上了)")
+
+    # ---- T11 验证码错 ----
+    c11 = KingoClient(config=CFG, session=requests.Session())
+    uid11, _ans11 = captcha_answer(c11)
+    msg11 = ""
+    try:
+        c11.login("2024010101", "mock-pass", code="999999", uid=uid11)
+    except EamsError as e:
+        msg11 = str(e)
+    check("T11 验证码错 ⇒ 报『验证码』而不是『密码』", "验证码" in msg11, msg11)
+
+    # ---- T12 明文密码必须被拒（证明 RSA 真的生效）----
+    #   直接绕过 login() 发一次明文：mock 用前端私钥解不开 ⇒ 等价于密码错。
+    #   这条是「以后有人把 cas_rsa.encrypt_password 删了」的守门测试。
+    c12 = KingoClient(config=CFG, session=requests.Session())
+    uid12, ans12 = captcha_answer(c12)
+    r12 = c12._request("POST", c12.cas_base + "/v1/tickets",
+                       data={"username": "2024010101", "password": "mock-pass",
+                             "service": CFG["cas"]["portal"], "loginType": "",
+                             "id": uid12, "code": ans12})
+    check("T12 明文密码被服务端拒收（RSA 加密是必需的）",
+          "PASSWORDFALSE" in (r12.text or ""), (r12.text or "")[:120])
+
+    # ---- T13 失败原因是人话 ----
+    #   事故原状是「登录没成功（200）」——HTTP 状态码冒充原因，用户没法行动。
+    check("T13 失败提示不再拿 HTTP 200 当原因",
+          "（200）" not in msg10 and "CODEFALSE" in msg10, msg10)
+
+    # ---- T14 RSA 实现与浏览器密文逐字符一致 ----
+    #   换钥/改算法的守门测试。向量来自真实登录页（见 cas_rsa 模块文档）。
+    BROWSER = ("502d19f461b666ff202cac4714a3a0a1abd52ce387483e450480ea8383b20e0b"
+               "8d0f105e7877474aaf42dbdf807d5d0cae2a43f8a2aaab4e119ed4f3fce8c392"
+               "2df75dd510bbbecbba07c715b422742a364fc60e78a2df852252b2f941a2a024"
+               "2dd876cebf463f1212fad0087118d932b17501ded0d9e531dd598eac70051a65")
+    check("T14 RSA 密文与浏览器逐字符一致",
+          cas_rsa.encrypt_password("zzz-not-a-real-password") == BROWSER)
 
 
 def json_copy(d):

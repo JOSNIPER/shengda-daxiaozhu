@@ -44,6 +44,52 @@ function absorbSetCookie(url, headers) {
 let reqSeq = 0;
 const pending = new Map();
 
+/* ---- CAS 密码 RSA 加密（Node 侧等价实现，供 Android.casRsa 桩使用）----
+   算法与 app/cas_rsa.py、NativeBridge.java 逐条一致：
+   两个字符拼一个小端 16 位字 → 按 16 位一段累加 → modPow → hex 左补到 4 的倍数。 */
+const CAS_MODULUS_HEX =
+  '00b5eeb166e069920e80bebd1fea4829d3d1f3216f2aabe79b6c47a3c18dcee5' +
+  'fd22c2e7ac519cab59198ece036dcf289ea8201e2a0b9ded307f8fb704136eaeb' +
+  '670286f5ad44e691005ba9ea5af04ada5367cd724b5a26fdb5120cc95b6431604' +
+  'bd219c6b7d83a6f8f24b43918ea988a76f93c333aa5a20991493d4eb1117e7b1';
+const CAS_N = BigInt('0x' + CAS_MODULUS_HEX);
+const CAS_E = 65537n;
+
+function bigPowMod(base, exp, mod) {
+  let r = 1n;
+  let b = base % mod;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) r = (r * b) % mod;
+    b = (b * b) % mod;
+    e >>= 1n;
+  }
+  return r;
+}
+
+function casRsaBigInt(pwd) {
+  if (!pwd) return '';
+  const CHUNK = 126;
+  const codes = [];
+  for (const ch of String(pwd)) codes.push(ch.codePointAt(0));
+  while (codes.length % CHUNK !== 0) codes.push(0);
+  let out = '';
+  for (let off = 0; off < codes.length; off += CHUNK) {
+    let acc = 0n;
+    for (let r = 0; r < CHUNK / 2; r++) {
+      const i = off + 2 * r;
+      const lo = codes[i] || 0;
+      const hi = codes[i + 1] || 0;
+      const word = lo + (hi << 8);
+      if (word) acc |= BigInt(word) << BigInt(16 * r);
+    }
+    let hex = bigPowMod(acc, CAS_E, CAS_N).toString(16);
+    while (hex.length % 4 !== 0) hex = '0' + hex;
+    out += hex;
+  }
+  return out;
+}
+
 function fireNativeDone(id, obj) {
   const cb = global.window.__nativeDone;
   if (cb) cb(id, JSON.stringify(obj));
@@ -115,6 +161,11 @@ global.Android = {
   saveCred() { return ''; },
   clearCred() { },
   credState() { return 'ok'; },
+  /* CAS 密码 RSA 加密 —— 生产环境在 NativeBridge.casRsa（java.math.BigInteger）。
+     这里是 Node 侧的等价实现，用 BigInt 复刻同一套「小端 16 位字 + 补 0」算法，
+     所以 W5 对拍同时也验证了 JS/Java 侧与 Python 侧算出同一串密文。
+     算法改一处就要改三处：cas_rsa.py / NativeBridge.java / 这里。 */
+  casRsa(pwd) { return casRsaBigInt(pwd); },
   clearCookies() { jar.clear(); return true; },
   loadPortalCred() { return ''; }, savePortalCred() { return ''; }, portalCredState() { return 'none'; },
   clearPortalCred() { },
@@ -187,10 +238,37 @@ function handle(path, body) {
   return domWin.NativeApi.handle(path, body || {});
 }
 
+/* 测试专用的直连 GET —— 上面 global.fetch 被换成了只答 config.json 的桩，
+   拿 mock 的答案要走真 http。 */
+function httpGetJson(url) {
+  return new Promise((res, rej) => {
+    http.get(url, (r) => {
+      let d = '';
+      r.on('data', (c) => (d += c));
+      r.on('end', () => {
+        try { res(JSON.parse(d)); } catch (e) { rej(e); }
+      });
+    }).on('error', rej);
+  });
+}
+
 async function main() {
   // 等 config.json 注入完成（loadCfg 是异步 IIFE）
   await new Promise((r) => setTimeout(r, 120));
-  const sync = await handle('/api/sync', {});
+  // 🔴 学校 CAS 第一次登录就要验证码（isVerifyCode=1），所以这里必须先取一张。
+  const cap = await handle('/api/captcha');
+  let answer = '';
+  if (cap.ok) {
+    // 测试专用端点：mock 从不把答案给客户端，这里是为了能稳定地走通「验证码对」
+    // 那条路。生产环境没有这个东西。
+    const ar = await httpGetJson('http://127.0.0.1:' + PORT + '/mock/kaptcha-answer');
+    answer = ar.answer || '';
+  }
+  const sync = cap.ok
+    ? await handle('/api/login', {
+        username: '2024010101', password: 'mock-pass', code: answer,
+      })
+    : { ok: false, error: 'captcha failed: ' + (cap.error || '') };
   const fr = await handle('/api/free-rooms', {
     date: '2026-11-05', periodBegin: 1, periodEnd: 2,
   });

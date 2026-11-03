@@ -328,6 +328,88 @@ public class NativeBridge {
         }
     }
 
+    /**
+     * 学校统一认证（CAS）账密登录要的 RSA 密文。
+     *
+     * 为什么放在 Java 而不是 JS 里：学校前端算这个用的是 RSAKey + 自定义 pad，
+     * 移植成 JS 需要 BigInt，而 BigInt 要 Chrome 67+ —— 目标是 Android 7 起，
+     * 系统 WebView 有可能更老。java.math.BigInteger 没有这个门槛，也不会有
+     * 「大数运算写错一位、登录永远失败」这种极难查的问题。
+     *
+     * 🔴 算法细节与 ``cas_rsa.py`` / 学校前端逐条一致，**改这里必须同步改那边**：
+     *    ① 两个字符拼一个小端 16 位字，按 16 位一段自低位累加；
+     *    ② 不足一块补 0（不是 PKCS#1 填充）；
+     *    ③ modPow 后转 hex，左侧补齐到 4 的倍数；
+     *    ④ 多块无空格拼接（服务端要的就是一整串）。
+     *
+     * 失败返回空串 —— 调用方必须当成失败，**不许**拿明文顶上去。
+     */
+    @JavascriptInterface
+    public String casRsa(String pwd) {
+        try {
+            return casRsaHex(pwd == null ? "" : pwd);
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    /** 公钥模数（2048 位，抄自学校登录页前端包；换钥时这里与 cas_rsa.py 一起改）。 */
+    private static final String CAS_MODULUS_HEX =
+            "00b5eeb166e069920e80bebd1fea4829d3d1f3216f2aabe79b6c47a3c18dcee5"
+            + "fd22c2e7ac519cab59198ece036dcf289ea8201e2a0b9ded307f8fb704136eaeb"
+            + "670286f5ad44e691005ba9ea5af04ada5367cd724b5a26fdb5120cc95b6431604"
+            + "bd219c6b7d83a6f8f24b43918ea988a76f93c333aa5a20991493d4eb1117e7b1";
+
+    /** 每块字符数 = 2 × 最高非零 16 位段下标。本模数下是 126。 */
+    private static int casChunkSize() {
+        int rem = CAS_MODULUS_HEX.length();
+        int top = 0;
+        int idx = 0;
+        while (rem > 0) {
+            String part = CAS_MODULUS_HEX.substring(Math.max(rem - 4, 0), rem);
+            int v;
+            try {
+                v = Integer.parseInt(part, 16);
+            } catch (Throwable t) {
+                v = 0;
+            }
+            if (v != 0) top = idx;
+            idx++;
+            rem -= 4;
+        }
+        return 2 * top;
+    }
+
+    private static String casRsaHex(String pwd) {
+        if (pwd.isEmpty()) return "";
+        int chunk = casChunkSize();
+        if (chunk <= 0) return "";
+        java.math.BigInteger n = new java.math.BigInteger(CAS_MODULUS_HEX, 16);
+        java.math.BigInteger e = java.math.BigInteger.valueOf(65537);
+        int[] codes = new int[pwd.length()];
+        for (int i = 0; i < codes.length; i++) codes[i] = pwd.charAt(i);
+        int padded = codes.length;
+        if (padded % chunk != 0) padded += chunk - (padded % chunk);
+        StringBuilder out = new StringBuilder();
+        for (int off = 0; off < padded; off += chunk) {
+            java.math.BigInteger acc = java.math.BigInteger.ZERO;
+            int end = Math.min(off + chunk, padded);
+            for (int r = off; r + 1 < end; r += 2) {
+                int lo = r < codes.length ? codes[r] : 0;
+                int hi = (r + 1) < codes.length ? codes[r + 1] : 0;
+                int word = lo + (hi << 8);
+                if (word != 0) {
+                    acc = acc.or(java.math.BigInteger.valueOf(word)
+                            .shiftLeft(16 * ((r - off) / 2)));
+                }
+            }
+            String hex = acc.modPow(e, n).toString(16);
+            while (hex.length() % 4 != 0) hex = "0" + hex;
+            out.append(hex);
+        }
+        return out.toString();
+    }
+
     /** 罐子里所有 cookie 导成 JSON（App 退出前存下来，下次不用重登）。 */
     @JavascriptInterface
     public String cxDumpCookies() {

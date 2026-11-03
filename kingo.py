@@ -29,6 +29,7 @@ import time
 
 import requests
 
+import cas_rsa
 import table_parser as tp
 
 try:
@@ -72,6 +73,14 @@ class KingoClient:
         self.s.verify = self.cfg["jw"].get("verify_tls", True)
         self.jw_base = self.cfg["jw"]["base"].rstrip("/")
         self.cas_base = self.cfg["cas"]["base"].rstrip("/")
+        # 🔴 本机 mock 必须绕开系统代理：这台机器上设了 HTTP_PROXY，requests 会把
+        #    发往 127.0.0.1:8090 的请求也塞给代理，代理连不上就回 502
+        #    「upstream connect failed」—— 表现是「验证码没取到」，极难往代理上想。
+        #    只对回环地址关掉，真实域名照旧走系统代理。
+        if _host_of(self.jw_base) in ("127.0.0.1", "localhost", "::1") or \
+                _host_of(self.cas_base) in ("127.0.0.1", "localhost", "::1"):
+            self.s.trust_env = False
+            self.s.proxies = {}
         # 域名白名单（见 _assert_allowed_host）：config 里出现过的 host 才算本校
         self._allow_hosts = {h for h in (
             _host_of(self.jw_base), _host_of(self.cas_base),
@@ -159,36 +168,83 @@ class KingoClient:
         img = j.get("content", "")
         if not uid or not img:
             raise EamsError("验证码没取到，可能登录页改版了")
-        return {"uid": uid, "img": img, "ttl_sec": 30}
+        try:
+            ttl = int(j.get("timeout") or 30)
+        except (TypeError, ValueError):
+            ttl = 30
+        return {"uid": uid, "img": img, "ttl_sec": ttl}
+
+    #: 登录失败时服务端在 ``data.code`` 里给的原因码 → (给用户看的话, kind)。
+    #: **只收录实测确认过的**（2026-11-03 用假学号真打接口得到）：
+    #:   * ``NOUSER``    —— 账号不存在（验证码与密码格式都通过后才到这个判定）
+    #:   * ``CODEFALSE`` —— 验证码为空/错误/过期（它在最前面校验，会掩盖密码错误）
+    #: 其它码**不猜**，原样回显让用户能反馈。
+    _CAS_CODE_HINTS = {
+        "NOUSER": ("学号不存在，核对一下再输", "auth"),
+        "CODEFALSE": ("验证码错了或过期了，换一张重新算", "code"),
+    }
+
+    @staticmethod
+    def _cas_failure(text: str) -> tuple:
+        """从 CAS 登录响应里提失败原因。返回 (说明, kind)；成功返回 ("", "")。
+
+        🔴 为什么必须解析这个：升达 CAS 登录失败时**照样返回 HTTP 200**，
+        真正原因只在 ``data.code`` 里。只看「有没有 TGT」的话，界面只能回一句
+        「登录没成功（200）」—— 用户完全不知道该改密码还是该改验证码。
+        """
+        j = tp._double_encoded_json(text)
+        if not isinstance(j, dict):
+            return ("", "")
+        data = j.get("data")
+        if not isinstance(data, dict):
+            return ("", "")
+        code = str(data.get("code") or "").strip()
+        if not code:
+            return ("", "")
+        hint, kind = KingoClient._CAS_CODE_HINTS.get(code.upper(), ("", "auth"))
+        if not hint:
+            return ("登录被拒绝（服务端返回 %s，请把这条反馈给开发者）" % code, kind)
+        return ("%s（%s）" % (hint, code), kind)
 
     def login(self, username: str, password: str, code: str = "", uid: str = "") -> None:
-        """CAS 账密登录（REST）。**失败不自动重试**（触发滑块/锁号的前科）。"""
-        form = {"username": username, "password": password,
+        """CAS 账密登录（REST）。**失败不自动重试**（触发滑块/锁号的前科）。
+
+        🔴 2026-11-03 修复：之前这里发明文密码、且不带验证码，
+        服务端一律回 ``data.code = CODEFALSE``，界面显示「登录没成功（200）」。
+        学校登录页前端（app.<hash>.js）的真实构造是：
+
+            if (!loginType) { setMaxDigits(131); v = RSA.encrypt(password) }
+            POST /v1/tickets { username, password: v, service, loginType, id, code }
+
+        所以：① 密码必须 RSA 加密；② 学校开了 ``isVerifyCode=1``，
+        验证码 ``id``(uid) + ``code``(答案) **第一次登录就要带**。
+        """
+        encrypted = cas_rsa.encrypt_password(password)
+        if not encrypted:
+            raise EamsError("密码是空的，没法加密提交", kind="auth")
+        form = {"username": username, "password": encrypted,
                 "service": self.cfg["cas"]["portal"], "loginType": ""}
         if uid:
+            # 字段名就是 id / code（不是 captcha / verifyCode），实测确认。
             form["id"] = uid
-            form["code"] = code
-            form["otpcode"] = ""
+            form["code"] = code or ""
         headers = {"Origin": self.cas_base.split("/lyuapServer")[0],
                    "Referer": self.cas_base + "/login",
                    "X-Requested-With": "XMLHttpRequest",
                    "Accept": "application/json, text/plain, */*"}
         r = self._request("POST", self.cas_base + self.cfg["cas"]["tickets_path"],
                           data=form, headers=headers, allow_redirects=True)
-        j = tp._double_encoded_json(r.text)
-        tgt = ""
-        if isinstance(j, dict):
-            flat = json.dumps(j, ensure_ascii=False)
-            m = re.search(r"TGT-[A-Za-z0-9_\-\.]+", flat) or re.search(r"TGT-[A-Za-z0-9_\-\.]+", r.text)
-            tgt = m.group(0) if m else ""
-        else:
-            m = re.search(r"TGT-[A-Za-z0-9_\-\.]+", r.text or "")
-            tgt = m.group(0) if m else ""
+
+        # 先判业务失败码，再找 TGT —— 顺序反了就只能给出「登录没成功」。
+        why, kind = self._cas_failure(r.text or "")
+        if why:
+            # 不重试：错 5 次锁号，"识别错误"与"密码输错"同一个计数器
+            raise EamsError(why, kind=kind)
+
+        tgt = self._extract_tgt(r)
         if not tgt:
-            # 不重试：错 5 次锁号，"识别错误"与"密码输错"同一个计数器（郑航实测，升达同组件推定同规）
-            if uid and ("验证码" in (r.text or "")):
-                raise EamsError("验证码不对或过期，换一张重新算", kind="code")
-            raise EamsError("学号或密码不对（或学校认证服务临时故障）", kind="auth")
+            raise EamsError("登录没成功（服务端没给票据，HTTP %d）" % (r.status_code or 0),
+                            kind="auth")
         # 🔴 手动种 CASTGC：服务器不 Set-Cookie，这是门户前端 JS 自己写的（实测）
         if not self._ck("CASTGC"):
             cas_dom = re.sub(r"^https?://", "", self.cas_base).split("/")[0]
@@ -196,6 +252,35 @@ class KingoClient:
         self.username = username
         self._logged_in = True
         self._ready = False   # 教务会话等 ensure_session 建
+
+    @staticmethod
+    def _extract_tgt(r) -> str:
+        """从登录响应里取 TGT。前端是 ``if (o.data.tgt) c = o.data.tgt; else c = o.data``，
+        同时兼容纯文本与 Location 头三种形态。"""
+        text = r.text or ""
+        j = tp._double_encoded_json(text)
+        cands = []
+        if isinstance(j, dict):
+            cands.append(j.get("tgt"))
+            data = j.get("data")
+            if isinstance(data, str):
+                cands.append(data)
+            elif isinstance(data, dict):
+                cands.append(data.get("tgt"))
+                inner = data.get("data")
+                if isinstance(inner, str):
+                    cands.append(inner)
+        for c in cands:
+            if isinstance(c, str):
+                m = re.search(r"TGT-[A-Za-z0-9_.\-]+", c)
+                if m:
+                    return m.group(0)
+        m = re.search(r"TGT-[A-Za-z0-9_.\-]+", text)
+        if m:
+            return m.group(0)
+        loc = (r.headers.get("Location") or "") if getattr(r, "headers", None) else ""
+        m = re.search(r"TGT-[A-Za-z0-9_.\-]+", loc)
+        return m.group(0) if m else ""
 
     def ensure_login(self, username: str, password: str) -> None:
         if not self._logged_in:

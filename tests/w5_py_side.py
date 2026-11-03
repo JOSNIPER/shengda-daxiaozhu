@@ -44,7 +44,11 @@ CFG = {
 
 def main():
     c = KingoClient(config=CFG, session=requests.Session())
-    c.login("2024010101", "mock-pass")
+    # 学校 CAS 第一次登录就要验证码 —— 先取一张，答案从 mock 的测试专用端点拿。
+    cap = c.captcha()
+    ans = c.s.get("http://127.0.0.1:%d/mock/kaptcha-answer" % PORT,
+                  params={"uid": cap["uid"]}, timeout=5).json().get("answer", "")
+    c.login("2024010101", "mock-pass", code=ans, uid=cap["uid"])
     profile = c.profile()
     tt = c.timetable()
     try:

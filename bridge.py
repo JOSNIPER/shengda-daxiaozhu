@@ -394,6 +394,10 @@ class Service:
         self.cfg_desc = cfg_desc or "config/shengda.json（默认）"
         self.client = self._new_client()
         self.last_error = ""
+        # 验证码 uid 只活在内存里，**不回给页面** —— 页面只负责让用户看图填答案。
+        # 一次性：登录请求发出后立刻清掉，同一张图不会被用第二次。
+        self.captcha_uid = ""
+        self.captcha_at = 0.0
 
     def _new_client(self) -> kingo.KingoClient:
         """换一个干净会话。每次登录、每次「会话过期后重登」都新建一个 ——
@@ -401,10 +405,21 @@ class Service:
         「无效访问请求」。"""
         return kingo.KingoClient(config=self.cfg)
 
-    def sync(self, username: str, password: str) -> dict:
+    def captcha(self) -> dict:
+        """取一张验证码。返回 {img(data URL), ttl_sec}；uid 留在 self 里。"""
         with self.lock:
             self.client = self._new_client()
-            self.client.login(username, password)
+            c = self.client.captcha()
+            self.captcha_uid = c["uid"]
+            self.captcha_at = time.time()
+            return {"img": c["img"], "ttl_sec": c.get("ttl_sec", 30)}
+
+    def sync(self, username: str, password: str, code: str = "") -> dict:
+        with self.lock:
+            self.client = self._new_client()
+            uid = self.captcha_uid
+            self.captcha_uid = ""      # 用掉就作废，避免同一张图重放
+            self.client.login(username, password, code=code, uid=uid)
             profile = self.client.profile()
             tt = self.client.timetable()
             # 成绩单独兜一层。**没有成绩不是错误** —— 新生第一学期历年成绩
@@ -610,6 +625,24 @@ class Handler(SimpleHTTPRequestHandler):
                 "credState": "ok" if acc else "none",
             })
             return
+        if path == "/api/captcha":
+            # 🔴 2026-11-03 新增：升达 CAS 开了验证码（/loginType 返回 isVerifyCode=1），
+            #   **第一次登录就要带**，不是错几次才出现。
+            #   uid 留在后端内存里（Service.captcha_uid），页面只拿图片 ——
+            #   页面拿不到 uid，就没有「重放同一张验证码」的可能。
+            if not self._authed():
+                self._json({"ok": False, "error": "token"}, 403)
+                return
+            try:
+                c = SERVICE.captcha()
+            except eams.EamsError as exc:
+                self._json({"ok": False, "error": str(exc)})
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._json({"ok": False, "error": "拿不到验证码：%s" % exc})
+                return
+            self._json({"ok": True, "img": c["img"], "ttl": c.get("ttl_sec", 30)})
+            return
         if path == "/api/room-options":
             if not self._authed():
                 self._json({"ok": False, "error": "token"}, 403)
@@ -748,13 +781,25 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/login":
             user = (data.get("username") or "").strip()
             pwd = data.get("password") or ""
+            # 验证码答案由人算出来填；uid 在后端内存里，不从请求体取（见 /api/captcha）
+            code = str(data.get("code") or "").strip()
             if not user or not pwd:
                 self._json({"ok": False, "error": "请填学号和密码"})
                 return
+            if not code:
+                # 学校 CAS 第一次登录就要验证码。先在前端拦一道，
+                # 省掉一次必然失败的请求（每次失败都在动那个错误计数器）。
+                self._json({"ok": False, "error": "请填验证码", "needCaptcha": True})
+                return
             try:
-                payload = SERVICE.sync(user, pwd)
+                payload = SERVICE.sync(user, pwd, code=code)
             except eams.EamsError as exc:
-                self._json({"ok": False, "error": str(exc)})
+                out = {"ok": False, "error": str(exc)}
+                if getattr(exc, "kind", "") == "code":
+                    # 验证码错了/过期 ⇒ 界面换一张，别让人对着死图重试
+                    out["needCaptcha"] = True
+                    out["captchaStale"] = True
+                self._json(out)
                 return
             except Exception as exc:  # noqa: BLE001
                 self._json({"ok": False, "error": "连接教务系统失败：%s" % exc})
@@ -780,6 +825,11 @@ class Handler(SimpleHTTPRequestHandler):
                 out = {"ok": False, "error": str(exc)}
                 if getattr(exc, "kind", "") == "auth":
                     out["authFail"] = True
+                if getattr(exc, "kind", "") == "code":
+                    # 🔴 CASTGC 过期后自动重登会撞上验证码 —— 这不是「密码错了」，
+                    #   是「这次需要人算一道题」。标出来，界面去要验证码，
+                    #   别把用户推到「重新绑定」那条更重的路上。
+                    out["needCaptcha"] = True
                 self._json(out)
                 return
             except Exception as exc:  # noqa: BLE001

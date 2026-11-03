@@ -602,6 +602,17 @@
             </span>
           </label>
           <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
+          <!-- 补密码也要验证码：学校 CAS 的登录是「密码 + 算术验证码」，
+               少一样都会被判 CODEFALSE。 -->
+          <label class="field">
+            <span>验证码</span>
+            <div class="caprow">
+              <input id="inCode2" type="text" inputmode="numeric" autocomplete="off"
+                     maxlength="8" placeholder="算出这题的结果">
+              <img id="jwCap2" class="capimg" alt="验证码" title="点一下换一张">
+            </div>
+          </label>
+          <p class="sub small pwdhint" id="jwCapHint2">上面是一道算术题，算出结果填进去。看不清就点图片换一张。</p>
           <button class="btn primary block" id="btnReauth">保存并同步</button>
           <p class="tip" id="reauthTip"></p>
         </div>
@@ -720,6 +731,18 @@
           </label>
           <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
           <p class="sub small pwdhint">那边的重置页只认「账号所用邮箱」—— 当初没在教务系统里绑过邮箱的话，这一步走不通，得找教务处重置。</p>
+          <!-- 2026-11-03：学校统一认证开了图形验证码（/loginType 的 isVerifyCode=1），
+               **第一次登录就要带**，不是错几次才出现。图是一道算术题，
+               由人来算 —— 红线是不自动识别（错 5 次锁号）。 -->
+          <label class="field">
+            <span>验证码</span>
+            <div class="caprow">
+              <input id="inCode" type="text" inputmode="numeric" autocomplete="off"
+                     maxlength="8" placeholder="算出这题的结果">
+              <img id="jwCap" class="capimg" alt="验证码" title="点一下换一张">
+            </div>
+          </label>
+          <p class="sub small pwdhint" id="jwCapHint">上面是一道算术题，算出结果填进去。看不清就点图片换一张。</p>
           <button class="btn primary block" id="btnBind">绑定并同步</button>
           <p class="tip" id="bindTip"></p>
           <!-- 以前这里有个「记住账号密码」勾选框，默认勾上但可以取消。

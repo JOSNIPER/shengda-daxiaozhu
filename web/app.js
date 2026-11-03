@@ -3760,11 +3760,16 @@ function renderMe() {
   const bound = !!(DATA && DATA.profile && DATA.profile.studentId);
   $('meBound').hidden = !bound;
   $('meUnbound').hidden = bound;
+  // 没绑定时顺手取一张验证码 —— 进「我的」就能直接输，不用先点一下图。
+  if (!bound) loadJwCaptcha();
   // 有数据但本机没存住凭据 ⇒ 提示重新输入密码。
   // 只认 BOUND === false（问过、且确实没有）；null（还没问到 / 服务没开）不提示，
   // 否则开 App 的瞬间会闪一下这条警告。
   $('reauthCard').hidden = !(bound && BOUND === false);
   if (bound && BOUND === false) {
+    // 补密码这条路上也要验证码（学校 CAS 的登录就是密码 + 算术题）；
+    // 卡片显示出来时才去取，别每次 render 都取一张新的把 uid 换掉。
+    loadJwCaptcha(false, 'jwCap2', 'jwCapHint2');
     // 🔴 「从来没存上」和「存着但解不开」是两件事，得说两套话。
     //    混成一句「密码没保存」，在第二种情况下就是在说假话 ——
     //    密文明明在文件里，只是密钥被系统重置了。
@@ -5881,12 +5886,52 @@ function setBusy(btn, busy, text) {
   }
 }
 
+/* ---------------- 教务验证码（2026-11-03 新增） ----------------
+ * 学校统一认证开了图形验证码（/loginType 的 isVerifyCode=1），**第一次登录就要带**。
+ * 图是一道算术题，由人来算 —— 红线是不自动识别：算错和密码错走同一个错误计数器，
+ * 错 5 次锁号。
+ * uid 留在后端（bridge.py / native.js 各自的内存里），页面只拿图片，
+ * 所以「同一张图重放两次」在结构上就不可能发生。 */
+let jwCapLoading = false;
+
+async function loadJwCaptcha(force, imgId, hintId) {
+  const img = $(imgId || 'jwCap');
+  if (!img) return;
+  // 已经有一张有效图就不要每次 render 都换掉 —— uid 是一次性的，
+  // 换图会让用户正在看的那道题作废。
+  if (!force && img.getAttribute('src')) return;
+  if (jwCapLoading && !force) return;
+  jwCapLoading = true;
+  const hint = $(hintId || 'jwCapHint');
+  try {
+    const r = await api('/api/captcha');
+    if (!r || !r.ok || !r.img) {
+      // 拿不到就如实说，别留一张空图让人对着发呆。
+      img.removeAttribute('src');
+      img.alt = '验证码没取到';
+      if (hint) hint.textContent = (r && r.error) ? ('验证码没取到：' + r.error) : '验证码没取到，点这里重试';
+      img.style.opacity = '.35';
+      return;
+    }
+    img.style.opacity = '';
+    img.alt = '验证码';
+    img.src = r.img;
+    if (hint) hint.textContent = '上面是一道算术题，算出结果填进去。看不清就点图片换一张。';
+  } catch (e) {
+    if (hint) hint.textContent = '验证码没取到：' + ((e && e.message) || e);
+  } finally {
+    jwCapLoading = false;
+  }
+}
+
 async function doBind() {
   const user = $('inUser').value.trim();
   const pass = $('inPass').value;
+  const code = ($('inCode').value || '').trim();
   const tip = $('bindTip');
   tip.textContent = '';
   if (!user || !pass) { tip.textContent = '学号和密码都要填'; return; }
+  if (!code) { tip.textContent = '把验证码那道题的结果填上'; return; }
 
   const btn = $('btnBind');
   setBusy(btn, true, '正在登录教务系统…');
@@ -5894,8 +5939,17 @@ async function doBind() {
     // 🔴 一律 remember: true。以前跟着勾选框走，取消勾选后就会出现
     //    「明明登录成功了，刷新却说没绑定」—— 数据在、密码没存，界面看不出来。
     //    密码怎么存：网页版走 Windows DPAPI，APK 走 Android Keystore，都是密文。
-    const res = await api('/api/login', { username: user, password: pass, remember: true });
-    if (!res.ok) { tip.textContent = res.error || '绑定失败'; return; }
+    const res = await api('/api/login', { username: user, password: pass, code: code, remember: true });
+    if (!res.ok) {
+      tip.textContent = res.error || '绑定失败';
+      // 验证码是一次性的：失败后必须换一张，不能让用户对着死图反复试
+      // （每试一次都在动学校的错误计数器）。
+      if (res.needCaptcha) {
+        $('inCode').value = '';
+        loadJwCaptcha(true);
+      }
+      return;
+    }
     applyPayload(res);
     $('inPass').value = '';
     const sv = credSaved(res);
@@ -5970,6 +6024,17 @@ async function doSync(goSchedule) {
         v.textContent = old;
         return;
       }
+      // 🔴 2026-11-03：登录态过期后自动重登撞上验证码。这不是「密码错了」，
+      //   是「这次要人算一道题」—— 把补密码卡片摆出来，那张卡上就有验证码。
+      //   不能套用 authFail 的话术（「密码可能改过了」是假的，会让人去改密码）。
+      if (res.needCaptcha) {
+        BOUND = false;
+        renderMe();
+        toast('登录状态过期了，输一次密码 + 验证码就能继续用', 4200);
+        switchTab('me');
+        v.textContent = old;
+        return;
+      }
       toast(res.error || '同步失败', 2600);
       v.textContent = old;
       return;
@@ -6037,21 +6102,37 @@ function applyPayload(res) {
 }
 
 $('btnBind').addEventListener('click', doBind);
+// 点验证码图换一张（和学校网页一个习惯）。拿不到图时点一下也当重试。
+$('jwCap').addEventListener('click', () => { $('inCode').value = ''; loadJwCaptcha(true); });
+$('inCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') doBind(); });
+$('jwCap2').addEventListener('click', () => {
+  $('inCode2').value = '';
+  loadJwCaptcha(true, 'jwCap2', 'jwCapHint2');
+});
 
 /** 有数据但本机没存住密码时的补救入口：学号已知，只补一个密码。 */
 $('btnReauth').addEventListener('click', async () => {
   const tip = $('reauthTip');
   const pass = $('inPass2').value;
+  const code = ($('inCode2').value || '').trim();
   const sid = (DATA && DATA.profile && DATA.profile.studentId) || '';
   tip.textContent = '';
   if (!pass) { tip.textContent = '请输入密码'; return; }
+  if (!code) { tip.textContent = '把验证码那道题的结果填上'; return; }
   if (!sid) { tip.textContent = '本地没有学号，请用「解除绑定」后重新绑定'; return; }
 
   const btn = $('btnReauth');
   setBusy(btn, true, '正在登录…');
   try {
-    const res = await api('/api/login', { username: sid, password: pass, remember: true });
-    if (!res.ok) { tip.textContent = res.error || '登录失败'; return; }
+    const res = await api('/api/login', { username: sid, password: pass, code: code, remember: true });
+    if (!res.ok) {
+      tip.textContent = res.error || '登录失败';
+      if (res.needCaptcha) {
+        $('inCode2').value = '';
+        loadJwCaptcha(true, 'jwCap2', 'jwCapHint2');
+      }
+      return;
+    }
     applyPayload(res);
     $('inPass2').value = '';
     // 🔴 这条路径以前**根本不看 res.saved**，登录成功就喊「已保存」。

@@ -1254,34 +1254,144 @@
   }
   /* ============== 青果段结束 ============== */
 
-  async function login(username, password) {
+  /* ---------------- CAS 登录失败原因（2026-11-03 新增） ----------------
+   * 🔴 升达 CAS 登录失败时**照样返回 HTTP 200**，真正原因只在 data.code 里。
+   *    以前只看「响应体里有没有 TGT-」，于是界面只能回一句「登录没成功（200）」——
+   *    用户根本分不清是密码错、验证码错还是学号不存在。实测到的两个码：
+   *      NOUSER    —— 账号不存在（验证码和密码格式都过了才到这一步）
+   *      CODEFALSE —— 验证码为空/错/过期（它在最前面校验，会掩盖密码错误）
+   *    其它码不猜，原样回显让人能反馈。
+   */
+  var CAS_CODE_HINTS = {
+    NOUSER: '学号不存在，核对一下再输',
+    CODEFALSE: '验证码错了或过期了，换一张重新算'
+  };
+
+  function casFailure(text) {
+    var s = String(text || '');
+    var i = s.indexOf('{');
+    if (i < 0) return null;
+    var j = null;
+    try { j = JSON.parse(s.slice(i)); } catch (e) { return null; }
+    if (!j || typeof j !== 'object') return null;
+    var d = j.data;
+    if (!d || typeof d !== 'object') return null;
+    var code = d.code ? String(d.code).trim() : '';
+    if (!code) return null;
+    var hint = CAS_CODE_HINTS[code.toUpperCase()] || '';
+    return {
+      code: code,
+      kind: code.toUpperCase() === 'CODEFALSE' ? 'code' : 'auth',
+      message: hint ? hint + '（' + code + '）'
+                    : '登录被拒绝（服务端返回 ' + code + '，请把这条反馈给开发者）'
+    };
+  }
+
+  /** 从登录响应里取 TGT。前端是 `if (o.data.tgt) c=o.data.tgt; else c=o.data`。 */
+  function casTgt(text, location) {
+    var s = String(text || '');
+    var i = s.indexOf('{');
+    if (i >= 0) {
+      try {
+        var j = JSON.parse(s.slice(i));
+        if (j && typeof j === 'object') {
+          var cands = [j.tgt];
+          var d = j.data;
+          if (typeof d === 'string') cands.push(d);
+          else if (d && typeof d === 'object') { cands.push(d.tgt); if (typeof d.data === 'string') cands.push(d.data); }
+          for (var k = 0; k < cands.length; k++) {
+            if (typeof cands[k] === 'string') {
+              var m0 = /TGT-[A-Za-z0-9_.\-]+/.exec(cands[k]);
+              if (m0) return m0[0];
+            }
+          }
+        }
+      } catch (e) { /* 落到下面的正则 */ }
+    }
+    var m = /TGT-[A-Za-z0-9_.\-]+/.exec(s) || /TGT-[A-Za-z0-9_.\-]+/.exec(String(location || ''));
+    return m ? m[0] : '';
+  }
+
+  /** 密码 → CAS 要的 RSA 密文（算法在 NativeBridge.casRsa，理由见那边的注释）。 */
+  function casRsa(pwd) {
+    if (typeof Android.casRsa !== 'function') {
+      throw new EamsError('这个版本的 APK 还不支持加密登录，请更新到最新版', 'auth');
+    }
+    var enc = String(Android.casRsa(pwd) || '');
+    if (!enc) {
+      // 🔴 加密失败**不许**拿明文顶上去：服务端只认密文，发明文等于拿错密码去撞，
+      //    撞够次数就锁号。宁可这次登不上。
+      throw new EamsError('密码加密失败，请重试（这次没有发出密码）', 'auth');
+    }
+    return enc;
+  }
+
+  /* ---------------- 验证码（2026-11-03 新增） ----------------
+   * 学校 /loginType 返回 isVerifyCode=1 ⇒ **第一次登录就要验证码**。
+   * uid 只活在内存里（Java 侧拿不到、页面也拿不到），取一次用一次：
+   * 这样「同一张图重放两次」在结构上就不可能发生。 */
+  var captchaUid = '';
+
+  function takeCaptchaUid() {
+    var u = captchaUid;
+    captchaUid = '';   // 一次性
+    return u;
+  }
+
+  /** 取一张验证码。返回 {img: 'data:image/png;base64,…', ttl}。 */
+  async function fetchCaptcha() {
+    var cas = cfgUrl(CFG.cas.base);
+    var url = cas + (CFG.cas.kaptcha_path || '/kaptcha') +
+              '?_t=' + Date.now() + '&uid=';
+    var r = await http('GET', url, '', cas + '/login', 0, {
+      'Accept': 'application/json, text/plain, */*',
+    });
+    var j = null;
+    try { j = JSON.parse(String(r.body || '')); } catch (e) { j = null; }
+    if (!j || !j.uid || !j.content) {
+      throw new EamsError('验证码没取到，可能登录页改版了');
+    }
+    captchaUid = String(j.uid);
+    return { img: String(j.content), ttl: Number(j.timeout) || 30 };
+  }
+
+  async function login(username, password, code, uid) {
     // 🔴 达小助改造（W3）：升达走统一 CAS，**镜像 kingo.py KingoClient.login**。
     //   ① POST {cas}/v1/tickets（表单编码+小写键+loginType）→ 拿 TGT；
-    //      有些部署直接回 JSON{TGT}，两种形态都抠。
     //   ② 🔴 CASTGC 是门户前端 JS 自己写进 cookie 的，服务器不 Set-Cookie ——
     //      必须手动种进原生 CookieStore（Android.setCookie），否则免密续期永不生效。
     //   ③ 失败**绝不重试**：错 5 次锁号、且会触发滑块验证码（红线）。
+    //   ④ 2026-11-03 修复：密码必须 RSA 加密、且第一次登录就要带验证码
+    //      （学校 /loginType 返回 isVerifyCode=1）。不带的话服务端回 CODEFALSE，
+    //      界面只能显示「登录没成功（200）」——就是用户报的那个错。
     if (loggedIn && loggedUser === username) return;
     var cas = cfgUrl(CFG.cas.base);
-    var r = await http('POST', cas + CFG.cas.tickets_path, form({
-      username: username, password: password,
-      service: CFG.cas.portal, loginType: '',
-    }), CFG.cas.portal, 0, {
+    var form0 = {
+      username: username,
+      password: casRsa(password),
+      service: CFG.cas.portal,
+      loginType: ''
+    };
+    // 字段名就是 id / code（不是 captcha / verifyCode），与学校前端一致。
+    if (uid) { form0.id = uid; form0.code = code || ''; }
+    var r = await http('POST', cas + CFG.cas.tickets_path, form(form0),
+                       CFG.cas.portal, 0, {
       'Origin': cas.split('/lyuapServer')[0],
       'Referer': cas + '/login?service=' + encodeURIComponent(CFG.cas.portal),
       'X-Requested-With': 'XMLHttpRequest',
       'Accept': 'application/json, text/plain, */*',
     });
     var body = String(r.body || '');
-    var m = /TGT-[A-Za-z0-9_.\-]+/.exec(body);
-    if (!m) {
-      // 不自动重试；把服务端原话带回去，界面上说人话
-      var why = '登录没成功';
-      if (/验证码|kaptcha/i.test(body)) why = '需要验证码，请刷新后人工完成';
-      else if (/密码|账号.*(错|误)/.test(body)) why = '学号或密码不对';
-      throw new EamsError(why + '（' + (r.status || '网络') + '）', 'auth');
+    // 先判业务失败码，再找 TGT —— 顺序反了就只能给出没用的「登录没成功」。
+    var bad = casFailure(body);
+    if (bad) throw new EamsError(bad.message, bad.kind);
+    var tgt = casTgt(body, r.location || r.url || '');
+    if (!tgt) {
+      // 不自动重试。走到这里说明服务端既没给原因码、也没给票据 ——
+      // 通常意味着登录页改版了。**不要**只甩一个 HTTP 状态码给用户。
+      throw new EamsError('登录没成功：服务端没给原因也没给票据（HTTP ' +
+                          (r.status || '网络') + '），可能登录页改版了', 'auth');
     }
-    var tgt = m[0];
     // 🔴 手动种 CASTGC（域名取 CAS 主机名）
     try {
       var casHost = cas.split('/')[2];
@@ -1538,12 +1648,14 @@
   // ------------------------------------------------------------------ 对外契约
 
   /** 整份同步。**失败会强制真登一次再重来**，见下面的注释。 */
-  async function doSync(user, pwd) {
+  async function doSync(user, pwd, code) {
     try {
-      return await doSyncOnce(user, pwd);
+      return await doSyncOnce(user, pwd, code);
     } catch (e) {
-      // 密码错是「用户重输一次就能解决」的，重试纯属白等
-      if (e && e.kind === 'auth') throw e;
+      // 密码错是「用户重输一次就能解决」的，重试纯属白等。
+      // 🔴 验证码错(kind='code')更不能重试：每失败一次都在动学校的错误计数器，
+      //    错 5 次锁号 —— 这是红线，2026-11-03 明确加进来。
+      if (e && (e.kind === 'auth' || e.kind === 'code')) throw e;
       // 🔴 为什么要这一层：
       //    login() 开头有个短路 —— 「已经登录着同一个账号就直接用现成会话」。
       //    这个短路是对的（不然拿不到加盐值），但它有个前提没被验证：
@@ -1558,15 +1670,15 @@
       examPageSeen = false;
       projectReady = false;
       clearCookies();
-      return await doSyncOnce(user, pwd);
+      return await doSyncOnce(user, pwd, code);
     }
   }
 
-  async function doSyncOnce(user, pwd) {
+  async function doSyncOnce(user, pwd, code) {
     idsCache = '';
     examPageSeen = false;
     projectReady = false;
-    await login(user, pwd);
+    await login(user, pwd, code, takeCaptchaUid());
     var prof = await profile();
     var tt = await timetable();
     // 成绩单独兜一层，理由同 Python 版 Service.sync：没有成绩不是错误，
@@ -3905,17 +4017,39 @@
           try { cs = String(Android.credState() || ''); } catch (e) { cs = ''; }
           return { ok: true, bound: !!c, username: c ? c.u : '', credState: cs };
         }
+        if (path === '/api/captcha') {
+          // uid 留在本文件的 captchaUid 里，只把图片给页面 —— 与 bridge.py 同契约。
+          try {
+            var cap = await fetchCaptcha();
+            return { ok: true, img: cap.img, ttl: cap.ttl };
+          } catch (e) {
+            return { ok: false, error: (e && e.message) || String(e) };
+          }
+        }
         if (path === '/api/login') {
           var user = (body.username || '').trim();
           var pwd = body.password || '';
+          var code = String(body.code || '').trim();
           if (!user || !pwd) return { ok: false, error: '请填学号和密码' };
-          var payload = await doSync(user, pwd);
+          if (!code) {
+            // 学校 CAS 第一次登录就要验证码。前端先拦一道，
+            // 省掉一次必然失败（还会计入错误次数）的请求。
+            return { ok: false, error: '请填验证码', needCaptcha: true };
+          }
+          var payload;
+          try {
+            payload = await doSync(user, pwd, code);
+          } catch (e) {
+            var out = { ok: false, error: (e && e.message) || String(e) };
+            if (e && e.kind === 'code') { out.needCaptcha = true; out.captchaStale = true; }
+            return out;
+          }
           if (body.remember !== false) {
             // 空串 = 存好了；"soft" = 走了备用方式；"fail: xxx" = 没存上。
             // 🔴 别再把这三件事压成一个布尔值 —— 用户有权知道密码到底存没存住。
             var why = '';
-            try { why = String(Android.saveCred(user, pwd) || ''); } catch (e) {
-              why = 'fail: 调用原生保存出错（' + ((e && e.message) || e) + '）';
+            try { why = String(Android.saveCred(user, pwd) || ''); } catch (e2) {
+              why = 'fail: 调用原生保存出错（' + ((e2 && e2.message) || e2) + '）';
             }
             payload.saved = why;
           }
@@ -3924,7 +4058,16 @@
         if (path === '/api/sync') {
           var acc = loadCred();
           if (!acc) return { ok: false, error: '还没绑定账号', needBind: true };
-          return await doSync(acc.u, acc.p);
+          try {
+            return await doSync(acc.u, acc.p, '');
+          } catch (e) {
+            // 🔴 CASTGC 过期后自动重登会撞上验证码 —— 这不是「密码错了」，
+            //   是「这次要人算一道题」。标出来让界面去要验证码，
+            //   别把用户推到「重新绑定」那条更重的路上。
+            var so = { ok: false, error: (e && e.message) || String(e) };
+            if (e && e.kind === 'code') so.needCaptcha = true;
+            return so;
+          }
         }
         if (path === '/api/unbind') {
           Android.clearCred();
