@@ -8024,16 +8024,21 @@ async function unbindPortal() {
 // 🔴 达小助改造（W6）：底座这三个地址是**郑航**当天实测打开过的，对升达全是错链：
 //      · 教务 `jwglxt.zua.edu.cn/eams/resetPassword.action` —— 郑航是正方 EAMS，
 //        升达是青果（jw.shengda.edu.cn:8090），根本没有这个路径；
-//      · 门户 `sfrz.zua.edu.cn/aqzx/...` —— 郑航的统一认证，升达是 cas.shengda.edu.cn，
-//        它的自助找回页地址要阶段2 确认（任务 2.7）。
+//      · 门户 `sfrz.zua.edu.cn/aqzx/...` —— 郑航的统一认证，升达是 cas.shengda.edu.cn。
 //   留错链比不给更糟：点开一个 404，用户会以为整个 App 坏了。
-//   所以 url 置空 ⇒ 按钮变成一个「地址待配置」的提示，不发请求也不跳转。
-//   学习通那条不带 fid 就能用（fid 只是预选学校），保留。
+//
+// ✅ 2026-11-03 补上：升达的找回页地址从学校登录页的注入脚本里读到了（不是猜的）：
+//      window.safePassWord       = https://cas.shengda.edu.cn/safe/#/password/passwordFound
+//      window.mobileSafePassWord = https://cas.shengda.edu.cn/mobile/#/password  （手机版）
+//    升达是 CAS 单点，教务（青果 8090）用的就是这个统一身份认证账号，
+//    所以 jw 与 portal 两条其实指向同一个入口。
+//    ⚠️ 前提：账号在认证中心绑过手机或密保 —— 没绑过的话这个页面走不通，只能找教务处。
+const CAS_PWD_FOUND = 'https://cas.shengda.edu.cn/safe/#/password/passwordFound';
 const PWD_HELP = {
-  jw: { name: '教务系统', url: '' },
+  jw: { name: '统一身份认证', url: CAS_PWD_FOUND },
   cx: { name: '学习通',
         url: 'https://passport2.chaoxing.com/pwd/findpwd?version=1' },
-  portal: { name: '统一身份认证', url: '' },
+  portal: { name: '统一身份认证', url: CAS_PWD_FOUND },
 };
 
 /** 「显示密码」眼睛按钮。`id` 是要切换的那个输入框。

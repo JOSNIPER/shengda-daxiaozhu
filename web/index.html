@@ -601,7 +601,7 @@
               </button>
             </span>
           </label>
-          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
+          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去统一身份认证重置</button>
           <!-- 补密码也要验证码：学校 CAS 的登录是「密码 + 算术验证码」，
                少一样都会被判 CODEFALSE。 -->
           <label class="field">
@@ -716,7 +716,7 @@
           <p class="sub">用学校统一身份认证的学号和密码，登录后自动单点进入教务系统。</p>
           <label class="field">
             <span>学号</span>
-            <input id="inUser" type="text" inputmode="numeric" autocomplete="username" placeholder="例如 2023123456">
+            <input id="inUser" type="text" inputmode="numeric" autocomplete="username" placeholder="例如 202201010101">
           </label>
           <label class="field">
             <span>密码</span>
@@ -729,8 +729,9 @@
               </button>
             </span>
           </label>
-          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
-          <p class="sub small pwdhint">那边的重置页只认「账号所用邮箱」—— 当初没在教务系统里绑过邮箱的话，这一步走不通，得找教务处重置。</p>
+          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去统一身份认证重置</button>
+          <p class="sub small pwdhint">升达的教务走学校统一身份认证，就这一个账号。忘了密码走上面的「忘记密码」——
+            前提是当初在认证中心绑过手机号或密保问题；都没绑过的话只能找教务处重置。</p>
           <!-- 2026-11-03：学校统一认证开了图形验证码（/loginType 的 isVerifyCode=1），
                **第一次登录就要带**，不是错几次才出现。图是一道算术题，
                由人来算 —— 红线是不自动识别（错 5 次锁号）。 -->
