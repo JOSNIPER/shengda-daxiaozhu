@@ -3227,6 +3227,10 @@ async function prefetchExams() {
   prefetchDone = 0;
 
   if (!DATA || !DATA.profile || !DATA.profile.studentId) { renderPrefetchHint(); return; }
+  // 🔴 2026-11-03：本校考试入口还没适配（payload 里带 error）。
+  //   这时不该去「补齐其他学期的考试」——那只会让绑定成功的提示里出现
+  //   「正在补齐其他学期的考试」这种空话，等于承诺一件不做的事。
+  if (DATA.exams && DATA.exams.error) { renderPrefetchHint(); return; }
   const terms = examTerms();
   const curId = (DATA.exams && DATA.exams.semesterId) || '';
   const todo = terms.filter((t) => t.id !== curId && !examBucket(t.id) && !EXAM_ERR[t.id]);

@@ -1,52 +1,86 @@
 {
-  "_comment": "🔴 W6 debug APK 专用：教务/CAS 全部指向 PC 上的离线 mock。装到手机前把 __PC_IP__ 替换成电脑局域网 IP（ipconfig 里那个），并在电脑上跑：python 离线mock_ui跑通/mock_server.py --lan 8090。正式发布包禁用本文件（改名或删除即可回退 shengda.json）。",
-
+  "_comment": "🔴 W6 debug APK 专用：教务/CAS 全部指向 PC 上的离线 mock。装到手机前把 __PC_IP__ 替换成电脑局域网 IP，并在电脑上跑：python 离线mock_ui跑通/mock_server.py --lan 8090。正式发布包禁用本文件（改名或删除即可回退 shengda.json）。",
   "cas": {
     "base": "http://__PC_IP__:8090/lyuapServer",
     "portal": "http://__PC_IP__:8090/",
     "tickets_path": "/v1/tickets",
     "kaptcha_path": "/kaptcha",
-    "login_type_path": "/loginType",
-    "wechat": {
-      "qrcode_path": "/weChat/CreateQRcode",
-      "check_scan_path": "/weChat/wx/CheckScan",
-      "poll_interval": 1.5,
-      "poll_timeout": 180,
-      "uuid_field": "uuid",
-      "content_field": "content",
-      "user_field": "userName",
-      "pass_field": "passWord",
-      "service_field": "service",
-      "waiting_status_code": 500
-    }
+    "login_type_path": "/loginType"
   },
   "jw": {
     "base": "http://__PC_IP__:8090",
     "cas_service": "http://__PC_IP__:8090/caslogin",
-    "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
-    "data_table_path": "/taglib/DataTable.jsp",
-    "time_range_path": "/jw/common/getWsxkTimeRange.action",
-    "score_stat_path": "/jw/common/getSelectLessonScoreKcsInfo.action",
     "home_path": "/frame/homes.html",
+    "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
     "droplist_path": "/frame/droplist/getDropLists.action",
+    "term_path": "/jw/common/showYearTerm.action",
+    "data_table_path": "/taglib/DataTable.jsp",
     "verify_tls": true,
     "polite_delay_sec": 0.2
   },
   "pages": {
-    "timetable": { "tableId": "9001", "menucode": "M9001", "preheat_path": "" },
-    "score": { "tableId": "9002", "menucode": "M9002", "preheat_path": "" },
-    "exam": { "tableId": "9003", "menucode": "M9003", "preheat_path": "" },
-    "free_room": { "tableId": "9004", "menucode": "M9004", "preheat_path": "" },
-    "profile": { "tableId": "9005", "menucode": "M9005", "preheat_path": "" }
+    "_comment": "全部来自 2026-11-03 校内 HAR（632 请求）实测，不是猜的。",
+    "timetable": {
+      "kind": "kbt",
+      "path": "/student/wsxk.xskcb10319.jsp",
+      "menucode": "S20301",
+      "params_b64": "xn={xn}&xq={xq}&xh={xh}"
+    },
+    "score": {
+      "kind": "stuckcj",
+      "path": "/student/xscj.stuckcj.jsp",
+      "data_path": "/student/xscj.stuckcj_data.jsp",
+      "menucode": "S40303",
+      "body": {
+        "sjxz": "sjxz1",
+        "ysyx": "yxcj",
+        "zx": "1",
+        "fx": "1",
+        "wz": "0",
+        "btnExport": "导出",
+        "ysyxS": "on",
+        "sjxzS": "on",
+        "zxC": "on",
+        "fxC": "on",
+        "xsjd": "1"
+      }
+    },
+    "exam": {
+      "kind": "unsupported",
+      "_comment": "用户 2026-11-03 明确「考试不用管」，入口未抓；返回空+说明，不编。"
+    },
+    "free_room": {
+      "kind": "unsupported",
+      "_comment": "用户明确「空教室不需要」，且公共查询里只有课表可查。"
+    },
+    "profile": {
+      "kind": "from_kbt",
+      "_comment": "学籍档案页未抓；学号/姓名/班级从课表页头部取，学院/专业从班级名拆。"
+    }
   },
   "column_map": {
-    "timetable": { "zc": "weeks_text", "kcm": "name", "skjs": "teacher",
-                   "cdmc": "room", "skxq": "day", "skjc": "periods" },
-    "score": {}, "exam": {}, "free_room": {}, "profile": {}
+    "timetable": {},
+    "score": {},
+    "exam": {},
+    "free_room": {},
+    "profile": {}
   },
-  "timetable": { "unit_count": 12, "parse_slots": true },
-  "semester": { "display_fallback": "2026-2027学年第1学期" },
-  "free_room": { "max_periods": null },
-  "chaoxing": { "fid": null },
-  "update": { "page_base": "http://__PC_IP__:8090/daxiaozhu", "github_user": "TBD", "enabled": false }
+  "timetable": {
+    "_comment": "unitCount 由课表实测（每天 10 小节 = 5 大节），不再写死 12。",
+    "unit_count": null
+  },
+  "semester": {
+    "total_weeks": 16
+  },
+  "free_room": {
+    "max_periods": null
+  },
+  "chaoxing": {
+    "fid": null
+  },
+  "update": {
+    "page_base": "http://__PC_IP__:8090/daxiaozhu",
+    "github_user": "TBD",
+    "enabled": false
+  }
 }

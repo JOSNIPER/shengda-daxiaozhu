@@ -1149,19 +1149,33 @@ def make_service(args) -> "Service":
 
 def source_note(svc: "Service") -> list:
     """启动时把「教务这一轨现在连着谁、能不能读出数据」说清楚。
-    撞在界面上才知道，比打印两行难查得多。"""
+    撞在界面上才知道，比打印两行难查得多。
+
+    🔴 配置里的 pages 现在有条 ``_comment`` 字符串，遍历时**必须跳过非字典项**，
+    否则启动就 AttributeError（2026-11-03 踩过：桥起不来，页面白屏，
+    浏览器那头只看到 switchTab 未定义）。
+    """
     cfg = svc.cfg or kingo.load_config()
     pages = cfg.get("pages") or {}
-    tbd = sorted(k for k, v in pages.items()
-                 if str((v or {}).get("tableId", "")).startswith("TBD"))
+    ready, unsupported = [], []
+    for k, v in pages.items():
+        if not isinstance(v, dict):       # _comment 之类的说明项
+            continue
+        if (v.get("kind") or "") == "unsupported":
+            unsupported.append(k)
+        elif v.get("path"):
+            ready.append(k)
     out = ["教务轨：  青果 kingo.py → %s" % cfg["jw"]["base"],
            "配置：    %s" % svc.cfg_desc]
-    if tbd:
-        out.append("⚠️ %s 的 tableId 还是占位（等阶段2校内抓包）——" % "/".join(tbd))
-        out.append("   绑号能登录成功，但课表/成绩会报「还没配置」，不会编数据。")
-        out.append("   只想先把界面跑通：另开一个窗口执行")
-        out.append("     python 离线mock_ui跑通/mock_server.py 8090")
-        out.append("   再用 python bridge.py --mock 起本服务（账号看 mock 打印的那行）。")
+    if ready:
+        out.append("已适配：  %s（入口来自校内抓包实测）" % " / ".join(sorted(ready)))
+    if unsupported:
+        out.append("未适配：  %s —— 界面上会如实说『还没适配』，不编数据。"
+                   % " / ".join(sorted(unsupported)))
+    if not ready:
+        out.append("⚠️ 一个页面都没配上：只能登录，取不到任何数据。")
+        out.append("   想先跑通界面：python 离线mock_ui跑通/mock_server.py 8090")
+        out.append("   再用 python bridge.py --mock 起本服务。")
     return out
 
 

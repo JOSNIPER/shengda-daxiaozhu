@@ -37,24 +37,31 @@ CFG = {
             "tickets_path": "/v1/tickets", "kaptcha_path": "/kaptcha"},
     "jw": {"base": "http://127.0.0.1:%d" % PORT,
            "cas_service": "http://127.0.0.1:%d/caslogin" % PORT,
-           "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
-           "data_table_path": "/taglib/DataTable.jsp",
-           "time_range_path": "/jw/common/getWsxkTimeRange.action",
            "home_path": "/frame/homes.html",
+           "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
            "droplist_path": "/frame/droplist/getDropLists.action",
+           "term_path": "/jw/common/showYearTerm.action",
+           "data_table_path": "/taglib/DataTable.jsp",
            "verify_tls": True, "polite_delay_sec": 0.0},
+    # 🔴 全部来自 2026-11-03 校内 HAR 实测（不是猜的），与 config/shengda.json 同构
     "pages": {
-        "timetable": {"tableId": "9001", "menucode": "M9001", "preheat_path": ""},
-        "score": {"tableId": "9002", "menucode": "M9002", "preheat_path": ""},
-        "exam": {"tableId": "9003", "menucode": "M9003", "preheat_path": ""},
-        "free_room": {"tableId": "9004", "menucode": "M9004", "preheat_path": ""},
-        "profile": {"tableId": "9005", "menucode": "M9005", "preheat_path": ""},
+        "timetable": {"kind": "kbt", "path": "/student/wsxk.xskcb10319.jsp",
+                      "menucode": "S20301",
+                      "params_b64": "xn={xn}&xq={xq}&xh={xh}"},
+        "score": {"kind": "stuckcj", "path": "/student/xscj.stuckcj.jsp",
+                  "data_path": "/student/xscj.stuckcj_data.jsp",
+                  "menucode": "S40303",
+                  "body": {"sjxz": "sjxz1", "ysyx": "yxcj", "zx": "1", "fx": "1",
+                           "wz": "0", "btnExport": "导出", "ysyxS": "on",
+                           "sjxzS": "on", "zxC": "on", "fxC": "on", "xsjd": "1"}},
+        "exam": {"kind": "unsupported"},
+        "free_room": {"kind": "unsupported"},
+        "profile": {"kind": "from_kbt"},
     },
-    "column_map": {"timetable": {"zc": "weeks_text", "kcm": "name", "skjs": "teacher",
-                                 "cdmc": "room", "skxq": "day", "skjc": "periods"},
-                   "profile": {}},
-    "semester": {}, "free_room": {"max_periods": None}, "chaoxing": {}, "update": {},
-    "timetable": {"unit_count": 12},
+    "column_map": {},
+    "timetable": {"unit_count": None},
+    "semester": {"total_weeks": None},
+    "free_room": {"max_periods": None}, "chaoxing": {}, "update": {},
 }
 
 PASS = FAIL = 0
@@ -105,49 +112,70 @@ def run_tests():
     jars = c.s.cookies.get_dict()
     check("T2 换票→caslogin 拿到 JSESSIONID", "JSESSIONID" in jars, jars)
 
-    # ---- T3 四组表格 ----
+    # ---- T3 课表 / 成绩 / 学籍（本校真实页面结构）----
     tt = c.timetable()
-    check("T3a 课表 4 行", len(tt["courses"]) == 4, len(tt["courses"]))
-    r0 = tt["courses"][0]
-    check("T3b 行内 id 定列(课程名列名映射)", r0.get("name") == "高等数学(上)", r0)
-    check("T3c 中文列名未登记的保留原名", "课程号" not in r0 and "kch" in r0, r0)
+    check("T3a 课表解析出全部课程（实测 19 条）",
+          len(tt["courses"]) == 19, len(tt["courses"]))
+    names = [x["name"] for x in tt["courses"]]
+    check("T3b 课程名/教师/地点都取到了",
+          "面向对象程序设计" in names and
+          any(x.get("teacher") == "张小峰" for x in tt["courses"]) and
+          any(x.get("room") for x in tt["courses"]), names[:4])
+    check("T3c 每门课都有 slots 和 weeks（能直接进格子）",
+          all(x["slots"] and x["weeks"] for x in tt["courses"]),
+          [x for x in tt["courses"] if not (x["slots"] and x["weeks"])][:2])
+    even = [x for x in tt["courses"] if x["name"] == "大学生创新基础"]
+    check("T3c2 「双周」真的只落在偶数周",
+          bool(even) and all(w % 2 == 0 for w in even[0]["weeks"]),
+          even[0]["weeks"] if even else None)
     gr = c.grades()
-    check("T3d 成绩 3 行", len(gr["courses"]) == 3, gr)
+    check("T3d 成绩 58 条（实测）", len(gr["courses"]) == 58, len(gr["courses"]))
+    check("T3d2 成绩按学期分段（实测 4 个学期）",
+          len(gr.get("terms") or []) == 4, gr.get("terms"))
+    ov = gr.get("overall") or {}
+    check("T3d3 绩点/学分/门数按界面契约给齐（overall 是对象）",
+          isinstance(ov.get("gpa"), float) and ov.get("credits") and ov.get("count") == 58,
+          ov)
+    check("T3d4 学期分段带 year/term（界面靠它画「大一上」）",
+          (gr.get("summary") or [{}])[0].get("year") == "2024-2025"
+          and (gr.get("summary") or [{}])[0].get("term") == 1,
+          (gr.get("summary") or [None])[0])
     ex = c.exams()
-    check("T3e 考试 2 行 published=True",
-          len(ex["exams"]) == 2 and ex["published"], ex)
+    check("T3e 考试未抓包 ⇒ 如实报未适配，不编数据",
+          not ex["exams"] and "没适配" in (ex.get("error") or ""), ex)
     pf = c.profile()
-    check("T3f 学籍中文键映射(_PROFILE_KEYS)",
-          pf.get("studentId") == "2024010101" and pf.get("major") == "计算机科学与技术", pf)
+    check("T3f 学籍从课表页头部取到（学号/姓名/专业）",
+          pf.get("studentId") == "2024010101" and pf.get("name") == "测试学生"
+          and pf.get("major") == "软件工程", pf)
 
-    # ---- T4 周数 ----
-    check("T4 totalWeeks=24 而非末课 18", tt["totalWeeks"] == 24, tt["totalWeeks"])
+    # ---- T4 周数与节次上限 ----
+    check("T4 totalWeeks 由课程周次兜底（实测 16）",
+          tt["totalWeeks"] == 16, tt["totalWeeks"])
+    check("T4b 每日节次由课表实测（10 节，不再写死 12）",
+          tt["unitCount"] == 10, tt["unitCount"])
 
     # ---- T5 会话负例 ----
     c2 = KingoClient(config=CFG, session=requests.Session())
-    c2._logged_in = True  # 假装登录过但没有 CASTGC/菜单上下文
+    c2._logged_in = True  # 假装登录过但没有 CASTGC/JSESSIONID
+    msg5, kind5 = "", ""
     try:
         c2.timetable()
-        ok5 = False
-        err = None
     except EamsError as e:
-        err = e
-        ok5 = "tableId 还没配置" not in str(e)  # 走到了请求并被错误页拦
-    check("T5 裸会话打业务页 → 报会话类错误",
-          ok5 and getattr(err, "kind", "") == "auth", str(err))
+        msg5, kind5 = str(e), getattr(e, "kind", "")
+    check("T5 裸会话打课表页 → 报会话类错误（不是静默空课表）",
+          kind5 == "auth", msg5 or "(居然成功了)")
 
-    # ---- T6 频控 vs 会话失效 ----
+    # ---- T6 未适配的页面必须如实说，不能编 ----
     c3 = KingoClient(config=CFG, session=requests.Session())
     login_ok(c3)
     c3.ensure_session()
     hit = ""
     try:
-        for _ in range(12):          # polite_delay=0，快速连打
-            c3._fetch_table("score")
+        c3._fetch_table("exam")
     except EamsError as e:
         hit = str(e)
-    check("T6 连打超限识别为『请求太频繁』而非『重新登录』",
-          "频繁" in hit, hit)
+    check("T6 未抓包的页面（考试/空教室）报未适配，不编数据",
+          "没适配" in hit, hit)
 
     # ---- T7 写端点护栏 ----
     blocked = False
@@ -187,15 +215,16 @@ def run_tests():
 
     # ---- T8 配置缺失行为 ----
     cfg8 = json_copy(CFG)
-    cfg8["pages"]["timetable"]["tableId"] = "TBD_X"
+    cfg8["pages"]["timetable"]["path"] = ""
     c8 = KingoClient(config=cfg8, session=requests.Session())
+    c8._logged_in = True
     try:
         c8.timetable()
         msg8 = ""
     except EamsError as e:
         msg8 = str(e)
-    check("T8 tableId 未配置 → 报可操作错误而非编数据",
-          "还没配置" in msg8, msg8)
+    check("T8 课表入口没配置 → 报可操作错误而非编数据",
+          "没配置" in msg8, msg8)
 
     # ---- T10 不带验证码（2026-11-03「登录没成功（200）」事故回归）----
     #   学校 /loginType 的 isVerifyCode=1 ⇒ 第一次登录就要验证码。

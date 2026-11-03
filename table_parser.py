@@ -251,3 +251,166 @@ def parse_selects(html_text: str, name_map: dict) -> dict:
             seen.add(rid)
             out[ui_key].append({"id": rid, "name": label})
     return out
+
+
+# ======================================================================
+# 升达青果「课表/成绩」页面解析（2026-11-03 校内 HAR 实测）
+# ----------------------------------------------------------------------
+# 🔴 本校**不用 DataTable.jsp**。上面那套 head_/trN_ 解析对课表成绩无效，
+#    真实入口是两张 jsp 页面。HAR 里抓到的原文见 _lab/har/*.html。
+#
+# 课表页 /student/wsxk.xskcb10319.jsp?params=<base64("xn=..&xq=..&xh=..")>
+#   结构：第一张表给学号/姓名/班级/课程门数/学分；
+#         第二张表 id=mytable，首行是「星期一…星期日」，
+#         之后每 2 行一大节（td[rowspan] 上午/下午/晚上 + td 节次「一」），
+#         每行最后 7 个 td 是周一到周日；
+#         有课的格子里是若干 <div>，每个 div 用 <br> 分成四段：
+#             课程名 / 教师 / 周次[节次] / 地点
+#         例：面向对象程序设计 / 张小峰 / 1-4,6-16[1-2] / 资-305（计算机教室二十）
+#         周次里可能带「单」「双」；同一格可能有多门课（分两个 div）。
+#
+# 成绩页 POST /student/xscj.stuckcj_data.jsp
+#   结构：多个「学年学期：2024-2025学年第一学期」分隔行，每段一张 12 列表：
+#         序号|课程/环节|学分|总学时|类别|修读性质|考核方式|成绩|获得学分|绩点|学分绩点|备注
+#         课程名带课程号前缀 "[01238111]专业认知"。
+# ======================================================================
+
+_TD = re.compile(r"<td[^>]*>(.*?)</td>", re.I | re.S)
+_BR = re.compile(r"<br\s*/?>", re.I)
+_KBT_DIV = re.compile(r"<div[^>]*padding-bottom[^>]*>(.*?)</div>", re.I | re.S)
+_BRACKET = re.compile(r"\[(\d+)-(\d+)\]")
+
+
+def _week_numbers(spec: str) -> list:
+    """'1-4,6-16 双' → 偶数周；'1-16 单' → 奇数周；'14,16' → [14,16]。
+
+    🔴 「单/双」必须**先记下来再从串里删**：直接剔非数字会把
+    '1-16 双' 变成 [1..16]，于是单周课也会出现在双周上。
+    """
+    s = str(spec or "")
+    even = "双" in s
+    odd = "单" in s
+    s = re.sub(r"[^\d,\-]", " ", s)
+    weeks = set()
+    for token in re.split(r"[,\s]+", s.strip()):
+        if not token:
+            continue
+        if "-" in token:
+            a, _, b = token.partition("-")
+            if a.isdigit() and b.isdigit():
+                weeks.update(range(int(a), int(b) + 1))
+        elif token.isdigit():
+            weeks.add(int(token))
+    if even:
+        weeks = {w for w in weeks if w % 2 == 0}
+    elif odd:
+        weeks = {w for w in weeks if w % 2 == 1}
+    return sorted(weeks)
+
+
+def _kbt_header(html_text: str) -> dict:
+    flat = clean_cell(html_text)
+    out = {}
+    for key, field, conv in (
+            (r"学号[：:]\s*([0-9A-Za-z]+)", "studentId", str),
+            (r"姓名[：:]\s*(\S+)", "name", str),
+            (r"所在班级[：:]\s*(\S+)", "clazz", str),
+            (r"课程门数[：:]\s*(\d+)", "courseCount", int),
+            (r"课程学分[：:]\s*([\d.]+)", "credits", str)):
+        m = re.search(key, flat)
+        if m:
+            try:
+                out[field] = conv(m.group(1))
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def parse_kbt_timetable(html_text: str) -> dict:
+    """课表页 → {head, courses[], totalWeeks, unitCount, empty}。
+
+    courses 的每一项都满足 UI 契约（code/name/teacher/room/weeks/slots），
+    可以直接进格子视图 —— 不再有 shape:"raw" 这种半成品。
+    """
+    rows = _TR.findall(html_text or "")
+    frags = []
+    for row in rows:
+        tds = _TD.findall(row)
+        if len(tds) < 7:
+            continue
+        days = tds[-7:]
+        if "星期" in clean_cell(days[0]):
+            continue                          # 表头行
+        for day, cell in enumerate(days):
+            if "padding-bottom" not in cell:
+                continue                      # 空格子（div_nokb）
+            for inner in _KBT_DIV.findall(cell):
+                parts = [clean_cell(p) for p in _BR.split(inner)]
+                parts = [p for p in parts if p]
+                if len(parts) < 2:
+                    continue
+                name = parts[0]
+                teacher = parts[1]
+                spec = parts[2] if len(parts) > 2 else ""
+                room = parts[3] if len(parts) > 3 else ""
+                pm = _BRACKET.search(spec)
+                periods = []
+                if pm:
+                    a, b = int(pm.group(1)), int(pm.group(2))
+                    if 1 <= a <= b <= 30:
+                        periods = list(range(a, b + 1))
+                weeks = _week_numbers(spec.split("[")[0])
+                frags.append((name, teacher, room, tuple(weeks), tuple(periods), day))
+
+    # 合并：同名同师同教室同周次 → 一条，多个时段并进 slots
+    merged = {}
+    order = []
+    for name, teacher, room, weeks, periods, day in frags:
+        key = (name, teacher, room, weeks)
+        if key not in merged:
+            merged[key] = {"code": name, "name": name, "teacher": teacher,
+                           "room": room, "weeks": list(weeks), "slots": []}
+            order.append(key)
+        e = merged[key]
+        for p in periods:
+            slot = {"day": day, "period": p - 1}
+            if slot not in e["slots"]:
+                e["slots"].append(slot)
+
+    courses = [merged[k] for k in order]
+    for c in courses:
+        c["slots"].sort(key=lambda s: (s["day"], s["period"]))
+        if not c["slots"] or not c["weeks"]:
+            # 拼不出格子就不交半成品：整条丢掉比画错位置好
+            c["slots"] = c["slots"] or []
+
+    usable = [c for c in courses if c["slots"] and c["weeks"]]
+    max_week = max([max(c["weeks"]) for c in usable] or [0])
+    max_period = max([max(s["period"] for s in c["slots"]) for c in usable] or [0]) + 1
+    return {"head": _kbt_header(html_text), "courses": usable,
+            "totalWeeks": max_week or None, "unitCount": max(10, max_period),
+            "empty": not usable}
+
+
+def parse_stuckcj(html_text: str) -> list:
+    """成绩页 → [{term,kch,kcm,xf,cj,jd,hdjd,xfdj,ksxz,ksfs,xz}]（UI 契约同旧版）。"""
+    rows = _TR.findall(html_text or "")
+    term = ""
+    out = []
+    for row in rows:
+        cells = [clean_cell(t) for t in re.findall(
+            r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.I | re.S)]
+        if len(cells) == 1 and "学年学期" in cells[0]:
+            term = re.split(r"[：:]", cells[0])[-1].strip()
+            continue
+        if len(cells) >= 12 and cells[0].isdigit():
+            raw = cells[1]
+            m = re.match(r"\[([0-9A-Za-z]+)\]\s*(.*)", raw)
+            kch, kcm = (m.group(1), m.group(2)) if m else ("", raw)
+            out.append({
+                "term": term, "kch": kch, "kcm": kcm,
+                "xf": cells[2], "lb": cells[4], "ksxz": cells[5],
+                "ksfs": cells[6], "cj": cells[7], "hdjd": cells[8],
+                "jd": cells[9], "xfdj": cells[10], "bz": cells[11],
+            })
+    return out

@@ -57,6 +57,18 @@ _WRITE_PATTERNS = re.compile(
     r"|electiveCourseForm|pingjia|evaluate|doXk|submit.*course)", re.I)
 
 
+#: 「2024-2025学年第一学期」→ ("2024-2025", 1)
+_TERM_RE = re.compile(r"(\d{4}-\d{4})\s*学年\s*第?([一二三四])学期")
+_CN_NO = {"一": 1, "二": 2, "三": 3, "四": 4}
+
+
+def _split_term(text: str) -> tuple:
+    m = _TERM_RE.search(str(text or ""))
+    if not m:
+        return ("", 0)
+    return (m.group(1), _CN_NO.get(m.group(2), 0))
+
+
 def _host_of(url: str) -> str:
     m = re.match(r"https?://([^/?#:]+)", str(url or ""), re.I)
     return m.group(1).lower() if m else ""
@@ -91,8 +103,9 @@ class KingoClient:
         self._ready = False           # 教务会话（换票+菜单上下文）是否建好
         self._last = 0.0
         self._delay = float(self.cfg["jw"].get("polite_delay_sec", 0.35))
-        self._context = {}            # getWsxkTimeRange 给的 xn/xqM/lcid…
+        self._context = {}            # showYearTerm 给的 xn/xqM/xqName
         self._context_loaded = False
+        self._kbt_head = None         # 课表页头部（学号/姓名/班级），profile 复用
 
     # ---------------------------------------------------------------- 内部
     def _sleep(self):
@@ -340,48 +353,63 @@ class KingoClient:
             pass  # 预热尽力而为，真实请求判活
 
     # ---------------------------------------------------------------- 取数
-    def _load_context(self) -> dict:
-        """选课/查询上下文（xn/xqM/lcid/nj/zydm…）与 🔴 学期总周数。
-        周数只能从这里来，不能用末课所在周反推（郑航 24 vs 18 的坑）。"""
+    def _term_context(self) -> dict:
+        """学期上下文。🔴 2026-11-03 校内 HAR 实测：本校的真实来源是
+        ``POST /jw/common/showYearTerm.action``（无 body），返回
+
+            {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"202401010138",...}
+
+        以前这里调 ``getWsxkTimeRange.action?xktype=2`` —— 本校**没有这个端点**
+        （HAR 里 628 条请求一条都没有），所以整个取数层从来没真正跑通过。
+        """
         if self._context_loaded:
             return self._context
-        r = self._jw_get(self.cfg["jw"]["time_range_path"], params={"xktype": "2"})
-        j = tp._double_encoded_json(r.text)
-        if not j:
-            self._guard(self._body_text(r), "学期时间范围")
+        conf = self.cfg["jw"].get("term_path") or ""
+        if not conf:
+            raise EamsError("学期上下文端点没配置（config 的 jw.term_path）")
+        r = self._jw_post(conf, data={},
+                          referer=self._jw_url(self.cfg["jw"]["home_path"]))
+        j = tp._double_encoded_json(r.text) or {}
+        if not j.get("xn"):
+            self._guard(self._body_text(r), "学期上下文")
             raise EamsError("学期上下文没取到（响应不是预期 JSON）")
-        ctx = j.get("result") if isinstance(j.get("result"), dict) else j
-        if isinstance(ctx, dict):
-            self._context = ctx
+        self._context = j
         self._context_loaded = True
         return self._context
 
+    def _load_context(self) -> dict:
+        """兼容旧调用面。"""
+        return self._term_context()
+
     def _context_params(self) -> dict:
-        c = self._load_context()
-        keys = ("xn", "xqM", "kcfw", "lcid", "nj", "zydm", "yxbdm")
-        return {k: c[k] for k in keys if k in c and c[k] not in (None, "")}
+        c = self._term_context()
+        keys = ("xn", "xqM", "nj")
+        return {k: c[k] for k in keys if c.get(k) not in (None, "")}
 
     def total_weeks(self):
-        """学期总周数（整数或 None）。🔴 唯一合法来源=time_range 端点。"""
-        c = self._load_context()
-        for k in ("zs", "zxs", "totalWeeks", "xqzs"):
-            v = c.get(k)
-            if v is not None:
-                try:
-                    n = int(float(v))
-                    if 10 <= n <= 40:
-                        return n
-                except (TypeError, ValueError):
-                    pass
-        return None
+        """学期总周数。🔴 本校没有权威端点（getWsxkTimeRange 不存在）。
+
+        退路是「所有课程周次的最大值」—— 它不会把任何一门课藏起来
+        （每门课的周次都 ≤ 这个值），代价是纯复习周看不见。
+        config 里给了 ``semester.total_weeks`` 就以它为准，用来纠正。
+        """
+        forced = (self.cfg.get("semester") or {}).get("total_weeks")
+        if forced:
+            try:
+                n = int(forced)
+                if 10 <= n <= 40:
+                    return n
+            except (TypeError, ValueError):
+                pass
+        return None      # 交给 timetable() 用实测最大值兜底
 
     def _fetch_table(self, page_key: str, extra: dict = None) -> list:
-        """DataTable.jsp 取一页表格行 [{青果列名:文本}]。TBD 未配置则报可操作错误。"""
+        """DataTable.jsp 取一页表格行 —— 本校**只剩考试/空教室可能用到**，
+        那两页还没抓包，所以这里通常直接报「未适配」。"""
         conf = self.cfg["pages"].get(page_key) or {}
         tid = conf.get("tableId", "")
         if not tid or tid.startswith("TBD"):
-            raise EamsError("%s的 tableId 还没配置（等校内抓包填入 config/shengda.json）"
-                            % page_key)
+            raise EamsError("%s还没适配本校系统（等抓包确认入口）" % page_key)
         self.ensure_session()
         self._menu_context(page_key)
         params = {"tableId": tid, "fre": "1"}
@@ -396,85 +424,241 @@ class KingoClient:
         rows = tp.parse_data_table(text)
         return tp.apply_column_map(rows, self.cfg["column_map"].get(page_key) or {})
 
+    def _kbt_params(self) -> str:
+        """课表页的 ``params`` = base64(配置里的模板)。实测原文：
+        ``eG49MjAyNiZ4cT0wJnhoPTIwMjQwMTAxMDEzOA==`` → ``xn=2026&xq=0&xh=202401010138``
+        模板放 config（pages.timetable.params_b64），参数名变了不用改代码。
+        """
+        import base64
+        ctx = self._term_context()
+        tpl = (self.cfg["pages"].get("timetable") or {}).get("params_b64") \
+            or "xn={xn}&xq={xq}&xh={xh}"
+        try:
+            raw = tpl.format(xn=ctx.get("xn", ""), xq=ctx.get("xqM", "0"),
+                             xh=self.username or "")
+        except (KeyError, IndexError):
+            raw = "xn=%s&xq=%s&xh=%s" % (ctx.get("xn", ""), ctx.get("xqM", "0"),
+                                         self.username or "")
+        return base64.b64encode(raw.encode("utf-8")).decode("ascii")
+
+    @staticmethod
+    def _semester_name(ctx: dict) -> str:
+        """'2026' + '第一学期' → '2026-2027学年第一学期'。"""
+        xn = str(ctx.get("xn") or "")
+        name = str(ctx.get("xqName") or "")
+        if not xn:
+            return ""
+        try:
+            y1 = int(xn)
+        except ValueError:
+            return name
+        return ("%d-%d学年%s" % (y1, y1 + 1, name)) if name else ("%d-%d学年" % (y1, y1 + 1))
+
     # ----------------------------------------------------------- 契约输出层
     def timetable(self, semester_id: str = "", semester_name: str = "") -> dict:
         """课表。契约 {unitCount, courses[], totalWeeks, weekStart, semester}。
 
-        🔴 会话类错误**向上抛**（与 eams.EamsClient.timetable 一致）——
-        bridge.Service._with_client 靠捕获 EamsError 触发"重登一次再试"；
-        在这里吞掉会把"重登能救"变成"界面显示空课表"。
+        🔴 2026-11-03 重写：本校课表是**独立的 jsp 页面**，不是 DataTable.jsp。
+        实测入口 ``GET /student/wsxk.xskcb10319.jsp?params=<base64>``，
+        格子结构见 table_parser.parse_kbt_timetable 的注释。
+        该页 HTML 里直接带 学号/姓名/班级，所以学籍也顺手从这里取。
 
-        课程行的形状：config 里开了 timetable.parse_slots 才把青果三列
-        （skxq/skjc/zc）拼成格子用的 slots/weeks；**任何一行拼不出来就整批
-        退回原样行**（shape:"raw"），绝不画一张可能错的课表。
+        以前那套「按 tableId 拉行 + 猜列名」在本校没有对应端点，
+        所以不再保留 shape:"raw" 退路 —— 解析不出来就如实报错。
         """
-        rows = self._fetch_table("timetable")   # EamsError 直接上抛
-        tw = None
-        try:
-            tw = self.total_weeks()
-        except EamsError:
-            pass
-        tcfg = self.cfg.get("timetable") or {}
-        unit_count = tcfg.get("unit_count", 12)
-        courses, shape = rows, "raw"
-        if tcfg.get("parse_slots") and rows:
-            shaped = tp.shape_courses(rows, unit_count)
-            if shaped is not None:
-                courses, shape = shaped, "slots"
-        out = {"unitCount": unit_count,
-               "courses": courses, "totalWeeks": tw, "weekStart": 1,
-               "semester": self._context.get("lcmc", "") or semester_name,
-               "shape": shape}
-        if not rows:
-            out["empty"] = True   # 空表≠过期（守卫已在 _fetch 区分过）
+        self.ensure_session()
+        conf = self.cfg["pages"].get("timetable") or {}
+        path = conf.get("path") or ""
+        if not path:
+            raise EamsError("课表入口没配置（config 的 pages.timetable.path）")
+        self._menu_context("timetable")
+        r = self._jw_get(path, params={"params": self._kbt_params()},
+                         headers={"Referer": self._jw_url(
+                             self.cfg["jw"]["home_path"])})
+        text = self._body_text(r)
+        self._guard(text, "课表")
+        res = tp.parse_kbt_timetable(text)
+
+        tw = self.total_weeks() or res["totalWeeks"]
+        ctx = self._term_context()
+        out = {"unitCount": res["unitCount"],
+               "courses": res["courses"],
+               "totalWeeks": tw, "weekStart": 1,
+               "semester": self._semester_name(ctx) or semester_name,
+               "shape": "slots"}
+        if res["empty"]:
+            out["empty"] = True
+        # 学籍缓存：课表页头部已有 学号/姓名/班级，profile() 省一次请求
+        self._kbt_head = res["head"]
         return out
 
     def grades(self) -> dict:
-        """成绩。契约 {summary[], overall, courses[]}。同上：先 raw。"""
+        """成绩。契约 {summary[], overall, courses[]}。
+
+        实测两步（HAR 2026-11-03）：
+          ① ``GET /student/xscj.stuckcj.jsp?menucode=S40303`` —— 检索表单页
+             （必须先访问，成绩数据页认这个页面的会话上下文）
+          ② ``POST /student/xscj.stuckcj_data.jsp`` —— 返回多学期成绩表
+        """
+        conf = self.cfg["pages"].get("score") or {}
+        path = conf.get("path") or ""
+        data_path = conf.get("data_path") or ""
+        if not path or not data_path:
+            return {"summary": [], "overall": None, "courses": [],
+                    "error": "成绩入口没配置（config 的 pages.score）"}
         try:
-            rows = self._fetch_table("score")
+            self.ensure_session()
+            self._menu_context("score")
+            form = self._jw_get(path, params={"menucode": conf.get("menucode", "")},
+                                headers={"Referer": self._jw_url(
+                                    self.cfg["jw"]["home_path"])})
+            self._guard(self._body_text(form), "成绩检索页")
+            r = self._jw_post(data_path, data=self._score_body(conf),
+                              referer=self._jw_url(path))
+            text = self._body_text(r)
+            self._guard(text, "成绩")
+            rows = tp.parse_stuckcj(text)
         except EamsError as e:
             return {"summary": [], "overall": None, "courses": [], "error": str(e)}
-        return {"summary": [], "overall": None, "courses": rows, "shape": "raw",
-                "empty": not rows}
+
+        # 🔴 界面契约（app.js renderGrades 读的就是这些键，猜一个都不行）：
+        #   summary  [{year:"2024-2025", term:1, count, credits, gpa}]
+        #   overall  {gpa, credits, count}
+        #   courses  [{term:"2024-2025 1", code, name, credit, score, gpa,
+        #              category, nature}]
+        # 学校原文是「2024-2025学年第一学期」+ kch/kcm/xf/cj/jd/类别/修读性质，
+        # 这里做一次翻译 —— 界面不改，只改这层。
+        courses, summary = [], []
+        seen = []
+        for r in rows:
+            year, tno = _split_term(r.get("term") or "")
+            if year and r.get("term") not in seen:
+                seen.append(r.get("term"))
+            courses.append({
+                "term": ("%s %d" % (year, tno)) if year else (r.get("term") or ""),
+                "code": r.get("kch", ""), "name": r.get("kcm", ""),
+                "credit": r.get("xf", ""), "score": r.get("cj", ""),
+                "gpa": r.get("jd", ""), "category": r.get("lb", ""),
+                "nature": r.get("ksxz", ""),
+            })
+        for t in seen:
+            year, tno = _split_term(t)
+            sub = [c for c in courses if c["term"] == "%s %d" % (year, tno)]
+            cr = 0.0
+            for c in sub:
+                try:
+                    cr += float(c["credit"] or "")
+                except (TypeError, ValueError):
+                    pass
+            summary.append({"year": year, "term": tno, "count": len(sub),
+                            "credits": round(cr, 1), "gpa": self._gpa(sub)})
+        total_cr = 0.0
+        for c in courses:
+            try:
+                total_cr += float(c["credit"] or "")
+            except (TypeError, ValueError):
+                pass
+        return {"summary": summary,
+                "overall": {"gpa": self._gpa(courses),
+                            "credits": round(total_cr, 1),
+                            "count": len(courses)},
+                "terms": ["%s %d" % (x["year"], x["term"]) for x in summary],
+                "courses": courses, "shape": "table", "empty": not courses}
+
+    def _score_body(self, conf: dict) -> dict:
+        """成绩数据页的提交体。实测原文（HAR）：
+
+            sjxz=sjxz1&ysyx=yxcj&zx=1&fx=1&wz=0&rxnj=2024&nj=2024
+            &btnExport=导出&xn1=2027&ysyxS=on&sjxzS=on&zxC=on&fxC=on
+            &xsjd=1&menucode_current=S40303
+
+        ``rxnj``/``nj`` 是入学年级（学号前 4 位），``xn1`` 是学年+1 ——
+        都能从已登录状态推出来，所以不写死在 config 里；config 只放
+        那堆语义不明的开关（sjxz/ysyx/zx/fx…），抓包变了好改。
+        """
+        ctx = self._term_context()
+        base = dict(conf.get("body") or {})
+        xn = str(ctx.get("xn") or "")
+        nj = (self.username or "")[:4]
+        sub = {"xn": xn, "xn1": str(int(xn) + 1) if xn.isdigit() else "",
+               "xq": str(ctx.get("xqM", "0")), "nj": nj, "rxnj": nj,
+               "menucode_current": conf.get("menucode", "")}
+        for k, v in list(base.items()):
+            if "{" in str(v):
+                try:
+                    base[k] = str(v).format(**sub)
+                except (KeyError, IndexError):
+                    pass
+        for k in ("xn", "xn1", "xq", "nj", "rxnj", "menucode_current"):
+            if k not in base and sub.get(k):
+                base[k] = sub[k]
+        return base
+
+    @staticmethod
+    def _gpa(rows: list):
+        """加权平均绩点 = Σ(绩点×学分) / Σ学分。非数字绩点（良好/合格）跳过。"""
+        tot_c, tot_n = 0.0, 0.0
+        for g in rows:
+            jd_raw = g.get("gpa", g.get("jd", ""))
+            xf_raw = g.get("credit", g.get("xf", ""))
+            try:
+                jd = float(jd_raw or "")
+                xf = float(xf_raw or "")
+            except (TypeError, ValueError):
+                continue
+            if xf <= 0:
+                continue
+            tot_c += jd * xf
+            tot_n += xf
+        return round(tot_c / tot_n, 2) if tot_n else None
 
     def exams(self, semester_id: str = "") -> dict:
-        try:
-            rows = self._fetch_table("exam")
-        except EamsError as e:
-            return {"exams": [], "published": False, "error": str(e)}
-        return {"exams": rows, "published": bool(rows), "shape": "raw"}
+        """考试：用户 2026-11-03 明确说「不用管」，本校入口未抓。
+        如实返回未适配，不编数据。"""
+        return {"exams": [], "published": False,
+                "error": "考试安排还没适配本校系统"}
 
     def semesters(self) -> list:
-        """学期下拉。青果来源端点未确认（郑航是 dataQuery.action）——
-        抓包确认前返回空列表且不报错：考试页界面据此只显示当前学期。"""
-        m = re.search(r"(\d{4})-(\d{4})", str(self._load_context().get("xn", "")))
-        if m:
-            return [{"id": "%s-%s/%s" % (m.group(1), m.group(2),
-                                          self._context.get("xqM", "1")),
-                     "name": "%s-%s学年第%s学期" % (m.group(1), m.group(2),
-                                                    self._context.get("xqM", "1"))}]
-        return []
+        """学期下拉：来源是成绩页返回的「学年学期」分段（实测一次给全 4 个）。"""
+        try:
+            g = self.grades()
+        except Exception:  # noqa: BLE001
+            return []
+        return [{"id": t, "name": t} for t in (g.get("terms") or [])]
 
     def profile(self) -> dict:
-        """学籍中文键 → 契约键（_PROFILE_KEYS 沿用 eams 的映射表）。
+        """学籍。🔴 本校「学籍档案」页还没抓过（用户只点了课表/成绩/考试）。
 
-        青果学籍表两种版式都见过：一行两对(键,值,键,值…) 和 两列(键,值)。
-        统一按**值扫描**：某个单元格等于标签 → 取它右边第一个非空值。"""
-        from eams import _PROFILE_KEYS
-        try:
-            rows = self._fetch_table("profile")
-        except EamsError as e:
-            raise EamsError("学籍信息没取到：%s" % e, kind="auth")
-        out = {}
-        for r in rows:
-            vals = list(r.values())
-            for i, v in enumerate(vals):
-                key = (v or "").strip().rstrip("：:")
-                if key in _PROFILE_KEYS and i + 1 < len(vals):
-                    val = (vals[i + 1] or "").strip()
-                    if val and val != "*":
-                        out.setdefault(_PROFILE_KEYS[key], val)
+        但**课表页头部就带 学号/姓名/所在班级**，够「我的」页显示主体信息：
+        学院/专业/年级尽量从班级名里拆（「2024级软件工程本科2班」→
+        2024 / 软件工程），拆不出就留空 —— 宁可空着，不编。
+        等抓到学籍档案页再补全（那时把 _kbt_head 换成真正的学籍表即可）。
+        """
+        head = getattr(self, "_kbt_head", None)
+        if not head:
+            try:
+                self.timetable()
+            except EamsError:
+                head = None
+            head = getattr(self, "_kbt_head", None)
+        if not head:
+            # 退一步：至少把登录用的学号交出去，界面不会一片空白
+            return {"studentId": self.username or ""} if self.username else {}
+        out = {"studentId": head.get("studentId", ""),
+               "name": head.get("name", "")}
+        clazz = head.get("clazz", "")
+        if clazz:
+            out["clazz"] = clazz
+            m = re.match(r"(\d{4})级(.+?)(?:本科|专科|专升本)?(\d+)班$", clazz)
+            if m:
+                out["grade"] = m.group(1)
+                out["major"] = m.group(2)
+            else:
+                m2 = re.match(r"(\d{4})级", clazz)
+                if m2:
+                    out["grade"] = m2.group(1)
+        if head.get("credits"):
+            out["credits"] = head["credits"]
         return out
 
     def room_options(self) -> dict:
@@ -509,8 +693,8 @@ class KingoClient:
                 "date": date_begin, "pb": period_begin, "pe": period_end,
                 "building": building_id, "campus": campus_id,
                 "type": type_id, "seats": seats, "name": name})
-        except EamsError as e:
-            raise EamsError("空闲教室查询失败：%s" % e)
+        except EamsError:
+            raise        # 原样上抛：两轨提示必须逐字一致（W5 对拍比的是同不同）
         rooms = [{"name": r.get("教室名称", ""), "building": r.get("教学楼", ""),
                   "campus": r.get("校区", ""), "type": r.get("教室类型", ""),
                   "capacity": _to_int(r.get("容量"))} for r in rows]

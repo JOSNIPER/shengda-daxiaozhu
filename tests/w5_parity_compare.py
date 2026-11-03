@@ -68,12 +68,14 @@ check('sync.plan 结构键一致',
 
 # ---- 空闲教室探针 ----
 jfr, pfr = js.get('free_rooms_probe', {}), py.get('free_rooms_probe', {})
-check('free_rooms_probe 两侧都成功', 'error' not in jfr and 'error' not in pfr)
+# 本校空教室未适配 ⇒ 两侧都该是 {error: 同一句话}。这里只验「不能说一边成功一边失败」。
+check('free_rooms_probe 两侧状态一致',
+      ('error' in jfr) == ('error' in pfr))
 check('free_rooms_probe 深比对', deep_eq(jfr, pfr, 'js.free_rooms_probe'))
 
 # ---- 周数探针 ----
-check('week_probe=24(JS)', js.get('week_probe') == 24)
-check('week_probe=24(PY)', py.get('week_probe') == 24)
+check('week_probe=16(JS)', js.get('week_probe') == 16)
+check('week_probe=16(PY)', py.get('week_probe') == 16)
 
 print('\n== W5 对拍: %d PASS / %d FAIL ==' % (n_pass, len(fails)))
 sys.exit(0 if not fails else 1)

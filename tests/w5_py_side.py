@@ -21,25 +21,41 @@ CFG = {
             "tickets_path": "/v1/tickets", "kaptcha_path": "/kaptcha"},
     "jw": {"base": "http://127.0.0.1:%d" % PORT,
            "cas_service": "http://127.0.0.1:%d/caslogin" % PORT,
-           "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
-           "data_table_path": "/taglib/DataTable.jsp",
-           "time_range_path": "/jw/common/getWsxkTimeRange.action",
-           "score_stat_path": "/jw/common/getSelectLessonScoreKcsInfo.action",
            "home_path": "/frame/homes.html",
+           "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
            "droplist_path": "/frame/droplist/getDropLists.action",
+           "term_path": "/jw/common/showYearTerm.action",
+           "data_table_path": "/taglib/DataTable.jsp",
            "verify_tls": True, "polite_delay_sec": 0.0},
     "pages": {
-        "timetable": {"tableId": "9001", "menucode": "M9001", "preheat_path": ""},
-        "score": {"tableId": "9002", "menucode": "M9002", "preheat_path": ""},
-        "exam": {"tableId": "9003", "menucode": "M9003", "preheat_path": ""},
-        "free_room": {"tableId": "9004", "menucode": "M9004", "preheat_path": ""},
-        "profile": {"tableId": "9005", "menucode": "M9005", "preheat_path": ""},
+        "timetable": {"kind": "kbt", "path": "/student/wsxk.xskcb10319.jsp",
+                      "menucode": "S20301",
+                      "params_b64": "xn={xn}&xq={xq}&xh={xh}"},
+        "score": {"kind": "stuckcj", "path": "/student/xscj.stuckcj.jsp",
+                  "data_path": "/student/xscj.stuckcj_data.jsp",
+                  "menucode": "S40303",
+                  "body": {"sjxz": "sjxz1", "ysyx": "yxcj", "zx": "1", "fx": "1",
+                           "wz": "0", "btnExport": "导出", "ysyxS": "on",
+                           "sjxzS": "on", "zxC": "on", "fxC": "on", "xsjd": "1"}},
+        "exam": {"kind": "unsupported"},
+        "free_room": {"kind": "unsupported"},
+        "profile": {"kind": "from_kbt"},
     },
     "column_map": {},
-    "timetable": {"unit_count": 12, "parse_slots": True},
-    "semester": {}, "free_room": {"max_periods": None},
+    "timetable": {"unit_count": None},
+    "semester": {"total_weeks": None}, "free_room": {"max_periods": None},
     "chaoxing": {}, "update": {},
 }
+
+
+def free_rooms_probe(c):
+    try:
+        r = c.free_rooms(date_begin="2026-11-05", date_end="2026-11-05",
+                         period_begin=1, period_end=2)
+        return {k: r.get(k) for k in
+                ("rooms", "notice", "raw", "dateBegin", "periodBegin", "truncated")}
+    except Exception as e:                      # noqa: BLE001
+        return {"error": str(e)}
 
 
 def main():
@@ -75,12 +91,11 @@ def main():
         "grades": gr,
         "exams": ex,
         "plan": pl,
-        # 与 JS 轨共用的对照点：空闲教室与学期上下文
-        "free_rooms_probe": (lambda: (lambda r: {k: r[k] for k in
-            ("rooms", "notice", "raw", "dateBegin", "periodBegin", "truncated")})(
-            c.free_rooms(date_begin="2026-11-05", date_end="2026-11-05",
-                         period_begin=1, period_end=2)))() if True else None,
-        "week_probe": c.total_weeks(),
+        # 与 JS 轨共用的对照点：空闲教室与学期上下文。
+        # 本校空教室未适配，两轨都应当返回 {error: ...} —— 对拍比的是「同不同」。
+        "free_rooms_probe": free_rooms_probe(c),
+        # 有效周数在 timetable 里（config 没写死就用课表实测最大值）
+        "week_probe": tt["totalWeeks"],
     }
     print(json.dumps(out, ensure_ascii=False, sort_keys=True))
     return 0

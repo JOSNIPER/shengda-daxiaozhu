@@ -36,8 +36,9 @@
   /* 单一真源 = app/config/shengda.json。构建时由 build_apk.py 的 stage_assets
      把该文件拷成 assets/web/config.json；运行时 fetch 本地 config.json，
      失败则退回下面这份**内置副本**（与 shengda.json 同步维护，
-     _setup/check_config_sync.py 会比对两者防漂移）。
-     🔴 tableId/menucode 是 TBD_* 占位 —— 阶段2校内抓包后替换真实值。 */
+     _setup/check_track_parity.py 会比对两者防漂移）。
+     🔴 2026-11-03 校内 HAR 实测后重写：本校不走 DataTable.jsp，
+     课表/成绩各自是独立 jsp，menucode 也是实测值（S20301 / S40303）。 */
   var CFG_DEFAULT = {
     cas: {
       base: 'https://cas.shengda.edu.cn/lyuapServer',
@@ -48,24 +49,34 @@
     jw: {
       base: 'https://jw.shengda.edu.cn:8090',
       cas_service: 'http://jw.shengda.edu.cn:8090/caslogin',
-      menu_context_path: '/frame/normalusemenu/getBreadcrumbsInfoNew.action',
-      data_table_path: '/taglib/DataTable.jsp',
-      time_range_path: '/jw/common/getWsxkTimeRange.action',
-      score_stat_path: '/jw/common/getSelectLessonScoreKcsInfo.action',
       home_path: '/frame/homes.html',
+      menu_context_path: '/frame/normalusemenu/getBreadcrumbsInfoNew.action',
       droplist_path: '/frame/droplist/getDropLists.action',
+      term_path: '/jw/common/showYearTerm.action',
+      data_table_path: '/taglib/DataTable.jsp',
       polite_delay_sec: 0.35
     },
     pages: {
-      timetable: { tableId: 'TBD_KB', menucode: 'TBD_KB_MENU', preheat_path: '' },
-      score:     { tableId: 'TBD_CJ', menucode: 'TBD_CJ_MENU', preheat_path: '' },
-      exam:      { tableId: 'TBD_KS', menucode: 'TBD_KS_MENU', preheat_path: '' },
-      free_room: { tableId: 'TBD_KXJS', menucode: 'TBD_KXJS_MENU', preheat_path: '' },
-      profile:   { tableId: 'TBD_XJ', menucode: 'TBD_XJ_MENU', preheat_path: '' }
+      timetable: {
+        kind: 'kbt', path: '/student/wsxk.xskcb10319.jsp', menucode: 'S20301',
+        params_b64: 'xn={xn}&xq={xq}&xh={xh}'
+      },
+      score: {
+        kind: 'stuckcj', path: '/student/xscj.stuckcj.jsp',
+        data_path: '/student/xscj.stuckcj_data.jsp', menucode: 'S40303',
+        body: {
+          sjxz: 'sjxz1', ysyx: 'yxcj', zx: '1', fx: '1', wz: '0',
+          btnExport: '导出', ysyxS: 'on', sjxzS: 'on', zxC: 'on',
+          fxC: 'on', xsjd: '1'
+        }
+      },
+      exam: { kind: 'unsupported' },
+      free_room: { kind: 'unsupported' },
+      profile: { kind: 'from_kbt' }
     },
     column_map: { timetable: {}, score: {}, exam: {}, free_room: {}, profile: {} },
-    timetable: { unit_count: 12, parse_slots: true },
-    semester: {},
+    timetable: { unit_count: null },
+    semester: { total_weeks: null },
     free_room: { max_periods: null },
     chaoxing: { fid: null },
     update: { page_base: 'https://johan.ccwu.cc/daxiaozhu', github_user: 'TBD-github-user', enabled: false }
@@ -992,7 +1003,8 @@
      两轨以 config/shengda.json 为单一真源。写端点一律不发（红线护栏）。 */
 
   var kingoReady = false;        // 教务会话（换票+菜单上下文+预热）建好没
-  var kingoCtx = null;           // getWsxkTimeRange 的 xn/xqM/lcid…
+  var kingoCtx = null;           // showYearTerm 给的 xn/xqM/xqName
+  var kingoKbtHead = null;       // 课表页头部（学号/姓名/班级），profile 复用
   var WRITE_RE = /(saveElectiveCourse|cancelElectiveCourse|getTempDeskey|getTempNowtime|electiveCourseForm|pingjia|evaluate|doXk)/i;
 
   /** 唯一出口：写端点特征 URL 一律拒绝发出。 */
@@ -1061,27 +1073,37 @@
   }
 
   async function kingoContext() {
+    // 🔴 2026-11-03 HAR 实测：本校的学期上下文是
+    //   POST /jw/common/showYearTerm.action（无 body）→
+    //   {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"…",…}
+    //   以前打的是 getWsxkTimeRange.action?xktype=2 —— 本校没有这个端点。
     if (kingoCtx) return kingoCtx;
-    var r = await kingoReq('GET', cfgUrl(CFG.jw.base) + CFG.jw.time_range_path + '?xktype=2');
-    var j = kingoJson(r.body);
-    var ctx = (j.result && typeof j.result === 'object') ? j.result : j;
-    if (!ctx || !Object.keys(ctx).length) {
-      kingoGuard(r.body, '学期时间范围');
+    var path = CFG.jw.term_path || '';
+    if (!path) throw new EamsError('学期上下文端点没配置（config 的 jw.term_path）');
+    var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + path, '', CFG.jw.home_path);
+    var ctx = kingoJson(r.body);
+    if (!ctx || !ctx.xn) {
+      kingoGuard(r.body, '学期上下文');
       throw new EamsError('学期上下文没取到（响应不是预期 JSON）');
     }
     kingoCtx = ctx;
     return ctx;
   }
 
-  /** 🔴 学期总周数唯一合法来源 = time_range 端点；禁止末课反推。 */
+  /** 学期总周数。本校没有权威端点：config 写了就用它，否则交给课表实测最大值兜底。 */
   async function kingoTotalWeeks() {
-    var c = await kingoContext();
-    var keys = ['zs', 'zxs', 'totalWeeks', 'xqzs'];
-    for (var i = 0; i < keys.length; i++) {
-      var n = parseInt(c[keys[i]], 10);
-      if (isFinite(n) && n >= 10 && n <= 40) return n;
-    }
+    var forced = parseInt((CFG.semester || {}).total_weeks, 10);
+    if (isFinite(forced) && forced >= 10 && forced <= 40) return forced;
     return null;
+  }
+
+  /** '2026' + '第一学期' → '2026-2027学年第一学期'。 */
+  function kingoSemesterName(ctx) {
+    var xn = String((ctx || {}).xn || '');
+    var name = String((ctx || {}).xqName || '');
+    if (!/^\d{4}$/.test(xn)) return name;
+    var y = parseInt(xn, 10);
+    return name ? (y + '-' + (y + 1) + '学年' + name) : (y + '-' + (y + 1) + '学年');
   }
 
   /** 会话失效/频控统一判定（**先排频控**——频控页也含"无效访问请求"字样）。 */
@@ -1236,7 +1258,7 @@
     var conf = (CFG.pages || {})[pageKey] || {};
     var tid = conf.tableId || '';
     if (!tid || tid.indexOf('TBD') === 0) {
-      throw new EamsError(pageKey + ' 的 tableId 还没配置（等校内抓包填入 config）');
+      throw new EamsError(pageKey + '还没适配本校系统（等抓包确认入口）');
     }
     await ensureKingoSession();
     await kingoMenu(pageKey);
@@ -1432,59 +1454,342 @@
     }
   }
 
-  async function timetable(semesterId, semesterName) {
-    // 🔴 达小助改造（W3）：青果 DataTable 取课表，镜像 kingo.timetable。
-    //   会话类错误向上抛（withLogin 靠它重登一次再试）；空表≠过期。
-    //   形状由 config 的 timetable.parse_slots 决定：拼得出来就是 slots，
-    //   拼不出来整批保留原样行（shape:'raw'）—— 不画可能错的格子。
-    var rows = await kingoFetch('timetable');
-    var tw = null;
-    try { tw = await kingoTotalWeeks(); } catch (e) { /* 周数取不到照交课表 */ }
-    var ctx = kingoCtx || {};
-    var tcfg = CFG.timetable || {};
-    var unitCount = tcfg.unit_count || 12;
-    var courses = rows, shape = 'raw';
-    if (tcfg.parse_slots && rows.length) {
-      var shaped = kingoShapeCourses(rows, unitCount);
-      if (shaped) { courses = shaped; shape = 'slots'; }
+  /* ============ 课表 / 成绩页面解析（2026-11-03 校内 HAR 实测） ============
+     本校**不用 DataTable.jsp**：课表、成绩各是一张独立 jsp 页面。
+     Python 轨见 table_parser.parse_kbt_timetable / parse_stuckcj，
+     两轨输出必须逐字段一致（W5 对拍盯这个）。 */
+
+  /** 折叠空白、去零宽、&nbsp; 当普通空格 —— 与 Python 的 clean_cell 同规则。 */
+  function normText(s) {
+    return String(s == null ? '' : s)
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** '1-4,6-16 双' → 偶数周；'1-16 单' → 奇数周；'14,16' → [14,16]。
+   *  🔴 单/双必须**先记下来再从串里删**：直接剔非数字会让单周课也出现在双周。 */
+  function weekNumbers(spec) {
+    var s = String(spec || '');
+    var even = s.indexOf('双') >= 0;
+    var odd = s.indexOf('单') >= 0;
+    s = s.replace(/[^\d,\-]/g, ' ');
+    var seen = {};
+    s.trim().split(/[,\s]+/).forEach(function (t) {
+      if (!t) return;
+      if (t.indexOf('-') >= 0) {
+        var p = t.split('-');
+        var a = parseInt(p[0], 10), b = parseInt(p[1], 10);
+        if (isFinite(a) && isFinite(b)) {
+          for (var w = a; w <= b; w++) seen[w] = 1;
+        }
+      } else if (/^\d+$/.test(t)) {
+        seen[parseInt(t, 10)] = 1;
+      }
+    });
+    var out = Object.keys(seen).map(Number).sort(function (x, y) { return x - y; });
+    if (even) out = out.filter(function (w) { return w % 2 === 0; });
+    else if (odd) out = out.filter(function (w) { return w % 2 === 1; });
+    return out;
+  }
+
+  /** 纯 ASCII 的 base64（课表 params 只有 xn=..&xq=..&xh=..，不会有中文）。 */
+  function b64ascii(str) {
+    var T = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var s = String(str), out = '';
+    for (var i = 0; i < s.length; i += 3) {
+      var c1 = s.charCodeAt(i);
+      var has2 = i + 1 < s.length, has3 = i + 2 < s.length;
+      var c2 = has2 ? s.charCodeAt(i + 1) : 0;
+      var c3 = has3 ? s.charCodeAt(i + 2) : 0;
+      out += T.charAt(c1 >> 2);
+      out += T.charAt(((c1 & 3) << 4) | (c2 >> 4));
+      out += has2 ? T.charAt(((c2 & 15) << 2) | (c3 >> 6)) : '=';
+      out += has3 ? T.charAt(c3 & 63) : '=';
     }
+    return out;
+  }
+
+  /** 把格子里每个「有课的 div」拆成 课程名/教师/周次[节次]/地点 四段。 */
+  function kbtDivParts(div) {
+    var parts = [], cur = '';
+    for (var n = div.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 1 && String(n.nodeName).toLowerCase() === 'br') {
+        parts.push(cur); cur = '';
+      } else {
+        cur += n.textContent || '';
+      }
+    }
+    parts.push(cur);
+    return parts.map(normText).filter(Boolean);
+  }
+
+  /** 课表页 → {head, courses[], totalWeeks, unitCount, empty}（契约与 Python 一致）。 */
+  function parseKbtTimetable(htmlText) {
+    var doc = new DOMParser().parseFromString(String(htmlText || ''), 'text/html');
+    var flat = normText(doc.body ? doc.body.textContent : '');
+    var head = {};
+    var m;
+    if ((m = /学号[：:]\s*([0-9A-Za-z]+)/.exec(flat))) head.studentId = m[1];
+    if ((m = /姓名[：:]\s*(\S+)/.exec(flat))) head.name = m[1];
+    if ((m = /所在班级[：:]\s*(\S+)/.exec(flat))) head.clazz = m[1];
+    if ((m = /课程门数[：:]\s*(\d+)/.exec(flat))) head.courseCount = parseInt(m[1], 10);
+    if ((m = /课程学分[：:]\s*([\d.]+)/.exec(flat))) head.credits = m[1];
+
+    var merged = {}, order = [];
+    var trs = doc.querySelectorAll('tr');
+    for (var i = 0; i < trs.length; i++) {
+      var tds = trs[i].children;
+      if (!tds || tds.length < 7) continue;
+      var days = [];
+      for (var k = tds.length - 7; k < tds.length; k++) days.push(tds[k]);
+      if (normText(days[0].textContent).indexOf('星期') >= 0) continue;   // 表头行
+      for (var day = 0; day < 7; day++) {
+        var divs = days[day].querySelectorAll('div');
+        for (var d = 0; d < divs.length; d++) {
+          var style = divs[d].getAttribute('style') || '';
+          if (style.indexOf('padding-bottom') < 0) continue;              // 空格子
+          var parts = kbtDivParts(divs[d]);
+          if (parts.length < 2) continue;
+          var name = parts[0];
+          var teacher = parts[1];
+          var spec = parts[2] || '';
+          var room = parts[3] || '';
+          var pm = /\[(\d+)-(\d+)\]/.exec(spec);
+          var periods = [];
+          if (pm) {
+            var a = parseInt(pm[1], 10), b = parseInt(pm[2], 10);
+            if (a >= 1 && a <= b && b <= 30) {
+              for (var p = a; p <= b; p++) periods.push(p);
+            }
+          }
+          var weeks = weekNumbers(spec.split('[')[0]);
+          var key = name + '|' + teacher + '|' + room + '|' + weeks.join(',');
+          if (!merged[key]) {
+            merged[key] = { code: name, name: name, teacher: teacher,
+                            room: room, weeks: weeks, slots: [] };
+            order.push(key);
+          }
+          var e = merged[key];
+          for (var q = 0; q < periods.length; q++) {
+            var slot = { day: day, period: periods[q] - 1 };
+            var dup = false;
+            for (var z = 0; z < e.slots.length; z++) {
+              if (e.slots[z].day === slot.day && e.slots[z].period === slot.period) { dup = true; break; }
+            }
+            if (!dup) e.slots.push(slot);
+          }
+        }
+      }
+    }
+
+    var courses = [];
+    for (var oi = 0; oi < order.length; oi++) {
+      var c = merged[order[oi]];
+      c.slots.sort(function (x, y) { return (x.day - y.day) || (x.period - y.period); });
+      if (c.slots.length && c.weeks.length) courses.push(c);
+    }
+    var maxWeek = 0, maxPeriod = 0;
+    for (var ci = 0; ci < courses.length; ci++) {
+      maxWeek = Math.max(maxWeek, Math.max.apply(null, courses[ci].weeks));
+      for (var si = 0; si < courses[ci].slots.length; si++) {
+        maxPeriod = Math.max(maxPeriod, courses[ci].slots[si].period + 1);
+      }
+    }
+    return { head: head, courses: courses,
+             totalWeeks: maxWeek || null,
+             unitCount: Math.max(10, maxPeriod),
+             empty: courses.length === 0 };
+  }
+
+  /** 成绩页 → [{term,kch,kcm,xf,cj,jd,hdjd,xfdj,ksxz,ksfs,bz}]。 */
+  function parseStuckcj(htmlText) {
+    var doc = new DOMParser().parseFromString(String(htmlText || ''), 'text/html');
+    var trs = doc.querySelectorAll('tr');
+    var term = '', out = [];
+    for (var i = 0; i < trs.length; i++) {
+      var kids = trs[i].children, cells = [];
+      for (var k = 0; k < kids.length; k++) cells.push(normText(kids[k].textContent));
+      if (cells.length === 1 && cells[0].indexOf('学年学期') >= 0) {
+        var seg = cells[0].split(/[：:]/);
+        term = seg[seg.length - 1].trim();
+        continue;
+      }
+      if (cells.length >= 12 && /^\d+$/.test(cells[0])) {
+        var raw = cells[1], code = '', cname = raw;
+        var mm = /^\[([0-9A-Za-z]+)\]\s*([\s\S]*)$/.exec(raw);
+        if (mm) { code = mm[1]; cname = mm[2]; }
+        out.push({ term: term, kch: code, kcm: cname,
+                   xf: cells[2], lb: cells[4], ksxz: cells[5], ksfs: cells[6],
+                   cj: cells[7], hdjd: cells[8], jd: cells[9],
+                   xfdj: cells[10], bz: cells[11] });
+      }
+    }
+    return out;
+  }
+
+  /** 「2024-2025学年第一学期」→ {year:'2024-2025', no:1}。与 kingo._split_term 同规则。 */
+  function splitTerm(text) {
+    var m = /(\d{4}-\d{4})\s*学年\s*第?([一二三四])学期/.exec(String(text || ''));
+    if (!m) return { year: '', no: 0 };
+    var map = { '一': 1, '二': 2, '三': 3, '四': 4 };
+    return { year: m[1], no: map[m[2]] || 0 };
+  }
+
+  /** 加权平均绩点 = Σ(绩点×学分)/Σ学分；非数字绩点（良好/合格）跳过。 */
+  function gpaOf(rows) {
+    var tc = 0, tn = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var jd = parseFloat(rows[i].gpa != null ? rows[i].gpa : rows[i].jd);
+      var xf = parseFloat(rows[i].credit != null ? rows[i].credit : rows[i].xf);
+      if (!isFinite(jd) || !isFinite(xf) || xf <= 0) continue;
+      tc += jd * xf; tn += xf;
+    }
+    if (!tn) return null;
+    return Math.round(tc / tn * 100) / 100;
+  }
+
+  async function timetable(semesterId, semesterName) {
+    // 🔴 2026-11-03 重写：本校课表是独立 jsp 页面
+    //   GET /student/wsxk.xskcb10319.jsp?params=<base64("xn=..&xq=..&xh=..")>
+    //   会话类错误向上抛（withLogin 靠它重登一次再试）。
+    var conf = (CFG.pages || {}).timetable || {};
+    var path = conf.path || '';
+    if (!path) throw new EamsError('课表入口没配置（config 的 pages.timetable.path）');
+    await ensureKingoSession();
+    await kingoMenu('timetable');
+    var ctx = await kingoContext();
+    var tpl = conf.params_b64 || 'xn={xn}&xq={xq}&xh={xh}';
+    var raw = tpl.replace('{xn}', ctx.xn || '')
+                 .replace('{xq}', ctx.xqM == null ? '0' : ctx.xqM)
+                 .replace('{xh}', loggedUser || '');
+    var r = await kingoReq('GET', cfgUrl(CFG.jw.base) + path + '?params=' +
+                           encodeURIComponent(b64ascii(raw)), '', CFG.jw.home_path);
+    kingoGuard(r.body, '课表');
+    var res = parseKbtTimetable(r.body);
+
+    var tw = (await kingoTotalWeeks().catch(function () { return null; })) || res.totalWeeks;
     var out = {
-      unitCount: unitCount,
-      courses: courses, totalWeeks: tw, weekStart: 1,
-      semester: ctx.lcmc || semesterName || '',
-      shape: shape,
+      unitCount: res.unitCount,
+      courses: res.courses,
+      totalWeeks: tw, weekStart: 1,
+      semester: kingoSemesterName(ctx) || semesterName || '',
+      shape: 'slots',
     };
-    if (!rows.length) out.empty = true;
+    if (res.empty) out.empty = true;
+    kingoKbtHead = res.head;    // 学籍复用，省一次请求
     return out;
   }
 
   async function grades() {
-    var rows = await kingoFetch('score');
-    return { summary: [], overall: null, courses: rows, shape: 'raw', empty: !rows.length };
+    // 🔴 两步：① GET 检索页（成绩数据页认它的会话上下文）② POST 数据页。
+    var conf = (CFG.pages || {}).score || {};
+    var path = conf.path || '', dataPath = conf.data_path || '';
+    if (!path || !dataPath) {
+      return { summary: [], overall: null, courses: [],
+               error: '成绩入口没配置（config 的 pages.score）' };
+    }
+    var rows;
+    try {
+      await ensureKingoSession();
+      await kingoMenu('score');
+      // 🔴 变量别叫 form：本文件顶层有个 form() 拼表单体的函数，重名会被遮蔽
+      var formPage = await kingoReq('GET', cfgUrl(CFG.jw.base) + path +
+                                    '?menucode=' + encodeURIComponent(conf.menucode || ''),
+                                    '', CFG.jw.home_path);
+      kingoGuard(formPage.body, '成绩检索页');
+      var ctx = await kingoContext();
+      var body = scoreBody(conf, ctx);
+      var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + dataPath, form(body),
+                             path);
+      kingoGuard(r.body, '成绩');
+      rows = parseStuckcj(r.body);
+    } catch (e) {
+      return { summary: [], overall: null, courses: [],
+               error: (e && e.message) || String(e) };
+    }
+    // 🔴 界面契约（app.js renderGrades 读这些键）：
+    //   summary [{year, term, count, credits, gpa}]
+    //   overall {gpa, credits, count}
+    //   courses [{term:"2024-2025 1", code, name, credit, score, gpa, category, nature}]
+    var courses = [], seen = [];
+    rows.forEach(function (r) {
+      var st = splitTerm(r.term || '');
+      if (st.year && seen.indexOf(r.term) < 0) seen.push(r.term);
+      courses.push({
+        term: st.year ? (st.year + ' ' + st.no) : (r.term || ''),
+        code: r.kch || '', name: r.kcm || '',
+        credit: r.xf || '', score: r.cj || '', gpa: r.jd || '',
+        category: r.lb || '', nature: r.ksxz || ''
+      });
+    });
+    var summary = seen.map(function (t) {
+      var st = splitTerm(t);
+      var key = st.year + ' ' + st.no;
+      var sub = courses.filter(function (c) { return c.term === key; });
+      var cr = 0;
+      sub.forEach(function (c) { var v = parseFloat(c.credit); if (isFinite(v)) cr += v; });
+      return { year: st.year, term: st.no, count: sub.length,
+               credits: Math.round(cr * 10) / 10, gpa: gpaOf(sub) };
+    });
+    var totalCr = 0;
+    courses.forEach(function (c) { var v = parseFloat(c.credit); if (isFinite(v)) totalCr += v; });
+    return { summary: summary,
+             overall: { gpa: gpaOf(courses), credits: Math.round(totalCr * 10) / 10,
+                        count: courses.length },
+             terms: summary.map(function (x) { return x.year + ' ' + x.term; }),
+             courses: courses, shape: 'table', empty: courses.length === 0 };
+  }
+
+  /** 成绩数据页提交体：config 里放语义不明的开关，年级/学年从学号和上下文推。 */
+  function scoreBody(conf, ctx) {
+    var base = {};
+    var src = conf.body || {};
+    for (var k in src) base[k] = src[k];
+    var xn = String(ctx.xn || '');
+    var nj = String(loggedUser || '').slice(0, 4);
+    var sub = { xn: xn, xn1: /^\d+$/.test(xn) ? String(parseInt(xn, 10) + 1) : '',
+                xq: String(ctx.xqM == null ? '0' : ctx.xqM),
+                nj: nj, rxnj: nj, menucode_current: conf.menucode || '' };
+    for (var k2 in base) {
+      if (String(base[k2]).indexOf('{') >= 0) {
+        base[k2] = String(base[k2]).replace(/\{(\w+)\}/g, function (s0, name) {
+          return sub[name] == null ? s0 : sub[name];
+        });
+      }
+    }
+    ['xn', 'xn1', 'xq', 'nj', 'rxnj', 'menucode_current'].forEach(function (k3) {
+      if (base[k3] == null && sub[k3]) base[k3] = sub[k3];
+    });
+    return base;
   }
 
   async function profile() {
-    var rows = await kingoFetch('profile');
-    // 键值两列行版式：某格等于中文标签 → 取右边第一个非空值。
-    // 🔴 KEYS 必须与 eams._PROFILE_KEYS（Python 轨）逐键一致——W5 对拍抓出过
-    //   这里多写了「班级/入学年份」两个别名，两轨同一账号会给出不同键。
-    var rows_map = { '学号': 'studentId', '姓名': 'name', '性别': 'gender', '年级': 'grade',
-                 '院系': 'dept', '专业': 'major', '方向': 'direction', '所属班级': 'className',
-                 '所属校区': 'campus', '学籍状态': 'status', '学历层次': 'level',
-                 '学制': 'duration', '入校时间': 'enrolledAt', '毕业时间': 'graduateAt' };
-    var p = {};
-    for (var i = 0; i < rows.length; i++) {
-      var vals = [];
-      for (var k in rows[i]) vals.push(rows[i][k]);
-      for (var j = 0; j < vals.length - 1; j++) {
-        var kk = String(vals[j] || '').trim().replace(/[：:]$/, '');
-        if (rows_map[kk]) {
-          var vv = String(vals[j + 1] || '').trim();
-          if (vv && vv !== '*' && !p[rows_map[kk]]) p[rows_map[kk]] = vv;
-        }
+    // 🔴 2026-11-03：本校「学籍档案」页没抓过，但**课表页头部就带
+    //   学号/姓名/所在班级**，够「我的」页显示主体信息。
+    //   学院/专业/年级尽量从班级名拆（「2024级软件工程本科2班」→ 2024/软件工程），
+    //   拆不出就留空 —— 宁可空着，不编。
+    var head = kingoKbtHead;
+    if (!head) {
+      try { await timetable(); } catch (e) { head = null; }
+      head = kingoKbtHead;
+    }
+    if (!head) {
+      if (!loggedUser) return {};
+      return { studentId: loggedUser };
+    }
+    var p = { studentId: head.studentId || '', name: head.name || '' };
+    var clazz = head.clazz || '';
+    if (clazz) {
+      p.clazz = clazz;
+      var m = /^(\d{4})级(.+?)(?:本科|专科|专升本)?(\d+)班$/.exec(clazz);
+      if (m) { p.grade = m[1]; p.major = m[2]; }
+      else {
+        var m2 = /^(\d{4})级/.exec(clazz);
+        if (m2) p.grade = m2[1];
       }
     }
-    if (!p.studentId) throw new EamsError('没拿到学籍信息，可能登录过期了', 'auth');
+    if (head.credits) p.credits = head.credits;
     return p;
   }
 
@@ -1497,20 +1802,20 @@
    *  🔴 学校没排考时**不是错误**：返回空列表 + published=false，
    *     界面照实说「还没发布」，别把「没数据」伪装成「没有考试」。 */
   async function exams(semesterId) {
-    // 🔴 达小助改造（W3）：青果 DataTable 取考试，镜像 kingo.exams。
-    //   学校没排考 = 空列表 + published=false，不是错误。
-    var rows = await kingoFetch('exam');
-    return { exams: rows, published: rows.length > 0, shape: 'raw' };
+    // 🔴 2026-11-03：用户明确「考试不用管」，本校入口未抓。
+    //   如实返回未适配，不编数据 —— 界面照实说，别假装「没有考试」。
+    return { exams: [], published: false,
+             error: '考试安排还没适配本校系统' };
   }
 
-  /** 全部学期。青果来源端点未确认 → 只给当前学期一项（界面只显示它）。 */
+  /** 全部学期：来源是成绩页返回的「学年学期」分段（实测一次给全 4 个）。 */
   async function semesters() {
-    var c = kingoCtx || {};
-    try { c = await kingoContext(); } catch (e) { /* 拿不到就空列表 */ }
-    var m = /(\d{4})-(\d{4})/.exec(String(c.xn || ''));
-    if (!m) return [];
-    return [{ id: m[1] + '-' + m[2] + '/' + (c.xqM || '1'),
-              name: m[1] + '-' + m[2] + '学年第' + (c.xqM || '1') + '学期' }];
+    try {
+      var g = await grades();
+      return (g.terms || []).map(function (t) { return { id: t, name: t }; });
+    } catch (e) {
+      return [];
+    }
   }
 
   // ------------------------------------------------------------------ 空闲教室
