@@ -1,0 +1,76 @@
+{
+  "_comment": "达小助 · 升达教务配置单一真源。native.js 与 kingo.py 各内置一份并以此为准；tableId/menucode 标 TBD 的待阶段2抓包填入。",
+
+  "cas": {
+    "base": "https://cas.shengda.edu.cn/lyuapServer",
+    "portal": "https://my.shengda.edu.cn/",
+    "tickets_path": "/v1/tickets",
+    "login_type_path": "/loginType",
+    "kaptcha_path": "/kaptcha",
+    "wechat": {
+      "qrcode_path": "/weChat/CreateQRcode",
+      "check_scan_path": "/weChat/wx/CheckScan",
+      "poll_interval": 1.5,
+      "poll_timeout": 180,
+      "uuid_field": "uuid",
+      "content_field": "content",
+      "user_field": "userName",
+      "pass_field": "passWord",
+      "service_field": "service",
+      "waiting_status_code": 500
+    }
+  },
+
+  "jw": {
+    "base": "https://jw.shengda.edu.cn:8090",
+    "cas_service": "http://jw.shengda.edu.cn:8090/caslogin",
+    "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
+    "data_table_path": "/taglib/DataTable.jsp",
+    "time_range_path": "/jw/common/getWsxkTimeRange.action",
+    "score_stat_path": "/jw/common/getSelectLessonScoreKcsInfo.action",
+    "home_path": "/frame/homes.html",
+    "droplist_path": "/frame/droplist/getDropLists.action",
+    "verify_tls": true,
+    "polite_delay_sec": 0.35
+  },
+
+  "_tableids_comment": "🔴 全部待阶段2校内抓包。tableId/menucode 从浏览器请求里抄，标 TBD 时客户端对应方法返回带 error 的空结构，绝不编造数据。",
+  "pages": {
+    "timetable":  { "tableId": "TBD_KB",   "menucode": "TBD_KB_MENU",   "preheat_path": "" },
+    "score":      { "tableId": "TBD_CJ",   "menucode": "TBD_CJ_MENU",   "preheat_path": "" },
+    "exam":       { "tableId": "TBD_KS",   "menucode": "TBD_KS_MENU",   "preheat_path": "" },
+    "free_room":  { "tableId": "TBD_KXJS", "menucode": "TBD_KXJS_MENU", "preheat_path": "" },
+    "profile":    { "tableId": "TBD_XJ",   "menucode": "TBD_XJ_MENU",   "preheat_path": "" }
+  },
+
+  "_column_map_comment": "青果列名(去 trN_/head_ 前缀后的行内 id)→UI 契约键。抓包确认真实 head_* 后再补；缺失键解析器保留原始列不丢弃。",
+  "column_map": {
+    "timetable": {},
+    "score": {},
+    "exam": {},
+    "free_room": {},
+    "profile": {}
+  },
+
+  "semester": {
+    "comment": "totalWeeks 必须从 time_range 端点取，禁止末课反推。这里只做展示名兜底。",
+    "display_fallback": ""
+  },
+
+  "free_room": {
+    "_comment": "郑航写死 12 节上限，升达每日节数待抓包确认（阶段2 2.4）。",
+    "max_periods": null
+  },
+
+  "chaoxing": {
+    "_comment": "郑航 fid=1286 是学校单位 id，升达对应值待阶段2 2.6。拿到前置 null，学习通入口显示未绑定学校。",
+    "fid": null
+  },
+
+  "update": {
+    "_comment": "W9 发布前自更新在 app.js UPD_SRC 处保持禁用。",
+    "page_base": "https://johan.ccwu.cc/daxiaozhu",
+    "github_user": "TBD-github-user",
+    "enabled": false
+  }
+}
