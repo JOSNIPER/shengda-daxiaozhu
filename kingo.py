@@ -148,6 +148,10 @@ class KingoClient:
         # 浏览器对同源 POST 一律带 Origin + Referer（HAR 实测）。
         # 少这两个头时青果可能回「无效访问请求」——它按来源页判上下文。
         headers.setdefault("Origin", self.jw_base)
+        # 浏览器这些接口都是 jQuery 的 $.ajax 发的，带 X-Requested-With
+        # （HAR 里 showYearTerm 的请求头逐个核对过）。少它时青果可能直接判成
+        # 「无效访问请求」—— 2026-11-03 真机 515 字节的报错页就出现在这个方向。
+        headers.setdefault("X-Requested-With", "XMLHttpRequest")
         if referer:
             headers.setdefault("Referer", self._jw_url(referer))
         else:
@@ -310,59 +314,63 @@ class KingoClient:
         return self._logged_in
 
     # ------------------------------------------------------- 教务会话（关键）
-    def ensure_session(self, force: bool = False) -> None:
-        """CASTGC → ST → caslogin → 菜单上下文 → 预热。幂等。
+    def _cas_exchange(self) -> str:
+        """REST 换票：POST /v1/tickets/{TGT} → ST → GET caslogin?ticket=ST。
 
-        🔴 只要拿得到 CASTGC 就重新换票（shengda-qk 实测教训：门户的
-        JSESSIONID 与教务的不是同一个，看到同名 cookie 就跳过会一路"凭证已失效"）。
+        返回一句给人看的进展描述（失败时拼进报错里）。
+        🔴 不看「有没有 JSESSIONID」：实测票据无效时 caslogin 回 500 却照样
+        Set-Cookie —— 那个会话是空壳，拿它取数只会得到「凭证已失效」。
+        """
+        tgt = self._ck("CASTGC")
+        if not tgt:
+            return "没有 CASTGC"
+        service = self.cfg["jw"]["cas_service"]
+        try:
+            r = self._request("POST", "%s%s/%s" % (
+                self.cas_base, self.cfg["cas"]["tickets_path"].rstrip("/"), tgt),
+                data={"service": service}, allow_redirects=False)
+        except requests.RequestException as e:
+            return "换票失败（%s）" % e
+        m = re.search(r"(ST-[A-Za-z0-9._\-]+)", r.text or "")
+        if not m:
+            return "换票 HTTP %s（没给 ST）" % r.status_code
+        joiner = "&" if "?" in service else "?"
+        try:
+            g = self._request("GET", service + joiner + "ticket=" + m.group(1),
+                              allow_redirects=True)
+        except requests.RequestException as e:
+            return "换票 HTTP %s → caslogin 失败（%s）" % (r.status_code, e)
+        return "换票 %s → caslogin %s" % (r.status_code, g.status_code)
+
+    def _cas_redirect(self) -> str:
+        """浏览器路径：带着 CASTGC 直接访问教务，让 CAS 自己把票送回来。
+
+        这就是「已登录状态下在浏览器打开教务 URL」时发生的事 —— CAS 校验
+        CASTGC，自动 302 到 caslogin?ticket=ST，教务随即下发真会话。
+        比手动换票少一步，也不依赖 REST 接口的实现细节。
+        """
+        try:
+            g = self._request("GET", self.cfg["jw"]["cas_service"],
+                              allow_redirects=True)
+            return "直连 caslogin %s" % g.status_code
+        except requests.RequestException as e:
+            return "直连 caslogin 失败（%s）" % e
+
+    def ensure_session(self, force: bool = False) -> None:
+        """CASTGC → 换票 → caslogin → 菜单上下文 → 预热。幂等。
+
+        🔴 这里**不判断**会话到底成没成 —— 判断权交给第一次真实取数
+        （见 _term_context）：能取到数据才算成。之前靠 cookie/状态码猜，
+        结果把「CAS 登录页 200 + 空壳 JSESSIONID」当成了成功。
         """
         if self._ready and not force:
             return
         if not self._logged_in:
             raise EamsError("还没登录", kind="auth")
-        tgt = self._ck("CASTGC")
-        service = self.cfg["jw"]["cas_service"]
-        note = []
-        if not tgt:
-            # 没有 CASTGC 就一定换不到票，别装作登录好了 —— 之前这里是静默跳过，
-            # 结果所有后续请求被当成匿名访问，回 1098，界面只能说「可能登录态过期了」。
-            raise EamsError("登录成功但票据没存住（CASTGC 为空），请重试一次", kind="auth")
-
-        # ① 先走 REST 换票（CAS 标准做法）：
-        #    POST /v1/tickets/{TGT} → 纯文本 ST → GET {service}?ticket=ST
-        r = self._request("POST", "%s%s/%s" % (self.cas_base,
-                          self.cfg["cas"]["tickets_path"].rstrip("/"), tgt),
-                          data={"service": service}, allow_redirects=False)
-        note.append("换票 HTTP %s" % r.status_code)
-        m = re.search(r"(ST-[A-Za-z0-9._\-]+)", r.text or "")
-        ok = False
-        if m:
-            joiner = "&" if "?" in service else "?"
-            got = self._request("GET", service + joiner + "ticket=" + m.group(1),
-                                allow_redirects=True)
-            note.append("caslogin HTTP %s" % got.status_code)
-            # 🔴 不能只看「有没有 JSESSIONID」：实测**票据无效时 caslogin 回 500，
-            #    但照样 Set-Cookie 一个 JSESSIONID**。拿这个会话去取数，
-            #    服务器只会回 1098「无效访问请求」——正是真机上遇到的样子。
-            #    判据必须是「状态码 < 400 且拿到了会话」。
-            ok = got.status_code < 400
-        else:
-            note.append("换票没拿到 ST")
-
-        # ② 兜底：带着 CASTGC 直接访问教务，让 CAS 自己发一张票回来。
-        #    这就是浏览器的真实行为 —— 已登录状态下打开教务 URL，CAS 会
-        #    自动带一张 ST 跳回来，全程不需要手动换票。
-        if not ok:
-            got2 = self._request("GET", service, allow_redirects=True)
-            note.append("直连 caslogin HTTP %s" % got2.status_code)
-            ok = got2.status_code < 400 and bool(
-                self._ck("JSESSIONID", _host_of(self.jw_base)))
-        if not ok:
-            raise EamsError("教务会话没建立（%s；JSESSIONID %s）"
-                            % (" · ".join(note),
-                               "有" if self._ck("JSESSIONID",
-                                                _host_of(self.jw_base)) else "没有"),
+        if not self._ck("CASTGC"):
+            raise EamsError("登录成功但票据没存住（CASTGC 为空），请重试一次",
                             kind="auth")
+        self._last_cas_note = self._cas_exchange()
         self._menu_context()
         self._warmup()
         self._ready = True
@@ -391,38 +399,39 @@ class KingoClient:
 
     # ---------------------------------------------------------------- 取数
     def _term_context(self) -> dict:
-        """学期上下文。🔴 2026-11-03 校内 HAR 实测：本校的真实来源是
+        """学期上下文。🔴 本校的真实来源是
         ``POST /jw/common/showYearTerm.action``（无 body），返回
 
             {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"202401010138",...}
 
-        以前这里调 ``getWsxkTimeRange.action?xktype=2`` —— 本校**没有这个端点**
-        （HAR 里 628 条请求一条都没有），所以整个取数层从来没真正跑通过。
+        **这个调用同时是「会话到底成没成」的判据** —— 能拿到 xn 才算登录成功。
+        失败时自动换一条路重试（最多三轮），并把每一轮的结果记下来：
+          ① 直接调（此时走的是 REST 换票建出来的会话）
+          ② 失败 → 走浏览器路径重新建会话（带 CASTGC 直连 caslogin）
+          ③ 还失败 → 重做一次 REST 换票（CASTGC 可能是刚种上的）
+        三轮都不行才报错，报错里带着每一步的 HTTP 状态和字节数。
         """
         if self._context_loaded:
             return self._context
         conf = self.cfg["jw"].get("term_path") or ""
         if not conf:
             raise EamsError("学期上下文端点没配置（config 的 jw.term_path）")
-        r = self._jw_post(conf, data={},
-                          referer=self._jw_url(self.cfg["jw"]["home_path"]))
-        j = tp._double_encoded_json(r.text) or {}
-        if not j.get("xn"):
-            body = self._body_text(r)
-            # 失败时把 HTTP 状态和响应长度带上 —— 没有这两个数，
-            # 「没打开」和「返回了别的东西」在用户那里长得一模一样。
-            try:
-                self._guard(body, "学期上下文")
-            except EamsError as e:
-                raise EamsError("%s（HTTP %s · %d 字节 · 会话Cookie:%s）"
-                                % (e, r.status_code, len(r.content),
-                                   "有" if self._ck("JSESSIONID") else "没有"),
-                                kind=getattr(e, "kind", ""))
-            raise EamsError("学期上下文没取到（HTTP %s · %d 字节，内容不是预期 JSON）"
-                            % (r.status_code, len(r.content)))
-        self._context = j
-        self._context_loaded = True
-        return self._context
+        notes = []
+        for attempt in range(3):
+            r = self._jw_post(conf, data={},
+                              referer=self.cfg["jw"]["home_path"])
+            j = tp._double_encoded_json(r.text) or {}
+            if j.get("xn"):
+                self._context = j
+                self._context_loaded = True
+                return self._context
+            notes.append("第%d次 HTTP %s/%d字节"
+                         % (attempt + 1, r.status_code, len(r.content or b"")))
+            if attempt == 0:
+                notes.append(self._cas_redirect())
+            elif attempt == 1:
+                notes.append(self._cas_exchange())
+        raise EamsError("学期上下文没打开（%s）" % " · ".join(notes), kind="auth")
 
     def _load_context(self) -> dict:
         """兼容旧调用面。"""

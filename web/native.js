@@ -1015,6 +1015,11 @@
     var h = {};
     for (var k in (headers || {})) h[k] = headers[k];
     if (h.Origin == null) h.Origin = cfgUrl(CFG.jw.base);
+    // 浏览器这些接口都是 jQuery 的 $.ajax 发的，一律带这个头（HAR 核对过）。
+    // 少它时青果可能直接判成「无效访问请求」。
+    if (method === 'POST' && h['X-Requested-With'] == null) {
+      h['X-Requested-With'] = 'XMLHttpRequest';
+    }
     if (!referer) referer = CFG.jw.home_path;
     return http(method, url, body || '', referer, Math.round((CFG.jw.polite_delay_sec || 0.35) * 1000), h);
   }
@@ -1036,48 +1041,47 @@
     return '';
   }
 
+  /** REST 换票：POST /v1/tickets/{TGT} → ST → GET caslogin?ticket=ST。
+   *  返回一句给人看的进展（失败时拼进报错）。
+   *  🔴 不看「有没有 JSESSIONID」：票据无效时 caslogin 回 500 却照样发 cookie，
+   *  那个会话是空壳，拿它取数只会得到「凭证已失效」。 */
+  async function casExchange() {
+    var tgt = kingoCk('CASTGC');
+    if (!tgt) return '没有 CASTGC';
+    var service = CFG.jw.cas_service;
+    try {
+      var r = await kingoReq('POST', cfgUrl(CFG.cas.base) + CFG.cas.tickets_path +
+                             '/' + encodeURIComponent(tgt),
+                             form({ service: service }), CFG.cas.portal);
+      var m = /(ST-[A-Za-z0-9._\-]+)/.exec(String(r.body || ''));
+      if (!m) return '换票 HTTP ' + (r.status || '?') + '（没给 ST）';
+      var joiner = service.indexOf('?') >= 0 ? '&' : '?';
+      var g = await kingoReq('GET', service + joiner + 'ticket=' + m[1]);
+      return '换票 ' + (r.status || '?') + ' → caslogin ' + (g.status || '?');
+    } catch (e) {
+      return '换票失败（' + ((e && e.message) || e) + '）';
+    }
+  }
+
+  /** 浏览器路径：带 CASTGC 直接访问教务，让 CAS 自己把票送回来。 */
+  async function casRedirect() {
+    try {
+      var g = await kingoReq('GET', CFG.jw.cas_service);
+      return '直连 caslogin ' + (g.status || '?');
+    } catch (e) {
+      return '直连 caslogin 失败（' + ((e && e.message) || e) + '）';
+    }
+  }
+
   async function ensureKingoSession(force) {
     if (kingoReady && !force) return;
     if (!loggedIn) throw new EamsError('还没登录', 'auth');
-    var tgt = kingoCk('CASTGC');
-    var service = CFG.jw.cas_service;
-    var note = [];
-    if (!tgt) {
-      // 没有 CASTGC 就一定换不到票。以前这里是静默跳过 ——
-      // 后面全被当匿名访问、回 1098，界面只能说「可能登录态过期了」。
+    // 🔴 这里不判断会话成没成 —— 判据是「能不能真取到数据」（见 kingoContext）。
+    //    之前靠 cookie/状态码猜，把「CAS 登录页 200 + 空壳 JSESSIONID」当成了成功。
+    if (!kingoCk('CASTGC')) {
       throw new EamsError('登录成功但票据没存住（CASTGC 为空），请重试一次', 'auth');
     }
-
-    // ① REST 换票（CAS 标准做法）
-    var r = await kingoReq('POST', cfgUrl(CFG.cas.base) + CFG.cas.tickets_path +
-                           '/' + encodeURIComponent(tgt),
-                           form({ service: service }), CFG.cas.portal);
-    note.push('换票 HTTP ' + (r.status || '?'));
-    var m = /(ST-[A-Za-z0-9._\-]+)/.exec(String(r.body || ''));
-    var ok = false;
-    if (m) {
-      var joiner = service.indexOf('?') >= 0 ? '&' : '?';
-      var got = await kingoReq('GET', service + joiner + 'ticket=' + m[1]);
-      note.push('caslogin HTTP ' + (got.status || '?'));
-      // 🔴 不能只看「有没有 JSESSIONID」：实测票据无效时 caslogin 回 500，
-      //    但照样 Set-Cookie 一个 JSESSIONID。拿它去取数只会得到 1098。
-      ok = (got.status || 0) < 400;
-    } else {
-      note.push('换票没拿到 ST');
-    }
-
-    // ② 兜底：带着 CASTGC 直接访问教务，让 CAS 自己把票送回来
-    //    （浏览器的真实行为：已登录时打开教务 URL，CAS 自动带 ST 跳回）
-    if (!ok) {
-      var got2 = await kingoReq('GET', service);
-      note.push('直连 caslogin HTTP ' + (got2.status || '?'));
-      ok = (got2.status || 0) < 400 && !!kingoCk('JSESSIONID', CFG.jw.base);
-    }
-    if (!ok) {
-      throw new EamsError('教务会话没建立（' + note.join(' · ') + '；JSESSIONID ' +
-                          (kingoCk('JSESSIONID', CFG.jw.base) ? '有' : '没有') + '）',
-                          'auth');
-    }
+    await casExchange();
     await kingoMenu();
     await kingoWarmup();
     kingoReady = true;
@@ -1113,26 +1117,26 @@
     // 🔴 2026-11-03 HAR 实测：本校的学期上下文是
     //   POST /jw/common/showYearTerm.action（无 body）→
     //   {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"…",…}
-    //   以前打的是 getWsxkTimeRange.action?xktype=2 —— 本校没有这个端点。
+    //   这个调用同时是「会话到底成没成」的判据：拿到 xn 才算登录成功。
+    //
+    //   失败时自动换路重试（最多三轮），并把每轮结果记下来：
+    //     ① 直接调（走 REST 换票建出来的会话）
+    //     ② 失败 → 浏览器路径重新建会话（带 CASTGC 直连 caslogin）
+    //     ③ 还失败 → 重做一次 REST 换票（CASTGC 可能是刚种上的）
     if (kingoCtx) return kingoCtx;
     var path = CFG.jw.term_path || '';
     if (!path) throw new EamsError('学期上下文端点没配置（config 的 jw.term_path）');
-    var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + path, '', CFG.jw.home_path);
-    var ctx = kingoJson(r.body);
-    if (!ctx || !ctx.xn) {
-      // 带上 HTTP 状态和响应长度：没有这两个数，
-      // 「没打开」和「返回了别的东西」在用户那里长得一模一样。
-      var detail = '（HTTP ' + (r.status || '?') + ' · ' + String(r.body || '').length +
-                   ' 字节 · 会话Cookie:' + (kingoCk('JSESSIONID', CFG.jw.base) ? '有' : '没有') + '）';
-      try {
-        kingoGuard(r.body, '学期上下文');
-      } catch (e) {
-        throw new EamsError(e.message + detail, e.kind);
-      }
-      throw new EamsError('学期上下文没取到' + detail + '，内容不是预期 JSON');
+    var notes = [];
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + path, '', CFG.jw.home_path);
+      var ctx = kingoJson(r.body);
+      if (ctx && ctx.xn) { kingoCtx = ctx; return kingoCtx; }
+      notes.push('第' + (attempt + 1) + '次 HTTP ' + (r.status || '?') + '/' +
+                 String(r.body || '').length + '字节');
+      if (attempt === 0) notes.push(await casRedirect());
+      else if (attempt === 1) notes.push(await casExchange());
     }
-    kingoCtx = ctx;
-    return ctx;
+    throw new EamsError('学期上下文没打开（' + notes.join(' · ') + '）', 'auth');
   }
 
   /** 学期总周数。本校没有权威端点：config 写了就用它，否则交给课表实测最大值兜底。 */
