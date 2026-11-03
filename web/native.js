@@ -1020,14 +1020,17 @@
   }
 
   /** CAS 票据 cookie 读取：先问原生 java.net 罐，再兜 WebView 罐。 */
-  function kingoCk(name) {
+  function kingoCk(name, baseUrl) {
+    // baseUrl 缺省 = CAS 域（CASTGC 在那边）；查教务的 JSESSIONID 必须传 jw 域，
+    // 否则永远读到空 —— 2026-11-03 的诊断信息就是这么误报的。
+    var base = (baseUrl || cfgUrl(CFG.cas.base)) + '/';
     try {
       if (typeof Android.cookie === 'function') {
-        var v = String(Android.cookie(cfgUrl(CFG.cas.base) + '/', name) || '');
+        var v = String(Android.cookie(base, name) || '');
         if (v) return v;
       }
       if (typeof Android.webCookie === 'function') {
-        return String(Android.webCookie(cfgUrl(CFG.cas.base) + '/', name) || '');
+        return String(Android.webCookie(base, name) || '');
       }
     } catch (e) { /* 读不到当没有 */ }
     return '';
@@ -1038,14 +1041,42 @@
     if (!loggedIn) throw new EamsError('还没登录', 'auth');
     var tgt = kingoCk('CASTGC');
     var service = CFG.jw.cas_service;
-    if (tgt) {
-      // 🔴 拿得到 CASTGC 就一定重新换票（门户的 JSESSIONID ≠ 教务的，实测教训）
-      var r = await kingoReq('POST', cfgUrl(CFG.cas.base) + CFG.cas.tickets_path + '/' + encodeURIComponent(tgt),
-                             form({ service: service }), CFG.cas.portal);
-      var m = /(ST-[A-Za-z0-9._\-]+)/.exec(String(r.body || ''));
-      if (!m) throw new EamsError('CAS 会话已过期（CASTGC 失效），请重新登录', 'auth');
+    var note = [];
+    if (!tgt) {
+      // 没有 CASTGC 就一定换不到票。以前这里是静默跳过 ——
+      // 后面全被当匿名访问、回 1098，界面只能说「可能登录态过期了」。
+      throw new EamsError('登录成功但票据没存住（CASTGC 为空），请重试一次', 'auth');
+    }
+
+    // ① REST 换票（CAS 标准做法）
+    var r = await kingoReq('POST', cfgUrl(CFG.cas.base) + CFG.cas.tickets_path +
+                           '/' + encodeURIComponent(tgt),
+                           form({ service: service }), CFG.cas.portal);
+    note.push('换票 HTTP ' + (r.status || '?'));
+    var m = /(ST-[A-Za-z0-9._\-]+)/.exec(String(r.body || ''));
+    var ok = false;
+    if (m) {
       var joiner = service.indexOf('?') >= 0 ? '&' : '?';
-      await kingoReq('GET', service + joiner + 'ticket=' + m[1]);
+      var got = await kingoReq('GET', service + joiner + 'ticket=' + m[1]);
+      note.push('caslogin HTTP ' + (got.status || '?'));
+      // 🔴 不能只看「有没有 JSESSIONID」：实测票据无效时 caslogin 回 500，
+      //    但照样 Set-Cookie 一个 JSESSIONID。拿它去取数只会得到 1098。
+      ok = (got.status || 0) < 400;
+    } else {
+      note.push('换票没拿到 ST');
+    }
+
+    // ② 兜底：带着 CASTGC 直接访问教务，让 CAS 自己把票送回来
+    //    （浏览器的真实行为：已登录时打开教务 URL，CAS 自动带 ST 跳回）
+    if (!ok) {
+      var got2 = await kingoReq('GET', service);
+      note.push('直连 caslogin HTTP ' + (got2.status || '?'));
+      ok = (got2.status || 0) < 400 && !!kingoCk('JSESSIONID', CFG.jw.base);
+    }
+    if (!ok) {
+      throw new EamsError('教务会话没建立（' + note.join(' · ') + '；JSESSIONID ' +
+                          (kingoCk('JSESSIONID', CFG.jw.base) ? '有' : '没有') + '）',
+                          'auth');
     }
     await kingoMenu();
     await kingoWarmup();
@@ -1092,7 +1123,7 @@
       // 带上 HTTP 状态和响应长度：没有这两个数，
       // 「没打开」和「返回了别的东西」在用户那里长得一模一样。
       var detail = '（HTTP ' + (r.status || '?') + ' · ' + String(r.body || '').length +
-                   ' 字节 · 会话Cookie:' + (kingoCk('JSESSIONID') ? '有' : '没有') + '）';
+                   ' 字节 · 会话Cookie:' + (kingoCk('JSESSIONID', CFG.jw.base) ? '有' : '没有') + '）';
       try {
         kingoGuard(r.body, '学期上下文');
       } catch (e) {

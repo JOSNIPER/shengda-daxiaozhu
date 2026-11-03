@@ -322,16 +322,47 @@ class KingoClient:
             raise EamsError("还没登录", kind="auth")
         tgt = self._ck("CASTGC")
         service = self.cfg["jw"]["cas_service"]
-        if tgt:
-            r = self._request("POST", "%s%s/%s" % (self.cas_base,
-                              self.cfg["cas"]["tickets_path"].rstrip("/"), tgt),
-                              data={"service": service}, allow_redirects=False)
-            m = re.search(r"(ST-[A-Za-z0-9._\-]+)", r.text or "")
-            if not m:
-                raise EamsError("CAS 会话已过期（CASTGC 失效），请重新登录", kind="auth")
+        note = []
+        if not tgt:
+            # 没有 CASTGC 就一定换不到票，别装作登录好了 —— 之前这里是静默跳过，
+            # 结果所有后续请求被当成匿名访问，回 1098，界面只能说「可能登录态过期了」。
+            raise EamsError("登录成功但票据没存住（CASTGC 为空），请重试一次", kind="auth")
+
+        # ① 先走 REST 换票（CAS 标准做法）：
+        #    POST /v1/tickets/{TGT} → 纯文本 ST → GET {service}?ticket=ST
+        r = self._request("POST", "%s%s/%s" % (self.cas_base,
+                          self.cfg["cas"]["tickets_path"].rstrip("/"), tgt),
+                          data={"service": service}, allow_redirects=False)
+        note.append("换票 HTTP %s" % r.status_code)
+        m = re.search(r"(ST-[A-Za-z0-9._\-]+)", r.text or "")
+        ok = False
+        if m:
             joiner = "&" if "?" in service else "?"
-            self._request("GET", service + joiner + "ticket=" + m.group(1),
-                          allow_redirects=True)
+            got = self._request("GET", service + joiner + "ticket=" + m.group(1),
+                                allow_redirects=True)
+            note.append("caslogin HTTP %s" % got.status_code)
+            # 🔴 不能只看「有没有 JSESSIONID」：实测**票据无效时 caslogin 回 500，
+            #    但照样 Set-Cookie 一个 JSESSIONID**。拿这个会话去取数，
+            #    服务器只会回 1098「无效访问请求」——正是真机上遇到的样子。
+            #    判据必须是「状态码 < 400 且拿到了会话」。
+            ok = got.status_code < 400
+        else:
+            note.append("换票没拿到 ST")
+
+        # ② 兜底：带着 CASTGC 直接访问教务，让 CAS 自己发一张票回来。
+        #    这就是浏览器的真实行为 —— 已登录状态下打开教务 URL，CAS 会
+        #    自动带一张 ST 跳回来，全程不需要手动换票。
+        if not ok:
+            got2 = self._request("GET", service, allow_redirects=True)
+            note.append("直连 caslogin HTTP %s" % got2.status_code)
+            ok = got2.status_code < 400 and bool(
+                self._ck("JSESSIONID", _host_of(self.jw_base)))
+        if not ok:
+            raise EamsError("教务会话没建立（%s；JSESSIONID %s）"
+                            % (" · ".join(note),
+                               "有" if self._ck("JSESSIONID",
+                                                _host_of(self.jw_base)) else "没有"),
+                            kind="auth")
         self._menu_context()
         self._warmup()
         self._ready = True
@@ -482,11 +513,12 @@ class KingoClient:
         以前那套「按 tableId 拉行 + 猜列名」在本校没有对应端点，
         所以不再保留 shape:"raw" 退路 —— 解析不出来就如实报错。
         """
-        self.ensure_session()
+        # 配置错误先报 —— 不该因为「还没建会话」把配置问题盖掉
         conf = self.cfg["pages"].get("timetable") or {}
         path = conf.get("path") or ""
         if not path:
             raise EamsError("课表入口没配置（config 的 pages.timetable.path）")
+        self.ensure_session()
         # 🔴 顺序必须和浏览器一致（HAR 实测）：
         #   首页 → showYearTerm → 点菜单(getBreadcrumbs) → 目标页面。
         #   先设菜单上下文再调 showYearTerm 的话，青果按「当前上下文」校验，
