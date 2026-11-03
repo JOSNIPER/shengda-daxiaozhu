@@ -1,16 +1,12 @@
 package cc.ccwu.johan.daxiaozhu;
 
 import android.annotation.SuppressLint;
-import android.Manifest;
-import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
-import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -45,10 +41,6 @@ public class MainActivity extends Activity {
     public static final String UA_TAG = " DaXiaoZhu/0.1.0";
 
     private WebView web;
-
-    /** 网页发来的那次相机请求，正等着系统权限弹窗的结果。同一时间只可能有一条。 */
-    private PermissionRequest camReq;
-    private static final int REQ_CAMERA = 61;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -119,67 +111,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        applyCameraBridge();
         applySystemBars();
         web.loadUrl("https://app.local/index.html");
-    }
-
-    /**
-     * 网页要用相机（扫码加饮水机，0.31.0）。
-     *
-     * 🔴 WebView **不会**自己申请系统权限：网页里的 getUserMedia 先落到
-     *    onPermissionRequest，只有 App 已经持有 CAMERA 才能 grant。
-     *    不给这个 WebChromeClient 的话 WebView 一律直接拒绝，网页那边只看到
-     *    NotAllowedError —— 表现是「点扫码永远是黑的」，而且**不报任何错**。
-     * 🔴 只放行视频采集这一种。位置、麦克风、通知都不该因为这段代码被顺带许可。
-     */
-    private void applyCameraBridge() {
-        web.getSettings().setMediaPlaybackRequiresUserGesture(false);   // 预览流是静音的，别等点击
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        boolean video = false;
-                        for (String r : request.getResources()) {
-                            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) video = true;
-                        }
-                        if (!video) { request.deny(); return; }
-                        if (checkSelfPermission(Manifest.permission.CAMERA)
-                                == PackageManager.PERMISSION_GRANTED) {
-                            request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-                            return;
-                        }
-                        // 一条没答完又来一条：旧的那条只能拒（它的浮层已经没了）
-                        if (camReq != null) {
-                            try { camReq.deny(); } catch (Exception e) { /* 已经失效 */ }
-                        }
-                        camReq = request;
-                        requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
-                    }
-                });
-            }
-        });
-    }
-
-    /** 系统权限弹窗的结果：允许就放行网页那条请求，拒绝就 deny。 */
-    @Override
-    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
-        super.onRequestPermissionsResult(code, perms, res);
-        if (code != REQ_CAMERA) return;
-        PermissionRequest p = camReq;
-        camReq = null;
-        if (p == null) return;
-        try {
-            if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED) {
-                p.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-            } else {
-                p.deny();
-            }
-        } catch (Exception e) {
-            // Activity 已经销毁 / 请求过期：让它去，网页那边会拿到错误自己说清楚
-        }
     }
 
     /** 状态栏跟着明暗模式走。硬写一个色的话，深色模式下顶上会挂一条亮白。 */

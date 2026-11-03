@@ -121,8 +121,6 @@ global.Android = {
   cxDumpCookies() { return '[]'; }, cxLoad() { return ''; }, cxSave() { return ''; }, cxClear() { },
   cxHasLogin() { return false; }, cxAes(p) { return ''; }, cxClearCookies() { return 0; },
   cxPwdSave() { return ''; }, cxPwdLoad() { return null; }, cxPwdState() { return 'none'; }, clearCxPwd() { },
-  loadWater() { return ''; }, saveWater() { return ''; }, waterState() { return 'none'; }, clearWater() { },
-  saveWater2() { return ''; },
   clearCookiesFor() { },
   addCalendar() { return 'none'; },
   openWeb() { return 'none'; }, openUrl() { return false; },

@@ -72,14 +72,6 @@ public final class CredStore {
      *   · 服务端明确说账号密码不对 ⇒ 立刻删掉这份，不拿错的密码反复试
      */
     private static final String FIELD_CX_PWD = "cx.pwd";
-    /**
-     * 慧生活798（宿舍接水）：整段 JSON（token + 手机号 + 设备列表）。
-     *
-     * 🔴 和 cookie 一样走 {@link #savePlain} —— 只有一份加解密实现。
-     *    另抄一份的话，两边的前缀（k1/s1）和备用方式迟早漂移。
-     * 🔴 这里面有**登录凭据**（token 等同于一张长期门票），必须加密存。
-     */
-    private static final String FIELD_WATER = "water.state";
     private static final String SALT = "cred.salt";
     private static final String KEY_ALIAS = "daxiaozhu.cred.v1";
     private static final String TRANSFORM = "AES/GCM/NoPadding";
@@ -140,31 +132,6 @@ public final class CredStore {
 
     public static void clearCxPwd() {
         clearField(FIELD_CX_PWD);
-    }
-
-    // ---- 慧生活798（宿舍接水）----
-    // 存的是整段 JSON：token、手机号、设备列表、上次同步时间。
-    // 和 cookie 同一套（savePlain），不另起一份加解密。
-
-    /** 空串 = 存好了，其余同 save()。 */
-    public static String saveWater(String json) {
-        if (json == null || json.isEmpty()) return "fail: 没有可存的数据";
-        return savePlain(FIELD_WATER, json);
-    }
-
-    /** 取回 JSON。解不开返回空串（当作没登录），绝不把异常抛给 JS。 */
-    public static String loadWater() {
-        return loadPlain(FIELD_WATER);
-    }
-
-    /** "none" / "ok" / "broken"，给界面区分「没登录」和「存着但解不开」。 */
-    public static String waterState() {
-        if (readBlob(FIELD_WATER).isEmpty()) return "none";
-        return loadPlain(FIELD_WATER).isEmpty() ? "broken" : "ok";
-    }
-
-    public static void clearWater() {
-        clearField(FIELD_WATER);
     }
 
     private static String saveInto(String field, String user, String pass) {

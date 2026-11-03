@@ -8,30 +8,6 @@
          允许一次「安装未知应用」，代码里会引导，见 UpdateDownloader。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- 扫码加饮水机（0.31.0）。只在用户点「添加设备」时才向网页批相机权限，
-         平时不会碰相机。
-         🔴 `required="false"`：没有相机的设备照样能装 —— 那种设备上
-            「添加设备」会退化成粘贴二维码内容。 -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-
-    <!-- 🔴 包可见性（Android 11 / API 30 起）：不在这里点名，PackageManager
-         就**查不到**别的 App 装没装 —— getLaunchIntentForPackage 一律返回 null。
-         表现是「明明装了，App 却说没装」，而且**不报错、不抛异常**，
-         只有真机才看得出来。targetSdk 是 33，这段必须有。
-
-         两个包名对应同一件事（宿舍接水）：
-           com.cloudora.android  慧生活798 官方（长沙云多啦）
-           com.water.widget      WaterWidget，第三方客户端
-                                 （nocookies111/life-798，MIT）
-         ⚠️ 加包名要同时改 NativeBridge.ALLOWED_APPS —— 那边是白名单，
-            两处对不上时表现是「点了没反应」。 -->
-    <queries>
-        <package android:name="com.cloudora.android" />
-        <package android:name="com.water.widget" />
-    </queries>
-
     <application
         android:name=".App"
         android:allowBackup="false"

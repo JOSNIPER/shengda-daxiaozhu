@@ -309,40 +309,6 @@ public class NativeBridge {
         CredStore.clearPortal();
     }
 
-    // ---- 慧生活798（宿舍接水）----
-    // 🔴 这一段是 0.24.0 发布后补的。0.23.0 里 `CredStore` 早就写好了
-    //    saveWater / loadWater / clearWater / waterState，但**这里漏了转发** ——
-    //    于是 JS 调 `Android.saveWater(...)` 拿到 undefined，登录成功后报
-    //    「token 存不进本机（none）」，关掉 App 就得重登。
-    //    界面判据没抓到，因为假桥是**按 JS 的期望写的**：JS 调什么它实现什么。
-    //    ⇒ 现在有 check_bridge_methods.py 拿两边的方法名对账（红线 50b）。
-    //
-    //    存的是整段 JSON（token / 手机号 / 设备列表 / 上次同步时间），
-    //    加密方式复用 CredStore 的 savePlain —— 和 cookie 同一套，不另抄一份。
-
-    /** 空串 = 存好了，其余是原因（和 saveCred 一样，界面必须原样说出来）。 */
-    @JavascriptInterface
-    public String saveWater(String json) {
-        return CredStore.saveWater(json);
-    }
-
-    /** 取回 JSON。解不开返回空串（当作没登录），不把异常抛给 JS。 */
-    @JavascriptInterface
-    public String loadWater() {
-        return CredStore.loadWater();
-    }
-
-    /** "none" / "ok" / "broken"，用来区分「没登录」和「存着但解不开」。 */
-    @JavascriptInterface
-    public String waterState() {
-        return CredStore.waterState();
-    }
-
-    @JavascriptInterface
-    public void clearWater() {
-        CredStore.clearWater();
-    }
-
     // ---- 学习通（作业待办）----
     // 只有三件事在 Java 层：AES 加密、cookie 导出/还原、cookie 加密存盘。
     // 登录流程、课程/作业解析全在 native.js 里（有 DOMParser，比手写解析稳）。
@@ -817,67 +783,6 @@ public class NativeBridge {
         } catch (Throwable t) {
             // 没有浏览器 / 被系统拦了：静默失败。界面那边本来就给了下载页兜底，
             // 这里再弹一个 Java 异常框只会更糟。
-        }
-    }
-
-    /**
-     * 允许拉起的其它 App。**必须是白名单**。
-     *
-     * 🔴 不能「传什么包名就开什么」：那样一段被改过的网页就能让 App 去拉起
-     *    任意应用（系统设置、安装器、带 intent: 的深链），等于在桥里焊了个后门。
-     *    这份名单和 AndroidManifest 的 &lt;queries&gt; 是同一份，加包名**两边一起改** ——
-     *    只改一边的表现是「明明装了却说没装」或「点了没反应」，都不报错。
-     */
-    private static final String[] ALLOWED_APPS = {
-            "com.cloudora.android",   // 慧生活798 官方（宿舍接水）
-            "com.water.widget"        // WaterWidget 第三方客户端（MIT）
-    };
-
-    private static boolean allowedApp(String pkg) {
-        if (pkg == null) return false;
-        for (String p : ALLOWED_APPS) {
-            if (p.equals(pkg)) return true;
-        }
-        return false;
-    }
-
-    /**
-     * 这个 App 装了没有。返回 "1" / "0"。
-     *
-     * 🔴 返回字符串、不返回 boolean：JS 那边要能分清「没装」和「这个壳根本没有
-     *    这个接口」（老 APK / 网页版）。返回 boolean 的话两种都是 undefined，
-     *    调用方只能猜，而猜错的代价是「装了却让人去下载」。
-     */
-    @JavascriptInterface
-    public String hasApp(final String pkg) {
-        if (!allowedApp(pkg)) return "0";
-        try {
-            Intent it = web.getContext().getPackageManager()
-                    .getLaunchIntentForPackage(pkg);
-            return it == null ? "0" : "1";
-        } catch (Throwable t) {
-            return "0";
-        }
-    }
-
-    /**
-     * 拉起另一个 App。返回 "ok" / "deny" / "notinstalled" / "fail: …"。
-     *
-     * 为什么不开一个新的 Activity 中转：切过去之后我们这边就退到后台了，
-     * 用 FLAG_ACTIVITY_NEW_TASK 直接起对方的启动页，返回键自然回到我们这里。
-     */
-    @JavascriptInterface
-    public String openApp(final String pkg) {
-        if (!allowedApp(pkg)) return "deny";
-        try {
-            Intent it = web.getContext().getPackageManager()
-                    .getLaunchIntentForPackage(pkg);
-            if (it == null) return "notinstalled";
-            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            web.getContext().startActivity(it);
-            return "ok";
-        } catch (Throwable t) {
-            return "fail: " + t;
         }
     }
 }

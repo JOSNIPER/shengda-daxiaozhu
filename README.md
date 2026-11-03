@@ -13,6 +13,8 @@
 真实课表/成绩/考试的 `tableId`、`menucode`、列名**还没在校内抓包**，
 所以同步回来的是原始行（`shape:"raw"`），格子视图要等抓包后再适配。
 一卡通、办事应用、门户、校园公告四项**已停用**，接口固定返回「未适配本校系统」。
+**直饮水（慧生活798）整块删了**：升达的饮水不是这个平台，代码留着只会让人以为能接。
+需要的话在 `vendor/hangyuantong/`（郑航原版）里还能翻到那份实现。
 
 下载：<https://hobson2233.dpdns.org/hangyuantong/>（⚠️ 这个地址上还是郑航版，达小助未发布）
 开源：[MIT](LICENSE) · 源码在 [CNB](https://cnb.cool/Hobson2233/hangyuantong) · 有问题去 [Issues](https://cnb.cool/Hobson2233/hangyuantong/-/issues)

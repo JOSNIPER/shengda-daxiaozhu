@@ -722,24 +722,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round;
 }
-/* 「添加设备」右边那两枚图标（0.37.0 起是两枚：手动输入 + 扫码）。
-   做成两颗 34px 的浅灰圆底按钮，而不是两根飘在角落的细线：
-   行里的图标（箭头 15px、灰）是「往里去」的指示，这两个不是 ——
-   它们本身就是动作，得看得出能按。
-   外框 44×44 是触控目标下限，图标本身 34 —— 差的那 10px 是手指的余量。 */
-.wt-ico {
-  flex: 0 0 auto; width: 44px; height: 44px; padding: 0;
-  border: 0; background: transparent;
-  display: flex; align-items: center; justify-content: center;
-}
-.wt-ico svg {
-  width: 34px; height: 34px; padding: 7px; box-sizing: border-box;
-  flex: 0 0 auto; color: var(--text);
-  background: var(--fill); border-radius: 50%;
-  fill: none; stroke: currentColor; stroke-width: 1.7;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.wt-ico:active svg { background: var(--active); }
 .row.danger { color: var(--danger); justify-content: center; font-weight: 500; }
 
 .hint { font-size: 13px; color: var(--sub); padding: 0 16px 12px; line-height: 1.45; }
@@ -1526,82 +1508,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes rise { from { transform: translateY(24px) } to { transform: translateY(0) } }
 
-/* ---------------- 扫码浮层（相机取景器） ----------------
-   视频要占满屏，所以是独立的浮层而不是底部弹层（弹层最高 76%，还挡手）。
-   z-index 70：压在弹层（40）和免责声明（60）之上 —— 相机开着时不该有东西挡着。
-   颜色**写死不跟主题走**：这是一块取景器，不是页面的一部分。 */
-.scan {
-  position: fixed; inset: 0; z-index: 70; background: #000;
-  display: flex; flex-direction: column;
-  padding: calc(6px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom));
-}
-.scan-bar {
-  flex: none; height: 44px; padding-left: 18px;
-  display: flex; align-items: center; justify-content: space-between;
-  color: #fff; font-size: 15px; font-weight: 600;
-}
-.scan-x {
-  width: 44px; height: 44px; border: 0; background: transparent; color: #fff;
-  display: grid; place-items: center;
-}
-.scan-x svg {
-  width: 20px; height: 20px; fill: none; stroke: currentColor;
-  stroke-width: 1.9; stroke-linecap: round;
-}
-.scan-stage { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
-.scan-stage video {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; background: #000;
-}
-/* 框外压暗一格：眼睛才知道该把码放哪儿。
-   用 100vmax 的投影而不是四块 div —— 一块元素就能盖满，还跟着框走。 */
-.scan-frm {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 62vw; height: 62vw; max-width: 260px; max-height: 260px;
-  border: 2px solid rgba(255, 255, 255, .92); border-radius: var(--r);
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45);
-}
-/* 相机还没出画面时盖上来的一层。
-   🔴 为什么要有：video 没有画面时，WebView 会在纯黑底上画它自己那枚
-      巨大的播放三角 —— 那不是「加载中」，那是一张坏掉的视频封面。
-      盖一层自己的说明，人才知道是在等相机，而不是该点那个三角。
-   拿到画面就 hidden，露出真正的预览。 */
-.scan-wait {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px; padding: 0 40px; background: #000;
-  color: rgba(255, 255, 255, .74); font-size: 15px; text-align: center;
-}
-.scan-wait svg {
-  width: 46px; height: 46px; flex: none;
-  fill: none; stroke: currentColor;
-  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
-  animation: scanPulse 1.6s ease-in-out infinite;
-}
-.scan-wait[hidden] { display: none; }
-@keyframes scanPulse { 0%, 100% { opacity: .38 } 50% { opacity: .92 } }
-/* 相机起不来：别再假装在等 —— 光圈撤掉（没有画面时那个框只会更让人困惑），
-   底色留大半，万一画面其实到了还能看见一点。 */
-.scan.bad .scan-wait { background: rgba(0, 0, 0, .82); }
-.scan.bad .scan-wait svg { animation: none; color: #ff9f9a; }
-.scan.bad .scan-frm { display: none; }
-.scan-hint {
-  flex: none; color: #fff; font-size: 13px; line-height: 1.45; text-align: center;
-  margin: 14px 24px 10px; min-height: 18px;
-}
-.scan-paste {
-  flex: none; align-self: center; height: 44px; padding: 0 18px;
-  border: 0; border-radius: var(--r-ctl);
-  background: rgba(255, 255, 255, .16); color: #fff;
-  font-size: 15px; font-family: inherit;
-}
-.scan-paste:active { background: rgba(255, 255, 255, .26); }
-
-/* 消费记录收起时它是卡里最后一行，留着下边框会多出一条线。
-   展开时留着当分隔线。 */
-#wtBillOpen[aria-expanded="false"] { border-bottom: 0; }
-#wtBillMore { margin-top: 8px; }
-
 .sheet {
   width: 100%; background: var(--card);
   border-radius: var(--r) var(--r) 0 0;
@@ -1648,20 +1554,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .sh-row .k { flex: 0 0 44px; color: var(--sub); font-size: 13px; }
 .sh-row .v { flex: 1 1 auto; }
 .sh-block { margin-top: 14px; padding-top: 14px; border-top: .5px solid var(--line); }
-
-/* ---- 输入弹层（0.28.1，只有「添加饮水机」一处用） ----
-   外观和登录页的 .field input 完全一致：44 高、1px --line-strong、圆角 --r-ctl。
-   ⚠️ 别改成「白底无边框」—— 弹层自己就是白卡，白底白框等于没有输入区。 */
-.sheetinput {
-  display: block; width: 100%; box-sizing: border-box;
-  height: 44px; padding: 0 12px; margin: 10px 0 0;
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
-  background: var(--bg); color: var(--text);
-  font-size: 15px; font-family: inherit;
-  -webkit-appearance: none; appearance: none;
-}
-.sheetinput::placeholder { color: var(--sub); }
-.sheetinput:focus { outline: none; border-color: var(--accent); }
 
 /* ---- 单选弹层（校区 / 教学楼 / 教室类型共用） ---- */
 .pickgap { height: 8px; }.picklist { display: flex; flex-direction: column; margin: 0 -4px; }
@@ -2145,7 +2037,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 折叠指示：展开时箭头转 90°（不是换图标 —— 换图标会让卡片高度跳一下） */
 .cpchev { transition: transform .18s ease; }
 #cpAppsToggle[aria-expanded="true"] .cpchev { transform: rotate(90deg); }
-#wtBillOpen[aria-expanded="true"] .cpchev { transform: rotate(90deg); }
 
 /* 办事入口这张卡要自己带内边距。`.card` 默认 padding 是 0 —— 别的卡片靠
    `.row` 自己撑（padding 13px 15px），这里装的是「标题 + 说明 + 网格」，
@@ -2543,18 +2434,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .acc-note:last-child { margin: 10px 2px 0; }
 
-/* 分组小标题（0.27.0：账号管理里现在有两组 —— 学校三系统 / 慧生活账号）。
-   靠字号和留白分层，不加线、不加底色（HIG：层次靠「面」，不靠「线」）。 */
-/* 0.38.0：从 13 抬到 17。这一页只有「页头 34 / 行 15 / 说明 13」三档，
-   check_design 的「一屏 4–9 档」就红了 —— 而它是**真的**只有三层。
-   抬的不是装饰：这是「慧生活账号」这一段的段标题，本来就应该比行标题响一号，
-   以前靠 body 的 17 撑着，body 降到 15 之后它跟着掉，层级就平了。 */
-.acc-h2 {
-  margin: 18px 2px 8px;
-  font-size: 17px; font-weight: 600; color: var(--text);
-  letter-spacing: .02em;
-}
-
 .acc-list { padding: 0 16px; }
 .acc-row {
   display: flex; align-items: center; gap: 12px;
@@ -2590,380 +2469,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .acc-act.quiet { border-color: transparent; color: var(--sub); }
 .acc-act:active { background: var(--active); }
 
-/* ==================================================================
-   直饮水（#page-water）
-   ------------------------------------------------------------------
-   只用变量、不写死颜色 —— 深色那套是**覆盖变量**实现的（文件里有四段
-   `prefers-color-scheme: dark`），所以这里一个字都不用重复写。
-   尺寸也全部复用既有档位（44 控件高 / 30 KPI / 13 正文），不新开档。
-   ================================================================== */
-
-/* ---- 输入框 + 右侧一个图/按钮 -------------------------------------
-   和 `.pwdbox` 同一个套路：容器写在 <label class="field"> 里面，所以
-   必须把 `.field span` 那套「标签文字」样式覆盖掉，否则它会变成
-   12px 灰字、带下边距，整行错位。 */
-.field .wtcap {
-  display: flex; gap: 8px; align-items: stretch;
-  margin-bottom: 0; font-size: inherit; color: inherit;
-}
-/* min-width:0 是必须的：flex 子项默认 `min-width:auto`，输入框里的
-   placeholder 会把这一项撑得比容器还宽，右边的图被挤出去。 */
-.field .wtcap input { flex: 1 1 auto; min-width: 0; display: block; }
-
-/* 图形验证码。宽高固定 —— 服务端给的就是这个比例，别让 flex 拉变形。 */
-.wtcap-img {
-  flex: 0 0 auto; width: 108px; height: 44px;
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
-  background: var(--bg); object-fit: contain; cursor: pointer;
-}
-/* 图没加载出来时至少还是个能点的框，不是一块空白 */
-.wtcap-img:not([src]), .wtcap-img.bad {
-  background: var(--fill);
-}
-
-.wtcap-send {
-  flex: 0 0 auto; min-width: 88px; height: 44px; padding: 0 14px;
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
-  background: transparent; color: var(--accent);
-  font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
-}
-.wtcap-send[disabled] { color: var(--sub); opacity: .6; cursor: default; }
-.wtcap-send:active:not([disabled]) { background: var(--accent-soft); }
-
-/* ---- 卡片内边距 ---------------------------------------------------
-   `.card` 本身**没有** padding —— 全 App 都是靠内部元素自己给
-   （`.row` 给 12/16、`.todocard` 给 14/16/12、`.warncard` 给 14/16）。
-   所以新写的卡片如果不显式加，文字会**直接贴着卡片边缘**。
-   ⚠️ 这个错截图才看得出来：`getBoundingClientRect()` 是准的，肉眼当时也
-      觉得「差不多」，两张卡的白底连成一片才显出来。
-   ⇒ 数值直接抄 `.warncard` 的 14/16（同一套档位，别新开）。 */
-.wtpad { padding: 10px 16px 8px; }
-
-/* ---- 余额 --------------------------------------------------------
-   0.32.0：余额和三个周期**并排**。
-   以前是「大字 → 一条横线 → 三列大数字」竖着码，一张卡 250px，
-   信息量却只有四个数字 —— 用户原话「信息密度很低」。 */
-.wtpad.wtbal { padding-bottom: 10px; }
-.wtbal-hd {
-  display: flex; align-items: baseline; gap: 10px;
-}
-.wtbal-k { flex: 1 1 auto; font-size: 13px; color: var(--sub); }
-.wtbal-top {
-  /* 三列比大字高（它们有标签 + 金额 + 水量三行），居中才不偏 ——
-     用 flex-end 会变成「大字底边对齐水量那行」，看着像掉下去一截。 */
-  display: flex; align-items: center; gap: 14px;
-  /* 金额特别长（¥1234.56 那种）时，三列整体换到下一行 ——
-     宁可多一行，也不许把「¥1234.56」截成「¥12…」。 */
-  flex-wrap: wrap;
-}
-.wtbal-v {
-  flex: 0 0 auto;
-  font-size: 34px; font-weight: 600; line-height: 1.1;
-  letter-spacing: -.6px; margin: 8px 0;
-  /* 数字等宽，刷新时不会左右跳 */
-  font-variant-numeric: tabular-nums;
-}
-/* 🔴 「没读到」不能长得像金额 —— 掉成 15px 灰字，和 ¥12.30 一眼分得开。 */
-.wtbal-v.unknown { font-size: 15px; font-weight: 500; color: var(--sub); letter-spacing: 0; }
-.wtbal-v .unit { font-size: 15px; font-weight: 600; margin-right: 1px; }
-
-/* ---- 今日 / 本月 / 本年消费（0.24.1，照原版的「本地优先统计」）----
-   三列紧贴余额右侧，标签/金额/水量都只占一行，字号全部落在既有档位上。 */
-.wtstat {
-  flex: 1 1 190px; min-width: 0;
-  display: flex; gap: 10px;
-}
-.wtstat-i { flex: 1 1 0; min-width: 0; text-align: right; }
-.wtstat-k { display: block; font-size: 11px; color: var(--sub); line-height: 1.3; }
-.wtstat-v {
-  display: block; font-size: 15px; font-weight: 600;
-  line-height: 1.25; margin-top: 1px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-/* 「没读到」和「≥ ¥3.20（下限）」都要和确切金额长得不一样 */
-.wtstat-v.unknown { font-size: 13px; font-weight: 500; color: var(--sub); }
-.wtstat-v.lower { font-weight: 500; color: var(--sub); }
-/* 金额下面那行估算水量。用 11 的说明档，不跟金额抢注意力。
-   :empty 藏掉 —— 关掉估算后别在每格下面留一条空白，三格底下空一截很怪。 */
-.wtstat-w {
-  display: block;
-  font-size: 11px; line-height: 1.3; color: var(--sub);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.wtstat-w:empty { display: none; }
-
-/* 估算比例的入口：整行可点，右侧一个 ›，跟「我的」页那些 row 是同一个语言 */
-.wtuserow {
-  display: flex; align-items: center; gap: 6px;
-  width: 100%; min-height: 44px; margin-top: 4px; padding: 0;
-  border: 0; background: transparent; color: var(--sub);
-  font-family: inherit; font-size: 13px; text-align: left;
-}
-.wtuserow span { flex: 1 1 auto; min-width: 0; }
-.wtuserow .rowico { width: 16px; height: 16px; flex: 0 0 auto; }
-.wtuserow:active { opacity: .6; }
-
-/* 金额 / 水量两个输入框。输入框必须 44 —— 手指点得中，键盘才弹得出来 */
-.wtusefields { display: flex; align-items: flex-end; gap: 8px; margin-top: 4px; }
-.wtusef { flex: 1 1 0; min-width: 0; }
-.wtusef > span { display: block; margin-bottom: 4px; font-size: 11px; color: var(--sub); }
-.wtusef input {
-  width: 100%; height: 44px; box-sizing: border-box; padding: 0 10px;
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
-  background: transparent; color: var(--text);
-  font-family: inherit; font-size: 15px;
-  font-variant-numeric: tabular-nums;
-}
-.wtusef input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
-/* 等号对着输入框的中线，不是对着标签 */
-.wtuseop { padding-bottom: 12px; font-size: 13px; color: var(--sub); }
-.wtusebtns { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.wtuseGap { flex: 1 1 auto; }
-.acc-act.strong {
-  background: var(--primary); color: var(--primary-ink);
-  border-color: var(--primary);
-}
-
-/* ---- 设备列表 ----------------------------------------------------
-   0.32.0：名字和编号**竖着排**，右边只留一颗「接水」。
-   以前是「名字 … 编号 [接水]」挤在一行 —— 编号把名字和按钮都挤薄，
-   还逼着每行留到 71px。竖排之后一行 52px，编号也不会被省略号截掉。 */
-.wtdev {
-  display: flex; align-items: center; gap: 10px;
-  min-height: 52px; padding: 4px 0;   /* 左右由 .wtpad 给 */
-  border-bottom: 1px solid var(--rule);
-}
-.wtdev:last-child { border-bottom: 0; }
-.wtdev-main {
-  flex: 1 1 auto; min-width: 0;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.wtdev-name {
-  font-size: 15px; line-height: 1.28; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-/* 设备号是纯数字，等宽才不会在换行时抖 */
-.wtdev-id {
-  font-size: 13px; line-height: 1.28; color: var(--sub);
-  font-variant-numeric: tabular-nums;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-/* 接水按钮：胶囊形，44 是可点区域下限（这是**主操作**，不降档）。
-   用胶囊而不是方圆角 —— 它跟设备名并排，圆角会显得像另一个输入框。 */
-.wtdev-go {
-  flex: 0 0 auto; min-width: 64px; height: 44px; padding: 0 16px;
-  border: 1px solid var(--line-strong); border-radius: 999px;
-  background: transparent; color: var(--text);
-  font-family: inherit; font-size: 15px; font-weight: 500;
-}
-.wtdev-go:active { background: var(--active); }
-/* 设备行的「⋯」（0.37.0）。以前手动加的那几台有一颗 ✕，服务端那几台什么都没有
-   —— 同一行左边一个样右边一个样，看着像「这几台不是我的」。
-   现在**每台都有**同一个「⋯」，点开是重命名 / 复制编号 / 移除。
-   44×44 是触控目标下限，图标本身只有 20。负 margin 把空白吃掉，
-   视觉上不会把「接水」挤走。 */
-.wtdev-more {
-  flex: 0 0 auto; width: 44px; height: 44px; margin: 0 -12px 0 -2px;
-  padding: 0; border: 0; background: transparent; color: var(--sub);
-  display: flex; align-items: center; justify-content: center;
-}
-.wtdev-more:active { background: var(--active); border-radius: var(--r-ctl); }
-.wtdev-more svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
-
-/* ---- 正在出水（0.24.0）--------------------------------------------
-   🔴 这一条是**本地记的提醒**，不是服务端状态 —— 文案不能说成
-      「设备正在出水」，只能说「刚才你启动了 X」。 */
-.wtlive-dot {
-  flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--danger-fill);
-  /* 呼吸一下，一眼看出「还在跑」 */
-  animation: wtlive 1.6s ease-in-out infinite;
-}
-@keyframes wtlive { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .wtlive-dot { animation: none; } }
-.wtlive-txt b { font-size: 15px; font-weight: 600; }
-.wtlive-txt span { font-size: 13px; color: var(--sub); }
-.wtlive .btn {
-  flex: 0 0 auto; width: auto; min-height: 36px; padding: 0 14px;
-  font-size: 15px; border-radius: var(--r-ctl);
-}
-
-/* 刚才那次（0.24.1）。和「正在出水」用同一块位置语言，但**不带红色描边**
-   —— 红色是「还在跑、要你决定」的意思，停完就不该再吓人。 */
-.wtlast-v {
-  font-size: 22px; font-weight: 600; line-height: 1.2; margin-top: 2px;
-  font-variant-numeric: tabular-nums;
-}
-/* 「账单还没出」不许长得像 ¥0.00 */
-.wtlast-v.unknown { font-size: 15px; font-weight: 500; color: var(--sub); }
-
-/* ---- 积分两个数并排 ------------------------------------------------
-   0.32.0：两个 24px 的大数字改成一行「可用 120 · 累计 300」。
-   积分在这一页只是**任务的成绩单**，它不该跟余额一样大 ——
-   余额是「还能不能接水」，积分是「今天赚了多少」。 */
-.wtpair { display: flex; align-items: baseline; gap: 18px; margin-top: 1px; }
-.wtpair-i { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.wtpair-k { font-size: 13px; color: var(--sub); }
-.wtpair-v {
-  font-size: 17px; font-weight: 600; line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-/* 没读到的时候不许长得像「0 分」 */
-.wtpair-v.unknown { font-size: 13px; font-weight: 500; color: var(--sub); }
-
-/* ---- 消费记录行 ---------------------------------------------------- */
-.wtbill {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 9px 0; border-bottom: 1px solid var(--rule);
-}
-.wtbill:last-child { border-bottom: 0; }
-.wtbill-main { flex: 1 1 auto; min-width: 0; }
-.wtbill-t1 {
-  display: block; font-size: 15px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.wtbill-t2 { display: block; font-size: 13px; color: var(--sub); margin-top: 1px; }
-.wtbill-money {
-  flex: 0 0 auto; font-size: 15px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-/* 🔴 金额没读到时不能写成 ¥0.00 —— 那会让人以为这单免费 */
-.wtbill-money.unknown { font-size: 13px; font-weight: 400; color: var(--sub); }
-
-/* ---- 积分任务行 ----------------------------------------------------
-   一行 = 标题 + 分值 + 状态。状态三态（等 / 成 / 败），**默认不显示「已完成」** ——
-   我们没解析任务列表里的完成状态（见 water.py missions() 的注释），
-   跑完才知道，所以只有跑过的行才有 ✓ 或 ✗。 */
-.wtmission {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 9px 0; border-bottom: 1px solid var(--rule);
-}
-.wtmission:last-child { border-bottom: 0; }
-.wtmission-t {
-  flex: 1 1 auto; min-width: 0; font-size: 15px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.wtmission-s {
-  flex: 0 0 auto; font-size: 13px; color: var(--sub);
-  font-variant-numeric: tabular-nums;
-}
-/* 分值没读到就不写数字（写 0 会让人以为这任务不值钱） */
-.wtmission-s.unknown { font-size: 13px; }
-.wtmission-st { flex: 0 0 auto; font-size: 13px; font-variant-numeric: tabular-nums; }
-
-/* 剩余次数。放在分值和状态之间，字号比分值小一档 —— 它是辅助信息，
-   不是这一行的主角（主角是任务名和 +N）。 */
-.wtmission-l {
-  flex: 0 0 auto; font-size: 11px; color: var(--sub);
-  font-variant-numeric: tabular-nums;
-}
-
-.wtmission-st.wait { color: var(--sub); }
-.wtmission-st.ok { color: var(--ok); font-weight: 600; }
-.wtmission-st.bad { color: var(--danger); font-weight: 600; }
-/* 签到那条签过之后：整行压暗 —— 它还在列表里（用户要知道今天签过），
-   但不该和「待做」的行抢注意力。 */
-.wtmission.done .wtmission-t { color: var(--sub); }
-.wtmission.done .wtmission-s { color: var(--sub); }
-/* 正在跑的那行给个底色，一眼看出进度在哪 */
-.wtmission.on { background: var(--accent-soft); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
-
-/* ---- 积分兑换余额 ------------------------------------------------
-   档位用胶囊、份数用 −/N/+。都靠「面」分层（--fill），不描边。
-   44px 是可点区域下限：兑换是**真会扣分**的操作，按钮小到按不准
-   等于让人点错档位。 */
-.wtchips { display: flex; gap: 8px; margin-top: 10px; }
-.wtchip {
-  flex: 0 0 auto; min-height: 36px; padding: 0 16px;
-  border: 0; border-radius: 18px; background: var(--fill);
-  color: var(--text); font: inherit; font-size: 15px;
-  font-variant-numeric: tabular-nums;
-}
-.wtchip:active { background: var(--active); }
-.wtchip.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.wtqty { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
-.wtqty-btn {
-  width: 44px; height: 44px; flex: 0 0 auto;
-  border: 0; border-radius: 10px; background: var(--fill);
-  color: var(--text); font-size: 22px; line-height: 1;
-}
-.wtqty-btn:active { background: var(--active); }
-.wtqty-v {
-  flex: 1 1 auto; text-align: center;
-  font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-/* `.wtpad` 卡片已经有 16px 内边距，里面的 `.row` 自带 16px ⇒ 会缩成 32px，
-   和卡里其他内容（标题、任务行）左边对不齐。这里把行自己的左右内边距去掉。 */
-.wtpad .row { padding-left: 0; padding-right: 0; }
-/* 兑换那块的第一行不要多出 10px 上边距（它紧跟着说明文字） */
-#wtExBox .row { margin-top: 6px; }
-
-/* ---- 账号：两套（设备登录 / 积分登录）----
-   两行紧挨、中间一条细线 —— 它们是一对，不是两张独立的卡。
-   未登录那一行的说明加 `.need`：用**正文色**而不是灰，让它有分量；
-   但**不用红色** —— 没登不是错误，红字会把正常状态说成出事了
-   （红线 50：红是「出错」的样式）。真正的错误在这里是「读失败」，那个才红。
-   ⚠️ 文案要短到一行放得下：两行高度不一致，一眼就看得出没对齐。
-   ⚠️ 按钮固定宽 + 不换行：文案一长就把左边挤成三行。 */
-.wtacc {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 0; border-bottom: 1px solid var(--rule);
-}
-/* ⚠️ 只去掉最后一条分隔线，**padding 不许动** —— 第一版把 padding-bottom
-   改成 2px，结果两行高度差了 10px，一眼就看得出没对齐。 */
-.wtacc:last-of-type { border-bottom: 0; }
-.wtacc-main {
-  flex: 1 1 auto; min-width: 0;
-  display: flex; flex-direction: column; gap: 2px;
-}
-.wtacc-main b { font-size: 15px; font-weight: 600; }
-.wtacc-sub {
-  font-size: 13px; line-height: 1.4; color: var(--sub);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.wtacc-sub.need { color: var(--text); }
-.wtacc .btn {
-  /* 🔴 44 是**可点区域下限**（DESIGN.md / check_design 都按这个量）。原来写 32，
-     在接水页里没人量到；0.27.0 搬到「我的 → 账号管理」后立刻被量出来了。 */
-  flex: 0 0 auto; min-width: 76px; height: 44px; padding: 0 16px;
-  border-radius: 999px; font-size: 15px; font-weight: 500;
-  white-space: nowrap;
-}
-/* 两个都登完这行提示就藏了，卡片底部别留一段空白 */
-#wtAccounts .tip { margin-top: 10px; }
-
-/* ---- 免责声明弹层 --------------------------------------------------
-   不复用 .sheet / #sheetMask：那个遮罩被 askConfirm 和十几个弹层共用，
-   在这里抢它的显隐状态会把别人的框顶掉（而且不报错）。
-   自己一层，z-index 压在 sheetMask 之上。 */
-.wtterms {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, .55);
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-}
-.wtterms-box {
-  width: 100%; max-width: 420px; max-height: 100%;
-  display: flex; flex-direction: column;
-  background: var(--card); border-radius: var(--r);
-  padding: 18px 16px 16px;
-}
-.wtterms-h { margin: 0 0 10px; font-size: 17px; font-weight: 700; }
-.wtterms-body {
-  flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  font-size: 13px; line-height: 1.62; color: var(--sub);
-  /* 里面长文，最后一段别贴着按钮 */
-  padding-bottom: 4px;
-}
-.wtterms-body p { margin: 0 0 10px; }
-.wtterms-body b { color: var(--text); font-weight: 600; }
-.wtterms-h2 {
-  margin: 16px 0 6px !important;
-  font-size: 13px; font-weight: 600; color: var(--text);
-}
-.wtterms-box .btn { margin-top: 12px; flex: 0 0 auto; }
 
 /* ==================================================================
    0.32.0：功能页「紧凑化」
@@ -2983,14 +2488,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 卡片之间的间距收紧一档，但最后一张不要再顶出一条空档（滚到底会多一截白） */
 #page-campus .scroll > .card:last-child,
 #page-campus .scroll > div:last-child > .card:last-child { margin-bottom: 2px; }
-
-/* 消费记录这张卡不再用 `.wtpad`（行要铺满卡宽），里面的明细自己给内边距 */
-.wtboxin { padding: 0 16px 8px; }
-
-/* 任务行 / 账单行：9px 一上一下就是白白多出 4px 一行，十条就是 40px */
-#page-campus .wtmission { padding: 7px 0; }
-#page-campus .wtbill { padding: 8px 0; }
-#page-campus .wtmission-l { font-size: 11px; }
 
 /* 页脚那句边界说明：11px 一行就够，别让它自己占出一条缝 */
 #page-campus .acc-note { margin: 6px 2px 0; font-size: 11px; line-height: 1.5; }
@@ -3060,8 +2557,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .row:last-child::after { display: none; }
 /* 卡片自己带内边距时（`.about` / `.bindcard`），行是贴边的，不用缩 */
 .about .row::after, .bindcard .row::after { left: 0; right: 0; }
-/* `.wtpad` 里的行自己已经被卡片的 16px 内边距推进来了，再缩 16 就是 32 */
-.wtpad .row::after { left: 0; right: 0; }
 /* 这两处的行本来就没有下分隔线：About 是「每行都不断」，余额卡的明细行
    只有一条上边线（下面就是卡底）。别给它们补线。 */
 .about .row::after, .ykt .row::after { display: none; }
@@ -3201,15 +2696,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 大数字统一收紧字距：34px 的「2.51」不收紧，两个数字之间会漏风 */
 .sum-main b, .ykt-bal b { letter-spacing: -.8px; }
 
-/* `.wtpad`（功能那几张表）的行不做成块：这一页的预算是「一屏装下」里
-   最紧的一个，十几行各加 4px 缝就是 40 多像素。这里退回通铺 + 细分隔线，
-   视觉上反而更像「一张表的几行」。 */
-.wtpad > .row {
-  background: transparent; margin: 0; padding: 12px 0;
-}
-.wtpad > .row + .row { margin-top: 0; }
-.wtpad > .row::after { display: block; left: 0; right: 0; }
-
 /* 功能是「一屏装下」余量最小的那页（夹具里只宽容 24px）。
    新卡面每张多 1px 间距、每行多 1px 内边距，累起来会顶出去 ——
    这一页单独收一档：卡间距 7、行内边距 8。视觉上几乎看不出，
@@ -3225,63 +2711,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   margin: 0; padding: 10px 16px;
   background: transparent; border-radius: 0;
 }
-/* 「消费记录」是折叠头：它下面那个 `#wtBillBox` 收起时是 hidden，
-   所以 `:only-child` 不成立、仍被当成「块」缩进 8px。
-   这一行必须铺满卡宽（check_water_ui 在量 row.left - card.left == 0）。 */
-#wtBillOpen {
-  margin-left: 0; margin-right: 0;
-  background: transparent; padding: 10px 16px;
-}
-
-/* ================= 功能 · 饮水（0.37.0 合并） =================
- *
- * 用户 2026-11-01 原话：「这个界面大部分区域都是饮水，但却被划分成了
- * 好多好多部分」—— 指的就是这一页：余额、正在出水、刚才那次、我的饮水机、
- * 积分、今日任务、消费记录，七块内容七个圆角七条投影，读起来像七个 App。
- *
- * 合并的判据不是「看起来像不像一类」，而是**回答的是不是同一个问题**：
- *   卡 1（饮水）    = 我还有多少钱、刚花了多少   ← 余额 + 出水 + 结算 + 明细
- *   卡 2（设备）    = 我能接哪台水、怎么再加一台
- *   卡 3（积分）    = 积分怎么挣、怎么花          ← 积分 + 今日任务
- *   卡 4（账号）    = 这个号怎么登出/去官方 App
- * 合完从 7 张降到 4 张，信息一条没少。
- */
-
-/* 余额块从「一张卡」降级成「卡里的第一段」。它不再是 .card，
-   所以要自己给内边距（.card 本身没有 padding，全 App 靠内部元素自己给）。 */
-.card > .wtbal { padding: 10px 16px 6px; }
-
-/* 正在出水 / 刚才那次：卡里的一条，不再各占一张卡。
-   红色只留在一个小圆点上 —— 一条**临时状态**不该用整圈红框喊。 */
-.wtstrip {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 16px; min-height: 44px;
-  border-top: .5px solid var(--line);
-}
-.wtstrip-t {
-  flex: 1 1 auto; min-width: 0;
-  display: flex; align-items: baseline; gap: 8px;
-  overflow: hidden;
-}
-.wtstrip-t b { font-size: 15px; font-weight: 600; }
-.wtstrip-t span {
-  font-size: 13px; color: var(--sub);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.wtstrip .btn { flex: 0 0 auto; }
-/* 「刚才那次」的金额是回执，不是主数字：跟余额同一档字体，小两号 */
-.wtstrip .wtlast-v { flex: 0 0 auto; margin-top: 0; font-size: 19px; }
-.wtstrip .tip { flex: 1 0 100%; margin: 0; }
-
-/* 卡内分组（积分 → 今日任务）。一条细线：不是装饰，是「换了件事」的记号。
-   只在卡里用，卡与卡之间**不用线** —— 层次靠面，不靠线（DESIGN.md）。 */
-.wtsec { margin-top: 10px; padding-top: 10px; border-top: .5px solid var(--line); }
-
-/* 「添加设备」：左边是标签，右边两枚图标（手动输入 + 扫码）。
-   .wtpad 已经把行左右内边距清零，这里不用再补。 */
-.wtadd { padding: 4px 0 2px; min-height: 48px; }
-.wtadd .rowend { gap: 2px; }
-
 /* ---------------- 课表第三屏：原样行列出（shape:'raw'，格子格式待阶段2适配）
    这块只在「数据到了但画不成格子」时出现。样式刻意朴素：它是排查用的原始行，
    不是课表 —— 做得越像课表，越容易有人把它当成已经适配好了。 */
