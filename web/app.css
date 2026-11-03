@@ -2632,6 +2632,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: var(--r-ctl);
   margin: 0 8px;
   padding: 9px 14px;
+  /* 🔴 基础 .row 写了 width:100%，加上这里的左右 8px 外边距后
+     总宽溢出 16px，.card 又 overflow:hidden —— 右边框被整条裁掉
+     （2026-11-03 真机截图「我的」页可见）。 */
+  width: calc(100% - 16px);
 }
 .card > .row + .row { margin-top: 4px; }
 .card > .row:first-child { margin-top: 6px; }
@@ -2805,3 +2809,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-size: 12px; font-weight: 500; letter-spacing: -.2px;
   white-space: nowrap;      /* 「5 天」不能折成两行 —— 折了就比旁边的按钮高一截 */
 }
+
+/* 「正在上 / 课上完了」提示条的**占位**态。
+   用户 2026-11-03：这块空间要常驻 —— 没上完之前是空白占位，
+   上完之后提示才浮出来；否则提示出现的一瞬间会把课表最后几节顶走。 */
+.daynext.ph { visibility: hidden; }

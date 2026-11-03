@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.0';
-const APP_CODE = 60;
+const APP_VERSION = '0.1.1';
+const APP_CODE = 61;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -39,13 +39,38 @@ const envText = (web, app) => (NATIVE ? app : web);
       对升达不成立，退回「常见排布」当占位。升达每节多长、课间几分钟，
       和每日节数上限一起在阶段2确认（config/shengda.json 的 free_room.max_periods）。
       确认之前别把它当事实宣传 —— 这是用户一眼能看到、也最容易改的东西。 */
-const DEFAULT_TIMES = [
-  ['08:00', '08:45'], ['08:55', '09:40'],
-  ['09:50', '10:35'], ['10:45', '11:30'],
-  ['14:30', '15:15'], ['15:25', '16:10'],
+/* 升达官方作息（教务处作息表，用户 2026-11-03 提供原件）。
+   两套：标准作息 + 夏令作息 —— 夏令作息**每年 5 月 1 日至 9 月 30 日**实行。
+   🔴 别再把「常见排布」当占位摆出来：之前那份 08:00 起的表是我们编的，
+      用户一眼就能看出来不对。 */
+const SCHED_STANDARD = [
+  ['08:10', '08:55'], ['09:05', '09:50'],
+  ['10:20', '11:05'], ['11:15', '12:00'],
+  ['14:10', '14:55'], ['15:05', '15:50'],
   ['16:20', '17:05'], ['17:15', '18:00'],
+  ['19:00', '19:45'], ['19:55', '20:40'],
+];
+const SCHED_SUMMER = [
+  ['08:10', '08:55'], ['09:05', '09:50'],
+  ['10:20', '11:05'], ['11:15', '12:00'],
+  ['14:40', '15:25'], ['15:35', '16:20'],
+  ['16:50', '17:35'], ['17:45', '18:30'],
   ['19:30', '20:15'], ['20:25', '21:10'],
 ];
+/* 兼容旧代码：别处还引用 DEFAULT_TIMES（测试 / 兜底），指向标准作息。 */
+const DEFAULT_TIMES = SCHED_STANDARD;
+const SCHED_NAME = { auto: '按日期自动', standard: '标准作息', summer: '夏令作息' };
+
+/** 今天该用哪套作息（schedMode=auto 时按日期：5.1 — 9.30 用夏令）。 */
+function schedFor(date) {
+  const mode = (CFG && CFG.schedMode) || 'auto';
+  if (mode === 'standard') return SCHED_STANDARD;
+  if (mode === 'summer') return SCHED_SUMMER;
+  const d = date || new Date();
+  const m = d.getMonth() + 1, day = d.getDate();
+  const summer = (m > 5 && m < 9) || (m === 5) || (m === 9 && day <= 30);
+  return summer ? SCHED_SUMMER : SCHED_STANDARD;
+}
 
 // 旧的默认作息。用户如果只是点过「保存」但没真改，localStorage 里存的是这一套，
 // 光改 DEFAULT_TIMES 不会生效 —— 得认出来并替换掉。
@@ -416,7 +441,9 @@ function currentWeek() {
 
 function times() {
   const n = (DATA && curTT().unitCount) || 10;
-  const t = (CFG.times && CFG.times.length) ? CFG.times : DEFAULT_TIMES;
+  // CFG.times 是旧版「自由编辑」留下的数据：有就继续认（别把用户改过的丢掉），
+  // 新版只提供两套官方作息，编辑入口已撤。
+  const t = (CFG.times && CFG.times.length) ? CFG.times : schedFor();
   const out = [];
   for (let i = 0; i < n; i++) out.push(t[i] || ['', '']);
   return out;
@@ -1157,7 +1184,11 @@ function fitGridHeight() {
   const scroll = $('schScroll');
   if (!scroll || !scroll.clientHeight) return;
   const units = (curTT().unitCount || 10);
-  const avail = scroll.clientHeight - 46;          // 40 表头 + 6 padding
+  // 提示条（正在上/课上完了/空白占位）常驻在课表下面，要给它让出高度 ——
+  // 不然占位一出现，第 9、10 节就被顶出屏幕（2026-11-03 用户反馈）。
+  const dn = $('dayNext');
+  const dnH = (dn && !dn.hidden) ? dn.offsetHeight + 8 : 0;
+  const avail = scroll.clientHeight - 46 - dnH;    // 40 表头 + 6 padding + 提示条
   let cell = Math.floor((avail - (units - 1)) / units);   // 行间还有 1px gap
   cell = Math.max(48, Math.min(110, cell));
   scroll.style.setProperty('--cell-h', cell + 'px');
@@ -1272,6 +1303,7 @@ function renderWeek() {
   });
   fitRoomLines(track);
   centerTrack(track);
+  renderDayNext(today0());     // 提示条常驻占位，周视图也要刷新（见 renderDayNext）
   // 🔴 首帧量出来的页宽常常不是最终值（表格还在布局/滚动条还没出现），
   //    平移量就会多出几十像素：左边漏出上一周的一条、右边第 7 列被裁。
   //    下一帧再核一次，代价是零。
@@ -1535,11 +1567,15 @@ function renderDay() {
 function renderDayNext(date) {
   const el = $('dayNext');
   const isToday = ymd(date) === ymd(today0());
-  const isDayView = CFG.view !== 'week';
-  if (!isToday || !isDayView || !DATA || !curTT().courses) { el.hidden = true; return; }
-
-  const week = weekOf(date);
-  if (week < 1) { el.hidden = true; return; }
+  // 2026-11-03 用户要求：这块**常驻占位** —— 没上完之前空白占位，
+  // 上完之后提示才出现；否则提示出现的一瞬间会把第 9、10 节顶走。
+  // 翻历史学期 / 明天的时候占位没有意义，才彻底藏掉。
+  const total = totalWeeks();
+  const wk = weekOf(date);
+  if (!isToday || !DATA || !curTT().courses || wk < 1 || wk > total) {
+    el.hidden = true;
+    return;
+  }
 
   const occ = occupancy(week);
   const dayIdx = (date.getDay() + 6) % 7;
@@ -1573,13 +1609,12 @@ function renderDayNext(date) {
     el.hidden = false;
     return;
   }
-  if (next && next.s - nowMin <= 180) {
-    const left = next.s - nowMin;
-    el.className = 'daynext';
-    el.innerHTML = '<span class="dn-tag">下一节</span>' +
-      '<span class="dn-main"><b>' + esc(main(next).name) + '</b>' +
-      '<em>' + esc(where(next)) + ' · ' + hhmm(next.s) + '–' + hhmm(next.e) + '</em></span>' +
-      '<span class="dn-side">' + (left <= 0 ? '马上' : '还有 ' + left + ' 分钟') + '</span>';
+  // 2026-11-03 用户要求：没上完之前就是**空白占位** ——
+  // 提示只在上完之后出现，别让「下一节还有 3 小时」这种话挂着。
+  // 占位用 visibility:hidden 保留高度，课表高度因此可以整体压低。
+  if (next) {
+    el.className = 'daynext ph';
+    el.innerHTML = '';
     el.hidden = false;
     return;
   }
@@ -1599,7 +1634,6 @@ function renderDayNext(date) {
 // 后台还每秒算一遍纯属耗电，而手机最在意这个。
 setInterval(() => {
   if (document.hidden) return;
-  if (CFG.view === 'week') return;
   if (!DATA || !curTT().courses) return;
   const date = CFG.cursor ? parseYmd(CFG.cursor) : today0();
   if (ymd(date) !== ymd(today0())) return;
@@ -4085,7 +4119,7 @@ function renderMe() {
   const first = tt.find((x) => x[0]);
   $('meTimes').textContent = CFG.times
     ? '已自定义' + (first ? '（第1节 ' + first[0] + '）' : '')
-    : '默认作息，可修改';
+    : (SCHED_NAME[(CFG && CFG.schedMode) || 'auto'] || '按日期自动');
 
   const hid = CFG.hidden || [];
   $('btnHidden').hidden = hid.length === 0;
@@ -4516,40 +4550,43 @@ $('btnHidden').addEventListener('click', () => {
 
 /* ---------------- 上课时间编辑 ---------------- */
 $('btnTimes').addEventListener('click', () => {
-  const tt = times();
-  let html = '<div class="sh-title">上课时间</div>' +
-    '<div class="sh-sub">按你们实际作息改；改完课表里会显示每节课的起止时间</div><div class="timerows">';
-  tt.forEach((t, i) => {
-    html += '<div class="timerow"><span class="tn">第' + (i + 1) + '节</span>' +
-      '<input type="time" data-i="' + i + '" data-k="0" value="' + (t[0] || '') + '">' +
-      '<span class="tdash">—</span>' +
-      '<input type="time" data-i="' + i + '" data-k="1" value="' + (t[1] || '') + '"></div>';
-  });
-  html += '</div><div class="sheetbtns">' +
-    '<button class="btn" id="timeReset">恢复默认</button>' +
-    '<button class="btn primary" id="timeSave">保存</button></div>';
-  $('sheetBody').innerHTML = html;
-  $('sheetMask').hidden = false;
-
-  $('timeReset').addEventListener('click', () => {
-    CFG.times = null;
-    store.set(KEY.settings, CFG);
-    $('sheetMask').hidden = true;
-    renderSchedule(); renderMe();
-    toast('已恢复默认时间');
-  });
-  $('timeSave').addEventListener('click', () => {
-    const out = [];
-    $('sheetBody').querySelectorAll('input[type=time]').forEach((inp) => {
-      const i = Number(inp.dataset.i), k = Number(inp.dataset.k);
-      out[i] = out[i] || ['', ''];
-      out[i][k] = inp.value;
+  // 2026-11-03 用户要求：只提供两套官方作息，撤掉自由编辑 ——
+  // 作息是学校文件定死的，让用户自己改反而会把「现在上到第几节」算错。
+  const mode = (CFG.schedMode || 'auto');
+  const cur = times();
+  const rows = (sched, label) => {
+    let h = '<div class="sh-sub sched-name">' + label + '</div><div class="timerows">';
+    sched.forEach((t, i) => {
+      h += '<div class="timerow"><span class="tn">第' + (i + 1) + '节</span>' +
+        '<span class="sched-t">' + t[0] + '</span><span class="tdash">—</span>' +
+        '<span class="sched-t">' + t[1] + '</span></div>';
     });
-    CFG.times = out;
-    store.set(KEY.settings, CFG);
-    $('sheetMask').hidden = true;
-    renderSchedule(); renderMe();
-    toast('已保存');
+    return h + '</div>';
+  };
+  const opt = (v, name) =>
+    '<button class="schedopt' + (mode === v ? ' on' : '') + '" data-mode="' + v + '">' +
+    '<b>' + name + '</b><i>' +
+    (v === 'auto' ? '5 月 1 日 — 9 月 30 日用夏令作息' :
+     v === 'summer' ? '固定用夏令作息' : '固定用标准作息') + '</i></button>';
+
+  $('sheetBody').innerHTML =
+    '<div class="sh-title">上课时间</div>' +
+    '<div class="sh-sub">两套作息来自学校教务处文件，按日期自动切换；也可以手动锁定一套。</div>' +
+    '<div class="schedopts">' + opt('auto', '按日期自动') + opt('standard', '标准作息') +
+    opt('summer', '夏令作息') + '</div>' +
+    rows(cur, '当前生效的作息');
+
+  $('sheetMask').hidden = false;
+  $('sheetBody').querySelectorAll('.schedopt').forEach((b) => {
+    b.addEventListener('click', () => {
+      CFG.schedMode = b.dataset.mode;
+      // 撤掉旧版自由编辑可能留下的数据 —— 它的优先级比新开关高，留着会打架
+      CFG.times = null;
+      store.set(KEY.settings, CFG);
+      renderSchedule(); renderMe();
+      $('sheetMask').hidden = true;
+      toast('已切换为' + (SCHED_NAME[CFG.schedMode] || '按日期自动'));
+    });
   });
 });
 
@@ -7405,8 +7442,35 @@ new MutationObserver(() => {
      ② 官网那张校历通常是图片，没有结构化接口，抓回来也解析不出日期；
      ③ 抓不到时显示「没有校历」比显示一套假日期诚实 —— 这也是本项目的红线。
    代价是每学年手改一次，所以入口只留 CAL_TERMS 这一个。 */
-const CAL_YEAR = '';
-const CAL_TERMS = [];
+/* 升达校历（2026-11-03 录入，来源：学校官网「校历信息」栏目
+   https://www.shengda.edu.cn/info/1069/67602.htm —— 2026–2027 学年第一学期）。
+   周次口径：第 1 周 = 9 月 7 日（老生开课）那周；
+   教学 16 周（与教务课表实测一致），17–18 周复习，
+   期末考试 2027-01-11 — 01-15，01-16 放寒假 ⇒ 本学期共 19 周。
+   🔴 每学期开学后到这里加一个新条目即可（官网校历是图片，
+      日期只能人工从通知里抄，抄完把 official_url 换成新通知的地址）。 */
+const CAL_YEAR = '2026-2027';
+const CAL_OFFICIAL_URL = 'https://www.shengda.edu.cn/info/1069/67602.htm';
+const CAL_TERMS = [
+  {
+    name: '第一学期',
+    start: '2026-09-07',
+    weeks: 19,
+    holiday: { d: '2027-01-16', label: '寒假' },
+    marks: [
+      { d: '2026-09-07', t: '开课（老生和专升本新生）' },
+      { d: '2026-09-07', e: '2026-09-20', t: '期初补缓考' },
+      { d: '2026-09-12', t: '本科新生开课' },
+      { d: '2026-10-01', t: '国庆节（调休安排以学校通知为准）' },
+      { d: '2026-11-01', t: '校庆' },
+      { d: '2026-12-12', t: '全国大学英语四六级考试' },
+      { d: '2026-12-19', e: '2026-12-20', t: '全国硕士研究生招生考试' },
+      { d: '2026-12-28', e: '2027-01-10', t: '复习备考（无教学安排）' },
+      { d: '2027-01-11', e: '2027-01-15', t: '期末考试' },
+      { d: '2027-01-16', t: '开始放寒假' },
+    ],
+  },
+];
 
 const calYmd = (d) => d.getFullYear() + '-' +
   String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -7463,6 +7527,7 @@ function renderCalendar() {
     $('calRange').textContent = '';
     $('calFill').style.width = '0%';
     $('calFind').textContent = '';
+    $('calOfficial').hidden = true;      // 没录入校历时也别放一个空链接
     $('calBody').innerHTML =
       '<div class="card"><h2>本校校历还没录入</h2>' +
       '<p class="sub">开学日、寒暑假、考试周这些日期要按学校发布的校历填进来。' +
@@ -7551,7 +7616,20 @@ function renderCalendar() {
     html += '</ul>';
   }
   $('calBody').innerHTML = html;
+  // 官网原文入口：只在「今天落在这个学期里」时显示（旧学期没有点开的必要）
+  const co = $('calOfficial');
+  if (co) {
+    co.hidden = !(cur && st.phase === 'in');
+    co.textContent = '在学校官网查看' + term.name + '校历原文';
+  }
 }
+
+// 官网校历原文：App 内打开（带返回），打不开退系统浏览器并给出地址
+$('calOfficial').addEventListener('click', () => {
+  if (!openApp(CAL_OFFICIAL_URL, '学校校历')) {
+    toast('打不开，可以复制这个地址手动打开：' + CAL_OFFICIAL_URL, 6000);
+  }
+});
 
 // ------------------------------------------------------------------ 校园（智慧门户）
 /*
