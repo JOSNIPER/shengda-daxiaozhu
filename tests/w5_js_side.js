@@ -166,7 +166,7 @@ global.fetch = async (u) => {
         profile: { tableId: '9005', menucode: 'M9005', preheat_path: '' },
       },
       column_map: { timetable: {}, score: {}, exam: {}, free_room: {}, profile: {} },
-      unit_count: 12,
+      timetable: { unit_count: 12, parse_slots: true },
       semester: {}, free_room: { max_periods: null }, chaoxing: { fid: null },
       update: {},
     };

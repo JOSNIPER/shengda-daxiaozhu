@@ -36,7 +36,7 @@ CFG = {
         "profile": {"tableId": "9005", "menucode": "M9005", "preheat_path": ""},
     },
     "column_map": {},
-    "timetable": {"unit_count": 12},
+    "timetable": {"unit_count": 12, "parse_slots": True},
     "semester": {}, "free_room": {"max_periods": None},
     "chaoxing": {}, "update": {},
 }

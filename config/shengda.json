@@ -52,6 +52,9 @@
     "profile": {}
   },
 
+  "_timetable_comment": "parse_slots：把青果标准的星期/节次/周次三列（skxq/skjc/zc）拼成格子。认不出的值格式一律整批退回原始行，不会画出错课表；抓包时顺手确认这三列的取值样式（「一」还是「1」、节次是 1-2 还是 0102）即可。",
+  "timetable": { "unit_count": 12, "parse_slots": true },
+
   "semester": {
     "comment": "totalWeeks 必须从 time_range 端点取，禁止末课反推。这里只做展示名兜底。",
     "display_fallback": ""

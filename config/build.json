@@ -44,7 +44,7 @@
                    "cdmc": "room", "skxq": "day", "skjc": "periods" },
     "score": {}, "exam": {}, "free_room": {}, "profile": {}
   },
-  "timetable": { "unit_count": 12 },
+  "timetable": { "unit_count": 12, "parse_slots": true },
   "semester": { "display_fallback": "2026-2027学年第1学期" },
   "free_room": { "max_periods": null },
   "chaoxing": { "fid": null },

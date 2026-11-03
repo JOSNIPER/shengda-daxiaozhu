@@ -319,10 +319,9 @@ class KingoClient:
         bridge.Service._with_client 靠捕获 EamsError 触发"重登一次再试"；
         在这里吞掉会把"重登能救"变成"界面显示空课表"。
 
-        青果 DataTable 行→courses[] 的字段（name/code/teacher/room/weeks/slots）
-        依赖抓包确认的真实列名与"周次/星期节次"列的格式 —— 在此之前
-        **原样保留解析行**放进 courses 并标记 shape:"raw"，由 W3 镜像的
-        JS 版与真机核对后固化 slot/week 解析。绝不猜格式编造格子。
+        课程行的形状：config 里开了 timetable.parse_slots 才把青果三列
+        （skxq/skjc/zc）拼成格子用的 slots/weeks；**任何一行拼不出来就整批
+        退回原样行**（shape:"raw"），绝不画一张可能错的课表。
         """
         rows = self._fetch_table("timetable")   # EamsError 直接上抛
         tw = None
@@ -330,10 +329,17 @@ class KingoClient:
             tw = self.total_weeks()
         except EamsError:
             pass
-        out = {"unitCount": self.cfg.get("timetable", {}).get("unit_count", 12),
-               "courses": rows, "totalWeeks": tw, "weekStart": 1,
+        tcfg = self.cfg.get("timetable") or {}
+        unit_count = tcfg.get("unit_count", 12)
+        courses, shape = rows, "raw"
+        if tcfg.get("parse_slots") and rows:
+            shaped = tp.shape_courses(rows, unit_count)
+            if shaped is not None:
+                courses, shape = shaped, "slots"
+        out = {"unitCount": unit_count,
+               "courses": courses, "totalWeeks": tw, "weekStart": 1,
                "semester": self._context.get("lcmc", "") or semester_name,
-               "shape": "raw"}
+               "shape": shape}
         if not rows:
             out["empty"] = True   # 空表≠过期（守卫已在 _fetch 区分过）
         return out
@@ -439,7 +445,11 @@ class KingoClient:
                 "error": "青果版培养计划端点未配置（待抓包）"}
 
     def todo(self) -> dict:
-        return {"items": []}
+        # 青果的选课/评教/免听/免修开放状态端点待抓包。返回**空列表 + note**：
+        # note 必须和 native.js 的 todo() 逐字一致（W5 对账在盯），界面无 note
+        # 时会退化成「这次四项都没有新消息」= 把「没适配」说成「没开放」（红线 20）。
+        return {"items": [],
+                "note": "本校教务的选课/评教状态还没接入，暂不查询这四类事项。"}
 
 
 def _to_int(s):

@@ -107,6 +107,114 @@ def apply_column_map(rows: list, mapping: dict) -> list:
     return out
 
 
+# ---------------------------------------------------------------- 课表格子
+# 青果标准的「星期 / 节次 / 周次」三列（skxq / skjc / zc）。值格式各校有差，
+# 这里只认下面这几种；**认不出来就整批放弃**，由调用方退回 shape:"raw"。
+# 理由：一张猜错格的课表比一张原始行列表害人得多 —— 学生会照着错误的时间
+# 去教室。config 里的 timetable.parse_slots 是这一层的总开关。
+
+_DAY_CN = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
+
+_DAY_RE = re.compile(r"^(?:星期|周|礼拜)?\s*([一二三四五六日天1-7])\s*$")
+_RANGE_RE = re.compile(r"^(\d{1,2})(?:\s*-\s*(\d{1,2}))?$")
+_PARITY_RE = re.compile(r"[（(]\s*(单|双)\s*[)）]")
+
+
+def _pick(row: dict, *keys):
+    """按优先级取第一个非空值。列名映射前后两套键都认（kcm / name …）。"""
+    for k in keys:
+        v = row.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ""
+
+
+def _norm(s: str) -> str:
+    return (s.replace("，", ",").replace("、", ",").replace("－", "-")
+             .replace("–", "-").replace("—", "-").replace("~", "-"))
+
+
+def _parse_day(v: str):
+    m = _DAY_RE.match(v)
+    if not m:
+        return None
+    c = m.group(1)
+    if c.isdigit():
+        n = int(c)
+        return 6 if n == 7 else n - 1      # 周日有的学校写 7
+    return _DAY_CN.get(c)
+
+
+def _parse_periods(v: str, unit_count: int):
+    s = _norm(v).replace("第", "").replace("节", "").strip()
+    if not s:
+        return None
+    out = []
+    for part in s.split(","):
+        m = _RANGE_RE.match(part.strip())
+        if not m:
+            return None
+        a = int(m.group(1))
+        b = int(m.group(2) or a)
+        if a < 1 or b < a or b > unit_count:
+            return None
+        out.extend(range(a, b + 1))
+    return [p - 1 for p in sorted(set(out))] if out else None
+
+
+def _parse_weeks(v: str):
+    s = _norm(v).replace("第", "").replace("周", "")
+    parity = None
+    m = _PARITY_RE.search(s)
+    if m:
+        parity = 1 if m.group(1) == "单" else 0
+        s = s[:m.start()] + s[m.end():]
+    out = set()
+    for part in s.split(","):
+        m = _RANGE_RE.match(part.strip())
+        if not m:
+            if not part.strip():
+                continue
+            return None
+        a = int(m.group(1))
+        b = int(m.group(2) or a)
+        if a < 1 or b < a:
+            return None
+        out.update(range(a, b + 1))
+    if not out:
+        return None
+    if parity is not None:                 # 双周 = 偶数周（2,4,6…）
+        out = {w for w in out if w % 2 == parity}
+    return sorted(out) if out else None
+
+
+def shape_courses(rows: list, unit_count: int):
+    """原样行 → 格子能画的 courses[]（name/teacher/room/weeks/slots/code）。
+
+    返回 None 表示**有行解析不了**，整批退回 raw。不做「跳过坏行、画好行」：
+    半张课表比没有更危险（少一门课的人不会发现）。
+    """
+    out = []
+    for r in rows:
+        name = _pick(r, "name", "kcm", "课程名")
+        day = _parse_day(_pick(r, "day", "skxq", "上课星期"))
+        periods = _parse_periods(_pick(r, "periods", "skjc", "上课节次"), unit_count)
+        weeks = _parse_weeks(_pick(r, "weeks_text", "weeks", "zc", "周次"))
+        if not name or day is None or not periods or not weeks:
+            return None
+        code = _pick(r, "code", "kcdm", "课程代码", "kch", "课程号") or name
+        out.append({
+            "code": code,
+            "name": name,
+            "teacher": _pick(r, "teacher", "skjs", "任课教师"),
+            "room": _pick(r, "room", "cdmc", "上课地点"),
+            "weeks": weeks,
+            "slots": [{"day": day, "period": p} for p in periods],
+        })
+    return out
+
+
+
 def _double_encoded_json(text: str):
     """Kingosoft 常见形态 {"status":"200","result":"{...}"}（result 是字符串里的 JSON）。
     解析失败返回 {}，**不抛异常** —— 会话失效时这里会收到一段 alert 弹窗 HTML。"""

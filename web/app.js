@@ -3998,6 +3998,7 @@ async function loadTodo(force) {
       TODO = {
         at: res.at || Math.floor(Date.now() / 1000),
         items: res.items || [],
+        note: res.note || '',
         error: '',
       };
     }
@@ -4044,10 +4045,13 @@ function renderTodo() {
 
   const items = TODO.items || [];
   if (!items.length) {
-    // 「什么都没查到」这句话反而要留着：它和「还没查」是两件事，
-    // 前者是查过了没东西，后者是没查过 —— 长一样就分不出来。
+    // 🔴 空列表有两种完全不同的含义：①「查过了，四项都没开」；②「这一轨还没
+    //    适配，根本没查」。郑航版没有 note，空就是①；达小助的 kingo.todo()
+    //    带 note 说明②，**必须照实说** ——「这次四项都没有新消息」用在②上
+    //    就是把「没适配」伪装成「没开放」，学生会真以为这学期没事要办（红线 20）。
     card.classList.remove('bare');
-    $('todoList').innerHTML = '<div class="todo-msg">这次四项都没有新消息。</div>';
+    $('todoList').innerHTML = '<div class="todo-msg">' +
+      esc(TODO.note || '这次四项都没有新消息。') + '</div>';
     foot.hidden = true;
     return;
   }

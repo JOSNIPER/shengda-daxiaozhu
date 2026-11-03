@@ -64,6 +64,7 @@
       profile:   { tableId: 'TBD_XJ', menucode: 'TBD_XJ_MENU', preheat_path: '' }
     },
     column_map: { timetable: {}, score: {}, exam: {}, free_room: {}, profile: {} },
+    timetable: { unit_count: 12, parse_slots: true },
     semester: {},
     free_room: { max_periods: null },
     chaoxing: { fid: null },
@@ -937,8 +938,11 @@
    */
   async function todo() {
     // 🔴 达小助改造（W3）：郑航 TODO_DEFS 那四个 /eams/*.action 端点随 EAMS 废弃。
-    //   青果的开放状态查询端点待抓包；未配置时返回空列表，界面显示「暂无可办事项」。
-    return { items: [] };
+    //   青果的开放状态查询端点待抓包。返回**空列表 + note**，note 必须和
+    //   kingo.py 的 todo() 逐字一致（W5 对账在盯）——没有 note 时界面会退化成
+    //   「这次四项都没有新消息」，那是把「没适配」说成「没开放」（红线 20）。
+    return { items: [],
+             note: '本校教务的选课/评教状态还没接入，暂不查询这四类事项。' };
   }
 
   var idsCache = '';
@@ -1131,6 +1135,103 @@
     return out;
   }
 
+  /* ---- 课表格子：青果 skxq/skjc/zc 三列 → slots/weeks ----------------
+   *  🔴 必须与 table_parser.shape_courses（Python 轨）逐条一致 ——
+   *     两轨同一账号必须给出同一张课表，W5 对拍在盯这一条。
+   *  认不出格式就**整批**退回原样行：少画一门课的课表比原始行列表更害人。 */
+  var DAY_CN = { '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6 };
+
+  function kgPick(row, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var v = row[keys[i]];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return '';
+  }
+
+  function kgNorm(s) {
+    return String(s).replace(/，/g, ',').replace(/、/g, ',')
+      .replace(/[－–—]/g, '-').replace(/~/g, '-');
+  }
+
+  function kgParseDay(v) {
+    var m = /^(?:星期|周|礼拜)?\s*([一二三四五六日天1-7])\s*$/.exec(v);
+    if (!m) return null;
+    var c = m[1];
+    if (/^[0-9]$/.test(c)) {
+      var n = parseInt(c, 10);
+      return n === 7 ? 6 : n - 1;          // 周日有的学校写 7
+    }
+    return DAY_CN[c];
+  }
+
+  function kgParsePeriods(v, unitCount) {
+    var s = kgNorm(v).replace(/第/g, '').replace(/节/g, '').trim();
+    if (!s) return null;
+    var out = [];
+    var parts = s.split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var m = /^(\d{1,2})(?:\s*-\s*(\d{1,2}))?$/.exec(parts[i].trim());
+      if (!m) return null;
+      var a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+      if (a < 1 || b < a || b > unitCount) return null;
+      for (var p = a; p <= b; p++) if (out.indexOf(p - 1) < 0) out.push(p - 1);
+    }
+    if (!out.length) return null;
+    out.sort(function (x, y) { return x - y; });
+    return out;
+  }
+
+  function kgParseWeeks(v) {
+    var s = kgNorm(v).replace(/第/g, '').replace(/周/g, '');
+    var parity = null;
+    var pm = /[（(]\s*(单|双)\s*[)）]/.exec(s);
+    if (pm) {
+      parity = pm[1] === '单' ? 1 : 0;
+      s = s.slice(0, pm.index) + s.slice(pm.index + pm[0].length);
+    }
+    var out = [];
+    var parts = s.split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var t = parts[i].trim();
+      if (!t) continue;
+      var m = /^(\d{1,2})(?:\s*-\s*(\d{1,2}))?$/.exec(t);
+      if (!m) return null;
+      var a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+      if (a < 1 || b < a) return null;
+      for (var w = a; w <= b; w++) if (out.indexOf(w) < 0) out.push(w);
+    }
+    if (!out.length) return null;
+    if (parity !== null) {                 // 双周 = 偶数周（2,4,6…）
+      out = out.filter(function (w) { return w % 2 === parity; });
+    }
+    out.sort(function (x, y) { return x - y; });
+    return out.length ? out : null;
+  }
+
+  function kingoShapeCourses(rows, unitCount) {
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var name = kgPick(r, ['name', 'kcm', '课程名']);
+      var day = kgParseDay(kgPick(r, ['day', 'skxq', '上课星期']));
+      var periods = kgParsePeriods(kgPick(r, ['periods', 'skjc', '上课节次']), unitCount);
+      var weeks = kgParseWeeks(kgPick(r, ['weeks_text', 'weeks', 'zc', '周次']));
+      if (!name || day === null || !periods || !weeks) return null;
+      var slots = [];
+      for (var p = 0; p < periods.length; p++) slots.push({ day: day, period: periods[p] });
+      out.push({
+        code: kgPick(r, ['code', 'kcdm', '课程代码', 'kch', '课程号']) || name,
+        name: name,
+        teacher: kgPick(r, ['teacher', 'skjs', '任课教师']),
+        room: kgPick(r, ['room', 'cdmc', '上课地点']),
+        weeks: weeks,
+        slots: slots,
+      });
+    }
+    return out;
+  }
+
   async function kingoFetch(pageKey, extraParams) {
     var conf = (CFG.pages || {})[pageKey] || {};
     var tid = conf.tableId || '';
@@ -1224,17 +1325,24 @@
   async function timetable(semesterId, semesterName) {
     // 🔴 达小助改造（W3）：青果 DataTable 取课表，镜像 kingo.timetable。
     //   会话类错误向上抛（withLogin 靠它重登一次再试）；空表≠过期。
-    //   courses 先原样保留解析行并标 shape:'raw' —— 周次/节次列的真实格式
-    //   待阶段2抓包核对后固化，绝不猜格式编造格子。
+    //   形状由 config 的 timetable.parse_slots 决定：拼得出来就是 slots，
+    //   拼不出来整批保留原样行（shape:'raw'）—— 不画可能错的格子。
     var rows = await kingoFetch('timetable');
     var tw = null;
     try { tw = await kingoTotalWeeks(); } catch (e) { /* 周数取不到照交课表 */ }
     var ctx = kingoCtx || {};
+    var tcfg = CFG.timetable || {};
+    var unitCount = tcfg.unit_count || 12;
+    var courses = rows, shape = 'raw';
+    if (tcfg.parse_slots && rows.length) {
+      var shaped = kingoShapeCourses(rows, unitCount);
+      if (shaped) { courses = shaped; shape = 'slots'; }
+    }
     var out = {
-      unitCount: (CFG.timetable && CFG.timetable.unit_count) || 12,
-      courses: rows, totalWeeks: tw, weekStart: 1,
+      unitCount: unitCount,
+      courses: courses, totalWeeks: tw, weekStart: 1,
       semester: ctx.lcmc || semesterName || '',
-      shape: 'raw',
+      shape: shape,
     };
     if (!rows.length) out.empty = true;
     return out;
