@@ -1051,23 +1051,28 @@
     }
   }
 
-  /** DataTable.jsp 一页 → [{青果列名:文本}]（head_ 表头定列、trN_ 行内 id 优先）。 */
+  /** DataTable.jsp 一页 → [{青果列名:文本}]（head_ 表头定列、trN_ 行内 id 优先）。
+   *  🔴 用 querySelectorAll 而不是 table.rows/cells —— 后者是 WebView 才有的
+   *     便利 API，Node/linkedom 侧没实现；前两个 DOM 方法到哪都在，
+   *     W5 对拍测试才能真跑到这一段。 */
   function kingoParseTable(htmlText, mapping) {
     var doc = new DOMParser().parseFromString(htmlText || '', 'text/html');
     var out = [];
     var tables = doc.querySelectorAll('table');
     for (var ti = 0; ti < tables.length; ti++) {
-      var rows = tables[ti].rows;
-      if (!rows.length) continue;
+      var trs = tables[ti].querySelectorAll('tr');
+      if (!trs.length) continue;
       var heads = [];
-      var hcells = rows[0].cells;
+      var hcells = trs[0].querySelectorAll('td,th');
       for (var hi = 0; hi < hcells.length; hi++) {
         var hid = (hcells[hi].getAttribute('id') || '').replace(/^head_/, '');
         heads.push(hid);
       }
-      if (!heads.some(Boolean)) continue;
-      for (var ri = 1; ri < rows.length; ri++) {
-        var cells = rows[ri].cells;
+      var hasHead = false;
+      for (var x = 0; x < heads.length; x++) if (heads[x]) { hasHead = true; break; }
+      if (!hasHead) continue;
+      for (var ri = 1; ri < trs.length; ri++) {
+        var cells = trs[ri].querySelectorAll('td,th');
         if (cells.length < 2) continue;
         var entry = {}, any = false;
         for (var ci = 0; ci < heads.length && ci < cells.length; ci++) {
@@ -1186,7 +1191,7 @@
     try { tw = await kingoTotalWeeks(); } catch (e) { /* 周数取不到照交课表 */ }
     var ctx = kingoCtx || {};
     var out = {
-      unitCount: CFG.unit_count || 12,
+      unitCount: (CFG.timetable && CFG.timetable.unit_count) || 12,
       courses: rows, totalWeeks: tw, weekStart: 1,
       semester: ctx.lcmc || semesterName || '',
       shape: 'raw',
@@ -1202,20 +1207,22 @@
 
   async function profile() {
     var rows = await kingoFetch('profile');
-    // 键值两列行版式：某格等于中文标签 → 取右边第一个非空值（镜像 kingo.profile）
-    var KEYS = { '学号': 'studentId', '姓名': 'name', '性别': 'gender', '年级': 'grade',
+    // 键值两列行版式：某格等于中文标签 → 取右边第一个非空值。
+    // 🔴 KEYS 必须与 eams._PROFILE_KEYS（Python 轨）逐键一致——W5 对拍抓出过
+    //   这里多写了「班级/入学年份」两个别名，两轨同一账号会给出不同键。
+    var rows_map = { '学号': 'studentId', '姓名': 'name', '性别': 'gender', '年级': 'grade',
                  '院系': 'dept', '专业': 'major', '方向': 'direction', '所属班级': 'className',
-                 '班级': 'className', '所属校区': 'campus', '学籍状态': 'status', '学历层次': 'level',
-                 '学制': 'duration', '入学时间': 'enrolledAt', '入学年份': 'grade', '毕业时间': 'graduateAt' };
+                 '所属校区': 'campus', '学籍状态': 'status', '学历层次': 'level',
+                 '学制': 'duration', '入校时间': 'enrolledAt', '毕业时间': 'graduateAt' };
     var p = {};
     for (var i = 0; i < rows.length; i++) {
       var vals = [];
       for (var k in rows[i]) vals.push(rows[i][k]);
       for (var j = 0; j < vals.length - 1; j++) {
         var kk = String(vals[j] || '').trim().replace(/[：:]$/, '');
-        if (KEYS[kk]) {
+        if (rows_map[kk]) {
           var vv = String(vals[j + 1] || '').trim();
-          if (vv && vv !== '*' && !p[KEYS[kk]]) p[KEYS[kk]] = vv;
+          if (vv && vv !== '*' && !p[rows_map[kk]]) p[rows_map[kk]] = vv;
         }
       }
     }
@@ -1448,7 +1455,7 @@
       pl = await plan();
     } catch (e) {
       pl = {
-        total: 0, cats: [], courses: [], subs: [],
+        total: 0, cats: [], courses: [], subs: [], specials: [],
         error: (e && e.message) || String(e),
       };
     }

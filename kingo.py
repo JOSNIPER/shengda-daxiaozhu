@@ -410,9 +410,10 @@ class KingoClient:
         return out
 
     def plan(self) -> dict:
-        """培养计划：青果端点未确认（阶段2 若顺路抓不到就维持 error）。"""
+        """培养计划：青果端点未确认（阶段2 若顺路抓不到就维持 error）。
+        结构与 eams.plan 出错时的契约一致：{total,cats,courses,subs,specials,error}。"""
         return {"total": 0, "cats": [], "courses": [], "subs": [],
-                "specials": [], "found": False,
+                "specials": [],
                 "error": "青果版培养计划端点未配置（待抓包）"}
 
     def todo(self) -> dict:

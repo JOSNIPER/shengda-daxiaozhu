@@ -5,6 +5,13 @@ __pycache__/
 *.pyc
 *.pyo
 
+# 测试临时产物（W5 对拍的两侧 JSON）
+tests/_js_out.json
+tests/_py_out.json
+# Node 测试依赖（linkedom/iconv-lite，仅为对拍装的本机包，不入库）
+node_modules/
+package-lock.json
+
 # 签名密钥只在本地，绝不进仓库（丢了就只能卸载重装）
 *.keystore
 *.jks
