@@ -91,6 +91,19 @@
         </button>
       </div>
 
+      <!-- 数据到了、但格子格式还没适配时用的那一屏（见 app.js 的 renderSchedule）。
+           青果课表现在给的是「原样解析出来的行」，没有 slots/weeks —— 猜一个格式
+           画出来的课表看着像真的，错起来没人发现，所以这一屏只列原始行。 -->
+      <div class="empty" id="schRaw" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        </div>
+        <h2 id="schRawH">课表数据已同步，格子格式还没适配</h2>
+        <p class="sub">下面列的是教务系统原样给出来的行。周次、星期、节次怎么拼成一张课表，
+          要按本校教务的真实格式确认之后才能画 —— 猜出来的课表比没有课表更容易害人。</p>
+        <div id="schRawList" class="rawlist"></div>
+      </div>
+
       <!-- 翻页轨道：同时放「上一周 / 本周 / 下一周」三页。
            只放一页的话，手指一拖就把唯一那页推走了，底下是空白 ——
            看起来就是「先全白一下，再蹦出下一页」。

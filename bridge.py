@@ -3,15 +3,23 @@
 作用：把教务系统（只支持 HTTP、且有同源限制）的数据，转成手机浏览器能直接用的 JSON。
 
 为什么需要它：
-    手机浏览器出于安全策略，不允许网页直接请求 `http://jwglxt.zua.edu.cn`
+    手机浏览器出于安全策略，不允许网页直接请求 `http://jw.shengda.edu.cn:8090`
     （跨域 + 混合内容两条都会拦）。所以由这个本地服务替手机去登录、抓数据，
     再以同源接口交给手机页面。**凭据不出这台电脑**，也不经过任何第三方服务器。
 
-运行：
-    python bridge.py            # 默认 8788 端口
-    python bridge.py --port 9000
+数据走的是哪一轨：
+    教务那部分用 `kingo.KingoClient`（青果/升达），和 APK 里 native.js 的
+    青果镜像是同构的两条路，逐字段对拍见 tests/w5_parity_compare.py。
+    🔴 以前这里挂的是 `eams.EamsClient`（郑航教务），等于「网页版会把升达
+    学生的账密发往郑航」；W4 那批只换了 JS 轨，Python 轨一直没换 —— 现在补上。
 
-凭据保存：Windows DPAPI 加密后存到 %LOCALAPPDATA%\\ZuaTimetable\\account.bin
+运行：
+    python bridge.py            # 默认 8788 端口，连真实升达教务（config/shengda.json）
+    python bridge.py --port 9000
+    python bridge.py --config x.json   # 换配置（tableId/menucode 抓包后另存一份）
+    python bridge.py --mock            # 连本机离线 mock，免账号联调界面
+
+凭据保存：Windows DPAPI 加密后存到 %LOCALAPPDATA%\\DaXiaoZhu\\account.bin
     只有当前 Windows 账户能解开，拷走文件也解不开。
 """
 
@@ -34,16 +42,18 @@ from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 WEB_DIR = HERE / "web"
-DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ZuaTimetable"
+DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "DaXiaoZhu"
 ACCOUNT_FILE = DATA_DIR / "account.bin"
 TOKEN_FILE = DATA_DIR / "token.txt"
 
 sys.path.insert(0, str(HERE))
 import chaoxing  # noqa: E402
-import eams  # noqa: E402
-import notice  # noqa: E402
+import eams  # noqa: E402  只借它的 EamsError/字段映射，教务取数已改走 kingo
+import kingo  # noqa: E402
 import portal  # noqa: E402
 import water  # noqa: E402
+# notice 暂不 import：那六张公告源表全是郑航部门站，路由停用后没有可达路径
+# （见 /api/notice 那里）。升达 CMS 抓包确认后重写 notice.py 再接回来。
 
 
 # ------------------------------------------------------------------ DPAPI
@@ -65,7 +75,7 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
     inb, _keep = _blob(data)
     outb = _BLOB()
     fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
-    ok = fn(ctypes.byref(inb), "ZuaTimetable", None, None, None, 0, ctypes.byref(outb))
+    ok = fn(ctypes.byref(inb), "DaXiaoZhu", None, None, None, 0, ctypes.byref(outb))
     if not ok:
         raise ctypes.WinError(ctypes.get_last_error())
     try:
@@ -117,8 +127,15 @@ def load_token() -> str:
 
 # ------------------------------------------------------------------ 门户凭据
 #
-# 门户（rhmh.zua.edu.cn）的密码和教务系统**不是同一套**，会话也是两套，
-# 所以单独存一份，不塞进 account.bin。
+# 🔴 达小助改造（W6 安全收口，本任务补齐 Python 轨）：下面这一整段是**郑航**
+#   门户（rhmh.zua.edu.cn / sfrz.zua.edu.cn，RSA 账密 + 算术验证码）的本机凭据
+#   层，`portal.Portal` 里的地址也还是那一套。升达门户 my.shengda.edu.cn 走
+#   CASTGC，机制不同，等阶段2抓包重写。
+#   ⇒ /api/portal/* 这一组路由已全部短路（见 Handler 里「门户未适配本校系统」），
+#     这段存/取函数因此暂无路由可达。留着是因为升达适配完要用的还是同一套
+#     DPAPI 落盘形状；真正的兜底是 kingo._assert_allowed_host() 那类域名白名单。
+#
+# 门户会话和教务**不是同一套**，所以单独存一份，不塞进 account.bin。
 #
 # 存 cookie，**也存密码**（2026-10-22 加的）：
 #   · cookie 里那张 CASTGC（身份证）是日常用的 —— 门票过期能自己换新的，
@@ -470,14 +487,22 @@ def reset_portal() -> None:
 class Service:
     """串行化对教务系统的访问，避免手机连点把学校服务器打疼。"""
 
-    def __init__(self) -> None:
+    def __init__(self, config: dict = None, cfg_desc: str = "") -> None:
         self.lock = threading.Lock()
-        self.client = eams.EamsClient()
+        self.cfg = config          # None ⇒ KingoClient 自己读 config/shengda.json
+        self.cfg_desc = cfg_desc or "config/shengda.json（默认）"
+        self.client = self._new_client()
         self.last_error = ""
+
+    def _new_client(self) -> kingo.KingoClient:
+        """换一个干净会话。每次登录、每次「会话过期后重登」都新建一个 ——
+        青果的 JSESSIONID 和菜单上下文绑在一起，复用半死的会话只会一路
+        「无效访问请求」。"""
+        return kingo.KingoClient(config=self.cfg)
 
     def sync(self, username: str, password: str) -> dict:
         with self.lock:
-            self.client = eams.EamsClient()
+            self.client = self._new_client()
             self.client.login(username, password)
             profile = self.client.profile()
             tt = self.client.timetable()
@@ -538,13 +563,13 @@ class Service:
     def _with_client(self, fn, username: str, password: str):
         with self.lock:
             if not self.client.logged_in:
-                self.client = eams.EamsClient()
+                self.client = self._new_client()
                 self.client.login(username, password)
             try:
                 return fn(self.client)
             except eams.EamsError:
                 # 会话过期 / 服务端重启 ⇒ 换一个干净会话再来一次
-                self.client = eams.EamsClient()
+                self.client = self._new_client()
                 self.client.login(username, password)
                 return fn(self.client)
 
@@ -581,14 +606,36 @@ class Service:
 SERVICE = Service()
 
 
+def free_room_max_periods():
+    """空闲教室的每日节数上限。没配置就是 None（那时只判「正整数、起不晚于止」）。
+    走 SERVICE 当前那份配置，所以 `--mock` / `--config` 换的是哪份，这里就是哪份。"""
+    cfg = SERVICE.cfg or kingo.load_config()
+    return (cfg.get("free_room") or {}).get("max_periods")
+
+
 # ------------------------------------------------------------------ HTTP
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "ZuaTimetable/0.1"
+    server_version = "DaXiaoZhu/0.1"
     token = ""
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(WEB_DIR), **kw)
+
+    # -- 界面文件每次都回源问一次
+    # 🔴 不加这条会踩到「代码改了、页面没变」：SimpleHTTPRequestHandler 发
+    #    Last-Modified，浏览器于是直接吃本地缓存，连 304 都不问。症状是点了
+    #    按钮没反应、而磁盘上那份 app.js 明明是对的 —— 排查的人会先怀疑自己
+    #    改错了地方。`no-cache` 只是「必须问一下」，命中 304 时只多一个来回。
+    REVALIDATE = (".html", ".js", ".css")
+
+    def end_headers(self):
+        try:
+            if self.path.split("?")[0].endswith(self.REVALIDATE):
+                self.send_header("Cache-Control", "no-cache")
+        except Exception:  # noqa: BLE001  头部的事不该把响应弄坏
+            pass
+        super().end_headers()
 
     # -- 小工具
     def _json(self, obj, code=200):
@@ -620,34 +667,6 @@ class Handler(SimpleHTTPRequestHandler):
         q = parse_qs(urlparse(self.path).query)
         got = (q.get("k", [""])[0] or "")
         return bool(got) and secrets.compare_digest(got, self.token)
-
-    def _portal_call(self, fn):
-        """跑一次门户取数，把失败翻译成前端认识的形状。
-
-        约定（和 app.js 的 renderCampus 对齐）：
-            ok:false + needLogin:true  ⇒ 门户要重新登录
-            ok:false + 其它 error      ⇒ 这次没读到，会话可能还好
-
-        🔴 这两种必须分开：把「网络抖了一下」说成「登录过期」，用户会白输
-           一次密码和验证码（门户错 5 次锁号）；把「真过期了」说成「没读到」，
-           他会一直点刷新、一直没反应。
-        """
-        cli = get_portal()
-        if not cli.has_ticket() and not cli.has_id():
-            return {"ok": False, "error": "还没连接门户", "needLogin": True}
-        try:
-            out = fn(cli)
-        except portal.PortalError as exc:
-            body = {"ok": False, "error": str(exc)}
-            if exc.kind == "expired":
-                body["needLogin"] = True
-            return body
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": "读门户数据失败：%s" % exc}
-        # 取数过程中可能续过期（cookie 换了一批），顺手落盘，下次开机直接用
-        save_portal({"cookies": cli.dump(), "user": cli.who()})
-        out["ok"] = True
-        return out
 
     def log_message(self, fmt, *args):  # 别刷屏
         # 🔴 这里的 args 不保证是字符串：走 send_error() 的时候 args[0] 是
@@ -732,38 +751,20 @@ class Handler(SimpleHTTPRequestHandler):
             out["at"] = int(time.time())
             self._json(out)
             return
-        # 校园公告：抓的是学校各部门的**公开页面**，所以不校验 token。
-        # 这也是有意的 —— 公告是唯一「没绑教务账号也能看」的栏目，
-        # 刚装完 App 还没绑号的时候，至少有个东西是能用的。
+        # 校园公告：🔴 达小助改造（W6，和 native.js 同步停用）。
+        # notice.py 里的六张源表全是郑航的部门站（www/jwc/tuanwei/hqfwzgs/
+        # xxglzx.zua.edu.cn），升达的公告 CMS 还没抓包确认。
+        # 返回空列表而不是报错：公告页显示「暂无」，不会把错误说成事实。
         if path == "/api/notice":
-            q = parse_qs(urlparse(self.path).query)
-            try:
-                limit = max(1, min(200, int((q.get("limit", ["60"])[0] or 60))))
-            except ValueError:
-                limit = 60
-            force = (q.get("force", ["0"])[0] or "0") == "1"
-            try:
-                self._json(notice.fetch_list(limit=limit, force=force))
-            except Exception as exc:  # noqa: BLE001
-                # 红线：不能把「没拿到」显示成「没有记录」
-                self._json({"ok": False, "error": "取公告失败：%s" % exc})
+            self._json({"ok": True, "at": int(time.time()), "cached": True,
+                        "total": 0, "items": [], "failed": [], "sources": 0,
+                        "note": "升达公告源未配置（待抓包确认学校CMS）"})
             return
-        # 单篇正文：只用来抠「时间 / 地点」和正文摘要。
-        # notice.fetch_detail 里有域名白名单，防止被当成跳板去访问内网。
+        # 单篇正文：以前靠 notice.py 里的域名白名单兜住「不替陌生人访问内网」，
+        # 现在源表整张作废，直接停用，不给它任何出网机会。
         if path == "/api/notice/detail":
-            q = parse_qs(urlparse(self.path).query)
-            u = (q.get("u", [""])[0] or "").strip()
-            if not u:
-                self._json({"ok": False, "error": "缺少 u 参数"}, 400)
-                return
-            try:
-                self._json(notice.fetch_detail(u))
-            except Exception as exc:  # noqa: BLE001
-                self._json({"ok": False, "error": "打开通知失败：%s" % exc})
+            self._json({"ok": False, "error": "升达公告源未配置（待抓包确认学校CMS）"})
             return
-        # ---- 智慧门户：一卡通 + 19 个办事应用 ----
-        # 这套接口和其他接口有一处根本不同：它要的是**门户**密码，
-        # 和教务系统的账号密码不是同一套，所以单独存一份凭据。
         # ---------------- 慧生活798（直饮水） ----------------
         # 0.26.0 的注释在这里写着「积分任务**故意不做**：要签名盐值」——
         # 那个结论是错的（盐在官方 APK 里，2026-10-30 已取出，见 water.py 文件头），
@@ -857,58 +858,35 @@ class Handler(SimpleHTTPRequestHandler):
                         "skipped": got["skipped"], "daily": got.get("daily"),
                         "lanes": got.get("lanes"), "errors": got.get("errors")})
             return
+        # ---------------- 智慧门户：一卡通 + 办事应用 ----------------
+        # 🔴 达小助改造（W6 安全收口）：这一组路由**全部短路**，与 native.js
+        #   的 /api/portal/* 逐条同构。底座走的是郑航 sfrz/rhmh（RSA 账密 +
+        #   算术验证码），而 app.js「连接门户」弹层会把用户输入的学号密码原样
+        #   送进来 —— 留着这条路径，升达学生的凭据就发到别的学校去了。
+        #   升达门户 my.shengda.edu.cn 走 CASTGC，机制不同，等阶段2抓包重写。
+        #   ⚠️ Python 轨没有 guardUrl 那种运行期兜底（portal.py 的地址是硬编码
+        #   的），所以「路由不可达」就是这道闸本身 —— 没换掉 portal.py 之前别接回。
         if path == "/api/portal/status":
-            acc = load_portal()
-            if not acc:
-                self._json({"ok": True, "state": "none", "saved": False})
-                return
-            cli = get_portal()
-            # 只在本地看 cookie，不探网 —— 这个接口每次切到「校园」页都会调，
-            # 探一次网就多几百毫秒。真正的死活由 card/apps 的 needLogin 决定。
-            state = "ok" if (cli.has_ticket() or cli.has_id()) else "expired"
-            # `saved` = 本机存着门户密码 ⇒ 过期后只需算一道验证码。
-            # 只回「存的是哪个学号」，**密码本身永远不出这个进程**。
-            self._json({"ok": True, "state": state, "user": cli.who(),
-                        "saved": bool(str(acc.get("pwd") or "")),
-                        "savedUser": str(acc.get("pwdUser") or "")})
+            self._json({"ok": False, "unsupported": True,
+                        "error": "门户未适配本校系统（待校内抓包确认学校用哪套门户）"})
             return
         if path == "/api/portal/captcha":
-            try:
-                cap = get_portal().captcha()
-            except portal.PortalError as exc:
-                self._json({"ok": False, "error": str(exc)})
-                return
-            except Exception as exc:  # noqa: BLE001
-                self._json({"ok": False, "error": "拿验证码失败：%s" % exc})
-                return
-            self._json({"ok": True, "img": cap["img"], "timeout": cap["timeout"]})
+            self._json({"ok": False, "unsupported": True, "needCaptcha": False,
+                        "error": "门户未适配本校系统，不需要验证码"})
             return
         if path == "/api/portal/card":
-            out = self._portal_call(lambda c: c.card())
-            if out is not None:
-                self._json(out)
+            self._json({"ok": False, "error": "一卡通未适配本校系统（待抓包确认）"})
             return
         if path == "/api/portal/apps":
-            out = self._portal_call(lambda c: {"apps": c.apps()})
-            if out is not None:
-                self._json(out)
+            self._json({"ok": False, "error": "办事应用未适配本校系统（待抓包确认）"})
             return
-        # 给某个办事系统换一张 CAS 票（app.js 拿到票会拼在地址后面再打开）。
+        # 给某个办事系统换一张 CAS 票：换票要先有门户会话，门户没适配就停在这里。
+        # 将来接升达门户时白名单规则照旧 —— 这张票**等于一次登录态**，
+        # 必须先解析 host 再比，别用 startswith 比字符串
+        # （`https://shengda.edu.cn.evil.com` 也满足 startswith）。
         if path == "/api/portal/ticket":
-            q = parse_qs(urlparse(self.path).query)
-            svc = (q.get("service") or [""])[0].strip()
-            # 🔴 只给学校的地址换票：这张票**等于一次登录态**，
-            #    拼到别人的域名上就是把登录态送出去了。
-            #    先解析 host 再比，别用 startswith 比字符串 ——
-            #    `https://shengda.edu.cn.evil.com` 也满足 startswith。
-            host = (urlparse(svc).hostname or "").lower()
-            if not svc.startswith("https://") or not (
-                    host == "shengda.edu.cn" or host.endswith(".shengda.edu.cn")):
-                self._json({"ok": False, "error": "只给学校（shengda.edu.cn）的地址换票"})
-                return
-            out = self._portal_call(lambda c: {"ticket": c.ticket_for(svc)})
-            if out is not None:
-                self._json(out)
+            self._json({"ok": False, "unsupported": True,
+                        "error": "门户未适配本校系统，暂不提供换票"})
             return
         # ---------------- 学习通（作业待办） ----------------
         # 只读。不签到、不刷课、不自动答题、不代交。
@@ -1316,62 +1294,20 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         # ---- 智慧门户登录 / 断开 ----
+        # 🔴 达小助改造（W6 安全收口）：登录这一条是全部残留里最危险的一条 ——
+        #   app.js 的「连接门户」弹层把学号、密码、验证码原样 POST 到这里，
+        #   底座会拿去打郑航 sfrz.zua.edu.cn 的 RSA 登录接口。升达学生的凭据
+        #   不能发给别的学校，所以在换成升达门户之前先短路（形状与 native.js 一致）。
+        #   ⚠️ 这里**不读 data**：密码停在这个请求体里，不进任何函数、不落盘。
         if path == "/api/portal/login":
-            user = (data.get("user") or "").strip()
-            pwd = data.get("pass") or ""
-            code = (data.get("code") or "").strip()
-            # 密码留空 = 「用本机存着的那份」。这样过期重登时人只需要算一道算术题。
-            used_saved = False
-            if not pwd:
-                sp, su = portal_saved_pwd()
-                if not sp:
-                    self._json({"ok": False, "error": "学号和密码都要填", "needCaptcha": True})
-                    return
-                # 🔴 存的是另一个学号的密码就**不许**拿去试：门户错 5 次锁号，
-                #    拿错账号的密码去撞等于帮用户把号锁了。
-                if su and user and su != user:
-                    self._json({"ok": False, "needCaptcha": True,
-                                "error": "本机存的是 %s 的门户密码，跟这个学号对不上，请手动输入" % su})
-                    return
-                pwd = sp
-                user = user or su
-                used_saved = True
-            # 🔴 一律回 needCaptcha：验证码是一次性的，不管哪一步失败，
-            #    这张都不能再用。前端收到就重新拉图，用户重算一次。
-            if not user or not pwd:
-                self._json({"ok": False, "error": "学号和密码都要填", "needCaptcha": True})
-                return
-            if not code:
-                self._json({"ok": False, "error": "还没算验证码", "needCaptcha": True})
-                return
-            try:
-                out = get_portal().login(user, pwd, code)
-            except portal.PortalError as exc:
-                body = {"ok": False, "error": str(exc), "needCaptcha": True}
-                # 用着本机存的密码、门户又明确说「密码/账号不对」⇒ 把那两份都扔了。
-                # 不扔的话下次还会拿一个错密码去撞，撞 5 次号就锁了。
-                # ⚠️ 验证码算错（CODEFALSE）**不在此列**：手滑一次不该删密码。
-                if used_saved and getattr(exc, "code", "") in portal.PWD_BAD_CODES:
-                    clear_portal()
-                    reset_portal()
-                    body["pwdStale"] = True
-                    body["error"] = "%s —— 本机存的那份密码已经删掉，请手动输入一次" % exc
-                self._json(body)
-                return
-            except Exception as exc:  # noqa: BLE001
-                self._json({"ok": False, "error": "登录出错：%s" % exc, "needCaptcha": True})
-                return
-            cli = get_portal()
-            saved = save_portal({"cookies": cli.dump(), "user": out["user"],
-                                 "pwd": pwd, "pwdUser": user})
-            self._json({"ok": True, "user": out["user"],
-                        # 空串 = 存好了，其余是原因（和 /api/login 同构）
-                        "saved": "" if saved else "fail: 凭据文件写不进去"})
+            self._json({"ok": False, "unsupported": True,
+                        "error": "门户未适配本校系统：不会把学号密码发往任何第三方"})
             return
 
         if path == "/api/portal/logout":
-            # 本地断开就行 —— 门户那边不需要「退出登录」：
-            # 我们只是不再拿这个 cookie 去请求了。
+            # 只做本地清理 —— 门户那边不需要「退出登录」，我们只是不再用这个 cookie。
+            # 这条留着还有个用处：老版本在这台电脑上存过的郑航门户凭据（portal.bin）
+            # 能被清掉，而它现在已经没有任何路由可读它了。
             clear_portal()
             reset_portal()
             self._json({"ok": True})
@@ -1473,9 +1409,11 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json({"ok": False, "error": "还没绑定账号", "needBind": True})
                 return
             sid = str(data.get("semesterId") or "").strip()
-            if not sid.isdigit():
-                # 不猜、不兜底：id 不对就直接说，别默默返回当前学期的数据
-                # 冒充用户点的那一学期。
+            # 青果的学期 id 是 `2026-2027/1` 这种形态（郑航是纯数字 257），
+            # 不能再按 isdigit 判 —— 那样每次切学期都被这句「学期编号不对」挡死。
+            # 规则与 native.js 的 /api/exams 一致：空 = 当前学期，非空只收
+            # [字母数字._/-]。不猜、不兜底：形状不对就直接说。
+            if sid and not re.fullmatch(r"[\w.\-/]+", sid):
                 self._json({"ok": False, "error": "学期编号不对"})
                 return
             try:
@@ -1515,7 +1453,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json({"ok": False, "error": "还没绑定账号", "needBind": True})
                 return
             sid = str(data.get("semesterId") or "").strip()
-            if sid and not sid.isdigit():
+            # 同上：青果的学期 id 不是纯数字（见 /api/exams 那段注释）。
+            if sid and not re.fullmatch(r"[\w.\-/]+", sid):
                 # 不猜：id 不合法就直说，别默默返回当前学期的课表冒充用户点的那一学期
                 self._json({"ok": False, "error": "学期编号不对"})
                 return
@@ -1542,8 +1481,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not acc:
                 self._json({"ok": False, "error": "还没绑定账号", "needBind": True})
                 return
-            # 🔴 参数一个都不猜：日期必须是 YYYY-MM-DD，节次必须是 1~12 的整数。
-            #    写错了直接回错，别默默按「今天第 1 节」查一遍再冒充用户要的。
+            # 🔴 参数一个都不猜：日期必须是 YYYY-MM-DD，节次必须是正整数、
+            #    开始不晚于结束。写错了直接回错，别默默按「今天第 1 节」查一遍
+            #    再冒充用户要的。
             day = str(data.get("date") or "").strip()
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
                 self._json({"ok": False, "error": "日期格式不对（要 YYYY-MM-DD）"})
@@ -1554,8 +1494,15 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError, ValueError):
                 self._json({"ok": False, "error": "节次要是数字"})
                 return
-            if not (1 <= p1 <= p2 <= 12):
-                self._json({"ok": False, "error": "节次要在 1~12 之间，且开始不晚于结束"})
+            # 上限来自配置，不写死 12（那是郑航的节数）。升达每日几节要等阶段2
+            # 抓包填进 config 的 free_room.max_periods，填了才按它判 ——
+            # 规则与 native.js 的 freeRooms() 逐条一致。
+            mx = free_room_max_periods()
+            if mx and not (1 <= p1 <= p2 <= int(mx)):
+                self._json({"ok": False, "error": "节次要在 1~%s 之间，且开始不晚于结束" % mx})
+                return
+            if not (1 <= p1 <= p2):
+                self._json({"ok": False, "error": "节次范围不对"})
                 return
             try:
                 out = SERVICE.free_rooms_for(
@@ -1619,16 +1566,71 @@ def print_qr(url: str) -> None:
         print("  （二维码生成失败：%s —— 用上面的网址手输即可）" % exc)
 
 
+# ------------------------------------------------------------------ 教务配置
+#
+# 网页版的教务轨现在只认 kingo.KingoClient，配置就从它那份单一真源来：
+#   默认          config/shengda.json     —— 域名是真的，tableId 全是 TBD_*
+#   --config PATH 自己指定一份            —— 阶段2抓到真实值后另存一份用这个
+#   --mock [PORT] config/build.json       —— 整条链打到本机离线 mock
+#
+# 🔴 为什么要有 --mock：正式表 tableId/menucode 得在校内抓包才能填（阶段2），
+#    在那之前网页版一绑号就只能报「还没配置」，界面根本没东西可看。
+#    mock 用的就是 kingo.py 那套真实形状（GBK、head_/trN_、错误页 1098 字节），
+#    所以界面跑通了不等于线上能跑通 —— 它验的是 UI，不是接口。
+
+MOCK_CFG_FILE = HERE / "config" / "build.json"
+#: build.json 里给手机用的占位符；APK 打包时换成局域网 IP，本机跑换成 127.0.0.1
+MOCK_TOKEN = "__PC_IP__:8090"
+
+
+def load_mock_config(port: int) -> dict:
+    raw = MOCK_CFG_FILE.read_text(encoding="utf-8")
+    return json.loads(raw.replace(MOCK_TOKEN, "127.0.0.1:%d" % port))
+
+
+def make_service(args) -> "Service":
+    if args.mock:
+        return Service(load_mock_config(args.mock),
+                       "config/build.json（本机离线 mock，端口 %d）" % args.mock)
+    if args.config:
+        return Service(kingo.load_config(args.config), args.config)
+    return Service(None, "config/shengda.json（默认）")
+
+
+def source_note(svc: "Service") -> list:
+    """启动时把「教务这一轨现在连着谁、能不能读出数据」说清楚。
+    撞在界面上才知道，比打印两行难查得多。"""
+    cfg = svc.cfg or kingo.load_config()
+    pages = cfg.get("pages") or {}
+    tbd = sorted(k for k, v in pages.items()
+                 if str((v or {}).get("tableId", "")).startswith("TBD"))
+    out = ["教务轨：  青果 kingo.py → %s" % cfg["jw"]["base"],
+           "配置：    %s" % svc.cfg_desc]
+    if tbd:
+        out.append("⚠️ %s 的 tableId 还是占位（等阶段2校内抓包）——" % "/".join(tbd))
+        out.append("   绑号能登录成功，但课表/成绩会报「还没配置」，不会编数据。")
+        out.append("   只想先把界面跑通：另开一个窗口执行")
+        out.append("     python 离线mock_ui跑通/mock_server.py 8090")
+        out.append("   再用 python bridge.py --mock 起本服务（账号看 mock 打印的那行）。")
+    return out
+
+
 def main() -> int:
+    global SERVICE
     ap = argparse.ArgumentParser(description="达小助手机端本地服务（网页版第二轨）")
     ap.add_argument("--port", type=int, default=8788)
     ap.add_argument("--no-qr", action="store_true")
+    ap.add_argument("--config", metavar="PATH",
+                    help="教务配置 JSON（默认 config/shengda.json，正式值等阶段2抓包）")
+    ap.add_argument("--mock", nargs="?", const=8090, type=int, metavar="PORT",
+                    help="连本机离线 mock 教务（默认 8090），免校园网/免账号跑通界面")
     args = ap.parse_args()
 
     if not WEB_DIR.is_dir():
         print("找不到 web/ 目录，脚本可能被挪动了")
         return 2
 
+    SERVICE = make_service(args)
     token = load_token()
     Handler.token = token
     # 上次扫的作业读回来：冷启动也能立刻看到列表（标着「X 分钟前查的」），
@@ -1650,6 +1652,8 @@ def main() -> int:
     for ip in ips:
         print("  手机上打开：  http://%s:%d/?k=%s" % (ip, args.port, token))
     print("  " + "-" * 46)
+    for line in source_note(SERVICE):
+        print("  " + line)
     print("  手机要和这台电脑连同一个 Wi-Fi。")
     print("  连不上最常见的原因是校园网开了「客户端隔离」，")
     print("  改成用电脑开热点给手机连最省事（README.md 里有对照表）。")

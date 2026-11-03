@@ -536,6 +536,7 @@ function occupancy(week) {
   const map = {};
   const hid = hiddenSet();
   (curTT().courses || []).forEach((c) => {
+    if (!isSlotCourse(c)) return;              // 还没适配成格子的原始行，不画
     if (hid.has(c.code)) return;               // 用户隐藏掉的课不画
     if (c.weeks.indexOf(week) < 0) return;
     c.slots.forEach((s) => {
@@ -709,6 +710,7 @@ const NT = {
   all: [],          // 全部条目，服务端已按日期倒序
   tier: 'all',      // 当前筛选
   fromCache: false, // 这批是不是从本机读出来的（决定要不要顺手刷一次）
+  note: '',         // 服务端给的原因说明（如「公告源未配置」）——没有原因就别编一个
 };
 
 /* url → {ok, when, where, summary} 或 {ok:false, error}。
@@ -799,8 +801,11 @@ function ntPaintState() {
   const dead = !NT.loading && NT.tried && !has;
   $('ntEmpty').hidden = !dead;
   if (dead) {
-    $('ntEmptyTitle').textContent = NT.err ? '没取到公告' : '这次一条都没取到';
-    $('ntEmptyText').textContent = NT.err ||
+    // 🔴 服务端说了原因（升达是「公告源未配置，等抓包」）就照它说。
+    //    之前这句一律显示「学校网站临时出问题」，等于替学校编了一个故障。
+    $('ntEmptyTitle').textContent = NT.err ? '没取到公告'
+      : (NT.note ? '公告还没接上本校源' : '这次一条都没取到');
+    $('ntEmptyText').textContent = NT.err || NT.note ||
       '可能是学校网站临时出问题，过一会儿再试。';
   }
 
@@ -948,6 +953,7 @@ async function loadNotice(force) {
     NT.sources = r.sources == null ? 0 : r.sources;
     NT.failed = r.failed || [];
     NT.at = r.at || 0;
+    NT.note = String(r.note || '');
     NT.tried = true;
     NT.fromCache = false;
     ntCacheSave();          // 刷成功才落盘：失败时保留上一次那份，别用空列表盖掉
@@ -1127,19 +1133,45 @@ function dayAnchor() {
 
 function renderSchedule() {
   syncToday();
-  const hasData = !!(DATA && curTT().courses && curTT().courses.length);
+  const rows = (DATA && curTT().courses) || [];
+  const hasData = !!(DATA && rows.length);
+  // 🔴 青果这一轨现在给的是**原样解析出来的行**（kingo.py / native.js 都标
+  //   shape:'raw'），还没有 slots/weeks。没有它们就一张格子都画不出来 ——
+  //   第三屏（schRaw）负责说清「数据到了、格式没适配」，别让人以为没同步成功。
+  const drawable = hasData && rows.some(isSlotCourse);
   $('schEmpty').hidden = hasData;
-  $('gridWrap').hidden = !(hasData && CFG.view === 'week');
-  $('dayWrap').hidden = !(hasData && CFG.view === 'day');
+  $('schRaw').hidden = !(hasData && !drawable);
+  $('gridWrap').hidden = !(drawable && CFG.view === 'week');
+  $('dayWrap').hidden = !(drawable && CFG.view === 'day');
   // 视图切换按钮上写的是**当前**视图（周 / 日），点一下换成另一个。
   // 以前是两个 SVG 互切，网格图标表示不了「点一下会换一种」。
   $('wkViewLab').textContent = CFG.view === 'week' ? '周' : '日';
   $('viewToggle').classList.toggle('is-day', CFG.view === 'day');
   // 没数据的时候顶上那排「翻周 / 今天 / 切视图」全是无效控件 ——
   // 点了没反应，还让人以为界面坏了，直接收起来。
-  document.querySelector('.weekbar').hidden = !hasData;
+  document.querySelector('.weekbar').hidden = !drawable;
   if (!hasData) return;
+  if (!drawable) { renderRawCourses(rows); return; }
   if (CFG.view === 'day') renderDay(); else renderWeek();
+}
+
+/** 这门课能不能画进格子：必须已经有 `weeks`（周次数组）和 `slots`（时段数组）。
+ *  判据只看形状，不看内容对不对 —— 形状都没到，就说明还在 raw 阶段。 */
+function isSlotCourse(c) {
+  return !!c && Array.isArray(c.weeks) && Array.isArray(c.slots) && c.slots.length > 0;
+}
+
+/** 第三屏：把原样解析出来的行列出来，让人至少能核对「学校给的到底是不是这些课」。
+ *  字段名一个都不猜：行里有什么就印什么，顺序按后端给的键序。 */
+function renderRawCourses(rows) {
+  $('schRawH').textContent = '课表已同步 ' + rows.length + ' 行，格子格式还没适配';
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  $('schRawList').innerHTML = rows.map((c) => {
+    const kv = Object.keys(c || {}).map((k) =>
+      '<span class="rawk">' + esc(k) + '</span><span class="rawv">' + esc(c[k]) + '</span>');
+    return '<div class="rawrow">' + kv.join('') + '</div>';
+  }).join('');
 }
 
 /* ---------------- 周视图 ----------------
@@ -6163,7 +6195,7 @@ function clearLocalCaches() {
   CAMPUS.bal = null; CAMPUS.rows = []; CAMPUS.total = 0;
   CAMPUS.apps = []; CAMPUS.at = 0; CAMPUS.fromCache = false;
   NT.all = []; NT.total = 0; NT.sources = 0; NT.at = 0;
-  NT.failed = []; NT.err = ''; NT.tried = false; NT.fromCache = false;
+  NT.failed = []; NT.err = ''; NT.note = ''; NT.tried = false; NT.fromCache = false;
 
   renderSchedule(); renderGrades(); renderExams(); renderMe();
   renderCampus();
@@ -9524,6 +9556,7 @@ function calCurrent(today) {
   return { term: lastTerm, st: calState(lastTerm, today) };
 }
 
+function renderCalendar() {
   // 🔴 达小助改造（W6）：校历数据还没换成升达的 —— **空着，不拿郑航的日期冒充**。
   //   底座这份写的是郑航 2026–2027 校历（含研究生/专升本报到、寒暑假具体日），
   //   对升达学生全是错的；宁可显示「待录入」，也不能显示一个看着可信的假日期。
@@ -9541,7 +9574,6 @@ function calCurrent(today) {
       '<p class="sub small">课表上的周次不受影响：它来自教务系统给的开学日与总周数。</p></div>';
     return;
   }
-function renderCalendar() {
   const today = today0();
   const cur = calCurrent(today);
   const term = cur.term;

@@ -5193,7 +5193,9 @@
         if (path === '/api/timetable') {
           if (!loadCred()) return { ok: false, error: '还没绑定账号', needBind: true };
           var tsid = String(body.semesterId == null ? '' : body.semesterId).trim();
-          if (tsid && !/^\d+$/.test(tsid)) return { ok: false, error: '学期编号不对' };
+          // 青果的学期 id 是 `2026-2027/1` 这种形态（郑航才是纯数字 257），
+          // 按 \d+ 判会让课表页翻不了历史学期。规则与上面 /api/exams 保持一致。
+          if (tsid && !/^[\w.\-\/]+$/.test(tsid)) return { ok: false, error: '学期编号不对' };
           var tsname = String(body.semesterName == null ? '' : body.semesterName).trim();
           var tt2 = await withLogin(function () { return timetable(tsid, tsname); });
           tt2.ok = true;

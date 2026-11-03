@@ -1,10 +1,20 @@
-# 航院通 · 手机端
+# 达小助 · 手机端
 
-郑航（郑州航空工业管理学院）的**课表 + 考试 + 成绩 + 空闲教室 + 校园公告**，
-外加一卡通余额和 19 个办事入口。课表类数据来自教务系统（`jwglxt.zua.edu.cn`），
-一卡通和办事入口来自智慧门户（`rhmh.zua.edu.cn`），同步一次之后就能离线看。
+升达（郑州升达经贸管理学院）的**课表 + 考试 + 成绩 + 空闲教室**，同步一次之后就能离线看。
+教务系统是青果（KINGOSOFT），走 CAS 单点登录：认证在 `cas.shengda.edu.cn/lyuapServer`，
+数据在 `jw.shengda.edu.cn:8090`。
 
-下载：<https://hobson2233.dpdns.org/hangyuantong/>
+> 🔴 **这份 README 的主体还是「航院通」（郑航）时期的设计记录。**
+> 改造只做到「能跑起来」这一段（下面几节已按升达现状重写）；
+> 第 780 行往后那些抓包结论、端点、cookie 域名表写的都是郑航，
+> 只当**方法参考**，不要当成升达的事实照抄。全站重写另行安排。
+
+**当前状态（诚实版）**：登录链路 + 只读取数已在离线 mock 上跑通并有回归测试；
+真实课表/成绩/考试的 `tableId`、`menucode`、列名**还没在校内抓包**，
+所以同步回来的是原始行（`shape:"raw"`），格子视图要等抓包后再适配。
+一卡通、办事应用、门户、校园公告四项**已停用**，接口固定返回「未适配本校系统」。
+
+下载：<https://hobson2233.dpdns.org/hangyuantong/>（⚠️ 这个地址上还是郑航版，达小助未发布）
 开源：[MIT](LICENSE) · 源码在 [CNB](https://cnb.cool/Hobson2233/hangyuantong) · 有问题去 [Issues](https://cnb.cool/Hobson2233/hangyuantong/-/issues)
 
 > 国内访问用 CNB 这份；GitHub 那份暂时打不开（账号申诉中），别去那边提 issue。
@@ -14,12 +24,12 @@
 | 形态 | 怎么用 | 数据从哪来 |
 | --- | --- | --- |
 | 网页版 | 电脑跑 `bridge.py`，手机浏览器打开局域网地址 | 电脑上的 `bridge.py` 替手机登录 |
-| **APK「航院通」** | 装到手机上直接打开，不需要电脑 | App 自己登录（`native.js` + 原生 HTTP 桥） |
+| **APK「达小助」** | 装到手机上直接打开，不需要电脑 | App 自己登录（`native.js` + 原生 HTTP 桥） |
 
-APK 是 **0.39.1**，安装包在 `android/dist/hangyuantong-0.39.1.apk`。
+APK 还在 debug 阶段，装在 `android/dist/`，**没在校内真机上验证过**（tableId 未配置，界面上只能看到原始行）。
 
 > 为什么网页版非得靠电脑：手机浏览器有同源策略 + 混合内容两条限制，
-> 网页不能直接请求 `http://jwglxt`。APK 没这个限制 —— 请求由原生代码发出去，
+> 网页不能直接请求教务系统。APK 没这个限制 —— 请求由原生代码发出去，
 > 所以它能独立工作。
 
 ---
@@ -50,11 +60,16 @@ APK 是 **0.39.1**，安装包在 `android/dist/hangyuantong-0.39.1.apk`。
 
 ### 1. 装依赖
 
-需要 Python 3.9 以上（`bridge.py` / `eams.py` 只用到标准库 + 一个 `requests`）。
+需要 Python 3.9 以上。`bridge.py` 除了标准库还要三个包 —— 注意 **`pycryptodome` 是必需的**：
+`bridge.py` 一启动就 import `chaoxing.py`（学习通查课），那个文件用 Crypto 的 AES。
+少装它会在启动瞬间 `ModuleNotFoundError: No module named 'Crypto'`，跟登录、网络都没关系。
 
 ```bash
-pip install requests qrcode
+pip install requests qrcode pycryptodome
 ```
+
+校内/代理环境装不上 pip 源时，换国内镜像（实测阿里云可用）：
+`pip install -i https://mirrors.aliyun.com/pypi/simple/ requests qrcode pycryptodome`
 
 `qrcode` 只是为了在终端里打个二维码方便手机扫。不想装就加 `--no-qr`，
 启动后手动把网址敲到手机上。
@@ -65,7 +80,8 @@ pip install requests qrcode
 python bridge.py
 ```
 
-屏幕上会打印两个网址和一张二维码：
+屏幕上除了两个网址和二维码，还会打一段**配置说明**：现在挂的是哪一轨教务、
+读的是哪份 config、哪些 `tableId` 还是 `TBD`（没抓包的功能会显示可操作的错误，不编数据）。
 
 ```
   电脑上打开：  http://127.0.0.1:8788/?k=xxxxxxxx
@@ -77,6 +93,18 @@ python bridge.py
 - **手机**用第二个链接，或者直接扫二维码。
 
 端口被占了就换一个：`python bridge.py --port 8899`。
+
+**两个启动参数（改造期用得上）**：
+
+| 参数 | 干什么 |
+| --- | --- |
+| `--config PATH` | 换一份教务配置。默认读 `config/shengda.json`（`tableId` 全是 `TBD`，等业务接口报「还没配置」） |
+| `--mock [PORT]` | **完全离线**跑通界面：连本机 `离线mock_ui跑通/mock_server.py`（默认端口 8090，账号 `2024010101` / `mock-pass`），不碰校园网、不需要真 tableId |
+
+```bash
+python ..\..\离线mock_ui跑通\mock_server.py 8090   # 先起 mock
+python bridge.py --mock 8090                       # 再起桥，浏览器点界面
+```
 
 ### 3. 手机连不上？按这个顺序查
 
@@ -103,14 +131,14 @@ python bridge.py
 把 Python 勾上；或者用管理员 PowerShell 加一条规则：
 
 ```powershell
-New-NetFirewallRule -DisplayName "郑航课表" -Direction Inbound -LocalPort 8788 -Protocol TCP -Action Allow
+New-NetFirewallRule -DisplayName "达小助" -Direction Inbound -LocalPort 8788 -Protocol TCP -Action Allow
 ```
 
 > 那个 `?k=xxxxxxxx` 是一串随机口令，作用是**只让拿到链接的人能连**。
 > 因为服务监听在局域网上，同一个 Wi-Fi 下别人也能访问到这个端口，
 > 没有口令就等于谁都能用你的身份去查教务系统。
 > 口令**只在第一次启动时生成**，之后一直复用（存在
-> `%LOCALAPPDATA%\ZuaTimetable\token.txt`），所以手机上的链接和
+> `%LOCALAPPDATA%\DaXiaoZhu\token.txt`），所以手机上的链接和
 > 「添加到主屏幕」的图标重启电脑后照样能用。想换口令就删掉那个文件。
 
 ---
@@ -119,13 +147,20 @@ New-NetFirewallRule -DisplayName "郑航课表" -Direction Inbound -LocalPort 87
 
 1. 打开就是**课表**（默认周视图）。
 2. 底部「我的」→ 填学号密码 → **绑定并同步**。
-   这里要的是**教务系统**（`jwglxt.zua.edu.cn`）的账号，
-   和校园网认证、和智慧门户**都不是同一套密码**。
+   这里要的是**教务系统**（`jw.shengda.edu.cn:8090`，青果）的账号，
+   登录经 CAS（`cas.shengda.edu.cn`）统一认证。
+   ⚠️ 升达的课表/成绩 `tableId` 还没在校内抓包，同步回来的是原始行，
+   课页面会显示「课表已同步 N 行，格子格式还没适配」而不是空页面。
 3. 同步完自动跳回课表。**密码会加密存下来**，以后刷新、重开 App
    都自动同步，不用再输。只有真的登录不上时才让你重新输一次。之后：
 
 > 换了手机、或者清了浏览器缓存？电脑上的凭据还在，所以空态页会多一个
-> 「直接同步 · 2507\*\*\*\*30」，点一下就行，不用再输密码。
+> 「直接同步 · 学号打码」，点一下就行，不用再输密码。
+
+> 🔴 已知缺口：如果校内实测 CAS 的 REST 登录**必须**带算术验证码，
+> 这一版还登不上 —— `kingo.captcha()` 已经把验证码取回来了，但
+> `/api/login` 没有把「答案 + uid」传进去的通路（界面上也没这个输入框）。
+> 抓包确认要验证码的话，这是第一件要补的事。红线不变：**不自动识别验证码**。
 
 | 想干什么 | 怎么做 |
 | --- | --- |
@@ -2484,8 +2519,8 @@ DownloadManager 入队 → 轮询进度（600ms）→ 下完算 sha256 → 对�
 
 | 东西 | 位置 | 说明 |
 | --- | --- | --- |
-| 学号密码 | `%LOCALAPPDATA%\ZuaTimetable\account.bin` | Windows DPAPI 加密，只有当前 Windows 账户能解开，拷走文件也解不开 |
-| 访问口令 | `%LOCALAPPDATA%\ZuaTimetable\token.txt` | 首次启动生成，之后复用 |
+| 学号密码 | `%LOCALAPPDATA%\DaXiaoZhu\account.bin` | Windows DPAPI 加密，只有当前 Windows 账户能解开，拷走文件也解不开 |
+| 访问口令 | `%LOCALAPPDATA%\DaXiaoZhu\token.txt` | 首次启动生成，之后复用 |
 | 课表/成绩 | 手机浏览器的 localStorage | 只在这台手机的浏览器里 |
 | APK 的学号密码 | 手机 `SharedPreferences`（只有密文） | Android Keystore，AES-256-GCM |
 
@@ -2763,7 +2798,7 @@ python check_privacy.py --live   # --live 会真起一次服务，验日志打�
 
 > ⚠️ 有一处要自己留意：网页版的 `?k=<token>` 会进浏览器历史记录。
 > 共用电脑的话，用完可以「清除本机缓存」或换一个 token（删掉
-> `%LOCALAPPDATA%\ZuaTimetable\token.txt` 重启服务会重新生成）。
+> `%LOCALAPPDATA%\DaXiaoZhu\token.txt` 重启服务会重新生成）。
 
 ---
 

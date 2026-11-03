@@ -3281,3 +3281,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    .wtpad 已经把行左右内边距清零，这里不用再补。 */
 .wtadd { padding: 4px 0 2px; min-height: 48px; }
 .wtadd .rowend { gap: 2px; }
+
+/* ---------------- 课表第三屏：原样行列出（shape:'raw'，格子格式待阶段2适配）
+   这块只在「数据到了但画不成格子」时出现。样式刻意朴素：它是排查用的原始行，
+   不是课表 —— 做得越像课表，越容易有人把它当成已经适配好了。 */
+.rawlist { margin-top: 12px; text-align: left; }
+.rawrow { padding: 7px 0; border-bottom: .5px solid var(--line);
+          font-size: 12px; line-height: 1.55; }
+.rawrow:last-child { border-bottom: 0; }
+.rawk { display: inline-block; min-width: 74px; color: var(--muted); }
+.rawv { color: var(--ink); word-break: break-all; }
