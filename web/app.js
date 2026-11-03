@@ -22,7 +22,7 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.39.2';
+const APP_VERSION = '0.1.0';
 const APP_CODE = 60;
 
 /* 两套运行环境共用这一份界面：
@@ -2760,7 +2760,7 @@ function examEvent(e) {
   if (!blankField(e.category)) lines.push('类型 ' + String(e.category).trim());
   if (!blankField(e.code)) lines.push('课程号 ' + String(e.code).trim());
   if (!blankField(e.note)) lines.push('说明 ' + String(e.note).trim());
-  lines.push('来自「航院通」，以教务系统为准');
+  lines.push('来自「达小助」，以教务系统为准');
   return {
     title: '考试：' + String(e.name || '未命名课程').trim(),
     desc: lines.join('\n'),
@@ -2800,11 +2800,11 @@ function icsEsc(s) {
 function icsText(ev) {
   const uid = 'exam-' + icsDay(ev.begin) + '-' +
     String(ev.title).replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g, '').slice(0, 24) +
-    '@hangyuantong';
+    '@daxiaozhu';
   const L = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//HangYuanTong//Exam//CN',
+    'PRODID:-//DaXiaoZhu//Exam//CN',
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
     'UID:' + uid,
@@ -2834,7 +2834,7 @@ function icsText(ev) {
 /** 网页版：把 .ics 下载下来。 */
 function downloadIcs(ev) {
   const base = String(ev.title).replace(/^考试[:：]\s*/, '');
-  const name = ('航院通-' + base + '-' + icsDay(ev.begin))
+  const name = ('达小助-' + base + '-' + icsDay(ev.begin))
     .replace(/[\\/:*?"<>|]/g, '_') + '.ics';
   const blob = new Blob([icsText(ev)], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -6518,9 +6518,16 @@ window.appBack = function () {
  *    两边都是跨域请求。少了这个头，fetch 会静默失败，
  *    表现成「永远显示已是最新版本」—— 又是一个把错误说成事实的坑。
  */
+/* 🔴 达小助改造（W1）：自更新源暂时禁用。
+ * 原地址指向航院通作者的 dpdns 域名与 GitHub 仓库，直接用会提示升级到郑航的
+ * APK。正式发布（W9）时把 DZX_GH_USER / 域名配好后，恢复为：
+ *   ['https://<用户域名>/daxiaozhu/version.json',
+ *    'https://raw.githubusercontent.com/<GH用户>/daxiaozhu/main/version.json']
+ * 在恢复之前保持空数组：fetchManifest() 拿到空列表会直接返回失败，
+ * checkUpdate(manual) 的失败路径是安静提示，不会误报「已是最新」。 */
 const UPD_SRC = [
-  'https://hobson2233.dpdns.org/hangyuantong/version.json',
-  'https://raw.githubusercontent.com/Hobson2233/hangyuantong/main/version.json',
+  // 'https://johan.ccwu.cc/daxiaozhu/version.json',        // W9: 待 Cloudflare Pages 配置
+  // 'https://raw.githubusercontent.com/<GH_USER>/daxiaozhu/main/version.json',
 ];
 // 频率 → 允许的间隔（秒）。always = 0，即每次打开都查。
 const UPD_FREQ_SEC = { always: 0, daily: 86400, weekly: 7 * 86400 };
@@ -6733,7 +6740,7 @@ function updUrls(info) {
 /** 下载到本机的文件名。只用 ASCII —— 中文名在有些 ROM 的下载目录里会变乱码。 */
 function updName(info) {
   const v = String(info.version || '').replace(/[^0-9A-Za-z._-]/g, '');
-  return 'hangyuantong-' + (v || 'new') + '.apk';
+  return 'daxiaozhu-' + (v || 'new') + '.apk';
 }
 
 /** DownloadManager 的失败原因码。不翻译的话界面上就是一句「错误码 1008」。 */
@@ -7739,7 +7746,7 @@ async function wtScanOpen() {
     const n = (e && e.name) || '';
     if (n === 'NotAllowedError' || n === 'SecurityError') {
       wtScanFail('没给相机权限',
-        '系统设置 → 应用 → 航院通 → 权限，打开相机；或者点下面粘贴。');
+        '系统设置 → 应用 → 达小助 → 权限，打开相机；或者点下面粘贴。');
     } else if (n === 'NotFoundError') {
       wtScanFail('这台设备没有相机', '用「粘贴二维码内容」添加，效果一样。');
     } else {
@@ -10539,7 +10546,8 @@ async function boot() {
     renderCalendar();
   });
   probeBound();                              // 不 await：别挡住首屏
-  autoCheckUpdate();                         // 也不 await：查更新不许拖慢启动
+  // 🔴 W1 禁用自更新（UPD_SRC 已置空，这里双保险；W9 发布时恢复）
+  // autoCheckUpdate();
   // 公告：先把本机那份摆好（立刻有内容），需要新鲜就顺手刷一次 ——
   // 这就是「点打开软件自动更新公告」。同样不 await。
   enterNotice();

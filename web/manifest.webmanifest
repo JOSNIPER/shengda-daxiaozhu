@@ -1,7 +1,7 @@
 {
-  "name": "航院通",
-  "short_name": "航院通",
-  "description": "郑州航空工业管理学院课表、成绩与考试安排（本地同步）",
+  "name": "达小助",
+  "short_name": "达小助",
+  "description": "郑州升达经贸管理学院课表、成绩与考试安排（本地同步）",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

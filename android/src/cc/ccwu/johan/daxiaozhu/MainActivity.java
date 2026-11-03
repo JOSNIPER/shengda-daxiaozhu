@@ -1,4 +1,4 @@
-package com.hobson.hangyuantong;
+package cc.ccwu.johan.daxiaozhu;
 
 import android.annotation.SuppressLint;
 import android.Manifest;
@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * 航院通 · 唯一的一个界面。
+ * 达小助 · 唯一的一个界面。
  *
  * 界面本身是 WebView 里那套 HTML/CSS/JS（和网页版同一份代码），
  * 原生这边只干三件网页干不了的事：
@@ -38,11 +38,11 @@ public class MainActivity extends Activity {
     /**
      * UA 尾巴，两个 WebView 共用（这个窗口 + 办事入口那个 WebActivity）。
      *
-     * 🔴 `build_apk.py` 用正则 `HangYuanTong/([\d.]+)` **从这一行**读版本号，
+     * 🔴 `build_apk.py` 用正则 `DaXiaoZhu/([\d.]+)` **从这一行**读版本号，
      *    再跟 app.js / version.json 对账。所以改版本号时这里必须跟着改，
      *    而且**不能删掉这段字符串**（正则找不到会直接判构建失败）。
      */
-    public static final String UA_TAG = " HangYuanTong/0.39.2";
+    public static final String UA_TAG = " DaXiaoZhu/0.1.0";
 
     private WebView web;
 

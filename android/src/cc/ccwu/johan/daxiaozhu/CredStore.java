@@ -1,4 +1,4 @@
-package com.hobson.hangyuantong;
+package cc.ccwu.johan.daxiaozhu;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -49,7 +49,7 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class CredStore {
 
-    private static final String PREFS = "hangyuantong";
+    private static final String PREFS = "daxiaozhu";
     private static final String FIELD = "cred";
     /** 门户密码单独一个字段。和教务那份是**两套账号**，混在一个 JSON 里必然串号。 */
     private static final String FIELD_PORTAL = "cred.portal";
@@ -81,7 +81,7 @@ public final class CredStore {
      */
     private static final String FIELD_WATER = "water.state";
     private static final String SALT = "cred.salt";
-    private static final String KEY_ALIAS = "hangyuantong.cred.v1";
+    private static final String KEY_ALIAS = "daxiaozhu.cred.v1";
     private static final String TRANSFORM = "AES/GCM/NoPadding";
     private static final int TAG_BITS = 128;
     private static final int PBKDF2_ROUNDS = 20000;
@@ -346,7 +346,7 @@ public final class CredStore {
         if (ctx == null) throw new IllegalStateException("应用上下文为空");
         String id = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ANDROID_ID);
         if (id == null) id = "";
-        KeySpec spec = new PBEKeySpec((id + "|hangyuantong.cred").toCharArray(),
+        KeySpec spec = new PBEKeySpec((id + "|daxiaozhu.cred").toCharArray(),
                 salt, PBKDF2_ROUNDS, 256);
         SecretKeyFactory f = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         return new SecretKeySpec(f.generateSecret(spec).getEncoded(), "AES");

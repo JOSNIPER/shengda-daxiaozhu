@@ -1,4 +1,4 @@
-package com.hobson.hangyuantong;
+package cc.ccwu.johan.daxiaozhu;
 
 import android.app.DownloadManager;
 import android.content.Context;
@@ -62,7 +62,7 @@ public class UpdateDownloader {
         }
     }
 
-    /** 只放行 `hangyuantong-0.1.1.apk` 这种形状，挡掉 `../../` 和奇怪字符。 */
+    /** 只放行 `daxiaozhu-0.1.1.apk` 这种形状，挡掉 `../../` 和奇怪字符。 */
     private static String safeName(String name) {
         String n = (name == null) ? "" : name.trim();
         if (!n.matches("[A-Za-z0-9._-]{1,80}")) return null;
@@ -102,7 +102,7 @@ public class UpdateDownloader {
             }
 
             DownloadManager.Request r = new DownloadManager.Request(Uri.parse(u));
-            r.setTitle("航院通更新");
+            r.setTitle("达小助更新");
             r.setDescription("正在下载新版本");
             r.setMimeType("application/vnd.android.package-archive");
             // 通知栏留一条：用户关掉 App / 切到后台也能看到进度和结果

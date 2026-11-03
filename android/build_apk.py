@@ -1,4 +1,4 @@
-"""把 mobile/ 打包成 APK「航院通 0.1.0」。
+"""把 mobile/ 打包成 APK「达小助 0.1.0」。
 
 不用 Gradle —— 本机没有 Android Studio，而且这点代码用不上它。
 走官方那套命令行：aapt2 → javac → d8 → zipalign → apksigner。
@@ -37,17 +37,31 @@ DIST = HERE / "dist"
 # 🔴 这里以前写的是本机绝对路径（带用户目录的那种）。公开仓库里带着用户名
 #    既没意义（别人用不了这个路径），也没必要露。现在按「环境变量 → 仓库相对位置」找。
 def _sdk_dir():
-    env = os.environ.get("HYT_SDK")
+    env = os.environ.get("DZX_SDK")
     if env:
         return Path(env)
     near = MOBILE.parent / "_lab" / "out" / "sdk"
     if near.exists():
         return near
-    sys.exit("找不到 Android SDK：把 HYT_SDK 指到 build-tools 那层，"
+    sys.exit("找不到 Android SDK：把 DZX_SDK 指到 build-tools 那层，"
              "或者按文件开头「前置」里说的放到 _lab/out/sdk")
 
 SDK = _sdk_dir()
-JDK = SDK / "zulu17.60.17-ca-jdk17.0.16-win_x64"
+# 🔴 必须是 JDK 17：更高版本 javac 给匿名内部类写的调试信息会让 d8/R8 崩
+#    （NullPointerException: "<parameter1>" is null，极具误导性）。
+def _jdk_dir():
+    env = os.environ.get("DZX_JDK")
+    if env:
+        return Path(env)
+    for cand in sorted(SDK.glob("jdk*17*")) + sorted(SDK.glob("zulu17*")):
+        if (cand / "bin" / "javac.exe").exists():
+            return cand
+    fixed = SDK / "zulu17.60.17-ca-jdk17.0.16-win_x64"
+    if (fixed / "bin" / "javac.exe").exists():
+        return fixed
+    sys.exit("找不到 JDK 17：设 DZX_JDK 指向 JDK 根目录，或放进 SDK 目录下（jdk*17*）")
+
+JDK = _jdk_dir()
 BT = SDK / "android-14"
 ANDROID_JAR = SDK / "android-13" / "android.jar"
 
@@ -57,18 +71,25 @@ KEYTOOL = JDK / "bin" / "keytool.exe"
 
 # 国内线路（腾讯云 CNB）上这个包的地址前缀 —— 换它等于换一条下载线路，
 # 只在这里写一次，version.json 和发布页都从这儿派生。
-CNB_APK_BASE = ("https://maven.cnb.cool/Hobson2233/campus-login"
-                "/-/packages/cnb/hangyuantong")
-CNB_APK_NAME = "航院通.apk"
+# ⚠️ W9 待办：用户的 GitHub 用户名与 Cloudflare 加速域名确认后填入；
+#    在此之前自更新入口在 app.js 里已被注释禁用，本常量不会生效。
+GITHUB_USER = os.environ.get("DZX_GH_USER", "TBD-github-user")
+UPD_PAGE_BASE = "https://johan.ccwu.cc/daxiaozhu"          # 用户域名(CNAME 到 Pages,待配置)
+CNB_APK_BASE = ("https://maven.cnb.cool/" + GITHUB_USER + "/campus-login"
+                "/-/packages/cnb/daxiaozhu")
+CNB_APK_NAME = "达小助.apk"
 
-VERSION_NAME = "0.39.2"
+VERSION_NAME = "0.1.0"
 VERSION_CODE = 60
-PKG = "com.hobson.hangyuantong"
+PKG = "cc.ccwu.johan.daxiaozhu"
 MIN_SDK = 23
 TARGET_SDK = 33
 
-KEYSTORE = SDK.parent / "keystore" / "hangyuantong.keystore"
-KS_PASS = os.environ.get("HYT_KS_PASS", "hangyuantong")
+# 🔴 keystore 必须放持久化工作区（原设计在 SDK.parent 下，云端环境会连 SDK 一起被清 ——
+#    丢 keystore = 老用户永远无法覆盖升级）。丢了要重新签名等于发新 App。
+KEYSTORE = Path(os.environ.get("DZX_KEYSTORE",
+                              str(MOBILE.parent / "keystore" / "daxiaozhu.keystore")))
+KS_PASS = os.environ.get("DZX_KS_PASS") or "CHANGE_ME_dzx_dev_only"
 
 
 def run(cmd, cwd=None, quiet=False):
@@ -117,15 +138,15 @@ def check_version_consistency():
     if gotc != VERSION_CODE:
         bad.append("app.js 的 APP_CODE 是 %s，应为 %d" % (gotc, VERSION_CODE))
 
-    java = (HERE / "src" / "com" / "hobson" / "hangyuantong" / "MainActivity.java").read_text(encoding="utf-8")
-    m = re.search(r"HangYuanTong/([\d.]+)", java)
+    java = (HERE / "src" / "cc" / "ccwu" / "johan" / "daxiaozhu" / "MainActivity.java").read_text(encoding="utf-8")
+    m = re.search(r"DaXiaoZhu/([\d.]+)", java)
     got = m.group(1) if m else "(找不到)"
     if got != VERSION_NAME:
         bad.append("MainActivity 的 UA 后缀是 %s，应为 %s" % (got, VERSION_NAME))
 
     strings = (HERE / "res" / "values" / "strings.xml").read_text(encoding="utf-8")
-    if 'name="app_name">航院通<' not in strings:
-        bad.append("strings.xml 里的 app_name 不是「航院通」")
+    if 'name="app_name">达小助<' not in strings:
+        bad.append("strings.xml 里的 app_name 不是「达小助」")
 
     # 更新清单是发布出去的东西，版本号错了会让所有人的「检查更新」失灵
     mf = MOBILE / "version.json"
@@ -205,7 +226,7 @@ def write_manifest(apk: Path):
         except Exception:
             info = {}
     raw = apk.read_bytes()
-    info["name"] = "航院通"
+    info["name"] = "达小助"
     info["version"] = VERSION_NAME
     info["code"] = VERSION_CODE
     info["size"] = len(raw)
@@ -215,18 +236,17 @@ def write_manifest(apk: Path):
     #    （2026-10-27 南师侧在他那边翻出来的，同一个形状；我这边也一样，
     #      上一版 0.17.3 的日期是我手工改的，不是脚本写的。）
     info["date"] = datetime.date.today().isoformat()
-    # 放在 /dl/ 子目录下：_headers 只支持尾部通配（/hangyuantong/dl/*），
-    # 放在 /hangyuantong/ 根上就没法给 .apk 单独一条长缓存规则。
-    info["apk"] = ("https://hobson2233.dpdns.org/hangyuantong/dl/hangyuantong-%s.apk"
-                   % VERSION_NAME)
+    # 放在 /dl/ 子目录下：_headers 只支持尾部通配（/daxiaozhu/dl/*），
+    # 放在 /daxiaozhu/ 根上就没法给 .apk 单独一条长缓存规则。
+    info["apk"] = (UPD_PAGE_BASE + "/dl/daxiaozhu-" + VERSION_NAME + ".apk")
     # 国内线路（腾讯云 CNB）。和上面那条是**同一个包**，只是线路不同 ——
     # 主站走 Cloudflare，国内下起来慢，App 的「立即更新」优先用这条。
     # ⚠️ 这条地址要求**已经用 upload_cnb.py 传过这个版本**（见 README「发版顺序」）。
-    # ⚠️ 拼的时候用 + 不用 %：`quote("航院通.apk")` 的结果里全是 `%E8%88%AA…`，
+    # ⚠️ 拼的时候用 + 不用 %：`quote("达小助.apk")` 的结果里全是 `%E8%88%AA…`，
     #    拿去 `%` 格式化会被当成格式符，报 "not enough arguments for format string"。
     info["apk_cn"] = (CNB_APK_BASE + "/" + VERSION_NAME + "/"
                       + urllib.parse.quote(CNB_APK_NAME))
-    info["page"] = "https://hobson2233.dpdns.org/hangyuantong/"
+    info["page"] = UPD_PAGE_BASE + "/"
     notes = read_notes()
     if notes:
         info["notes"] = notes
@@ -341,16 +361,16 @@ def sign(apk: Path) -> Path:
         KEYSTORE.parent.mkdir(parents=True, exist_ok=True)
         print("  生成签名密钥（只在本地，不进 git）：%s" % KEYSTORE)
         run([KEYTOOL, "-genkeypair", "-keystore", KEYSTORE,
-             "-alias", "hangyuantong", "-keyalg", "RSA", "-keysize", "2048",
+             "-alias", "daxiaozhu", "-keyalg", "RSA", "-keysize", "2048",
              "-validity", "10000",
              "-storepass", KS_PASS, "-keypass", KS_PASS,
-             "-dname", "CN=HangYuanTong, OU=Mobile, O=Hobson, L=Zhengzhou, ST=Henan, C=CN"])
+             "-dname", "CN=DaXiaoZhu, OU=Mobile, O=johan, L=Zhengzhou, ST=Henan, C=CN"])
 
     aligned = BUILD / "aligned.apk"
     run([BT / "zipalign.exe", "-f", "4", apk, aligned])
 
     DIST.mkdir(parents=True, exist_ok=True)
-    out = DIST / ("hangyuantong-%s.apk" % VERSION_NAME)
+    out = DIST / ("daxiaozhu-%s.apk" % VERSION_NAME)
     if out.exists():
         out.unlink()
     run([JAVA, "-jar", BT / "lib" / "apksigner.jar", "sign",
@@ -392,7 +412,7 @@ def verify(apk: Path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="打包 航院通 APK")
+    ap = argparse.ArgumentParser(description="打包 达小助 APK")
     ap.add_argument("--clean", action="store_true")
     args = ap.parse_args()
 
