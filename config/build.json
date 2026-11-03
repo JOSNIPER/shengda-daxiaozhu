@@ -1,0 +1,52 @@
+{
+  "_comment": "🔴 W6 debug APK 专用：教务/CAS 全部指向 PC 上的离线 mock。装到手机前把 __PC_IP__ 替换成电脑局域网 IP（ipconfig 里那个），并在电脑上跑：python 离线mock_ui跑通/mock_server.py --lan 8090。正式发布包禁用本文件（改名或删除即可回退 shengda.json）。",
+
+  "cas": {
+    "base": "http://__PC_IP__:8090/lyuapServer",
+    "portal": "http://__PC_IP__:8090/",
+    "tickets_path": "/v1/tickets",
+    "kaptcha_path": "/kaptcha",
+    "login_type_path": "/loginType",
+    "wechat": {
+      "qrcode_path": "/weChat/CreateQRcode",
+      "check_scan_path": "/weChat/wx/CheckScan",
+      "poll_interval": 1.5,
+      "poll_timeout": 180,
+      "uuid_field": "uuid",
+      "content_field": "content",
+      "user_field": "userName",
+      "pass_field": "passWord",
+      "service_field": "service",
+      "waiting_status_code": 500
+    }
+  },
+  "jw": {
+    "base": "http://__PC_IP__:8090",
+    "cas_service": "http://__PC_IP__:8090/caslogin",
+    "menu_context_path": "/frame/normalusemenu/getBreadcrumbsInfoNew.action",
+    "data_table_path": "/taglib/DataTable.jsp",
+    "time_range_path": "/jw/common/getWsxkTimeRange.action",
+    "score_stat_path": "/jw/common/getSelectLessonScoreKcsInfo.action",
+    "home_path": "/frame/homes.html",
+    "droplist_path": "/frame/droplist/getDropLists.action",
+    "verify_tls": true,
+    "polite_delay_sec": 0.2
+  },
+  "pages": {
+    "timetable": { "tableId": "9001", "menucode": "M9001", "preheat_path": "" },
+    "score": { "tableId": "9002", "menucode": "M9002", "preheat_path": "" },
+    "exam": { "tableId": "9003", "menucode": "M9003", "preheat_path": "" },
+    "free_room": { "tableId": "9004", "menucode": "M9004", "preheat_path": "" },
+    "profile": { "tableId": "9005", "menucode": "M9005", "preheat_path": "" }
+  },
+  "column_map": {
+    "timetable": { "zc": "weeks_text", "kcm": "name", "skjs": "teacher",
+                   "cdmc": "room", "skxq": "day", "skjc": "periods" },
+    "score": {}, "exam": {}, "free_room": {}, "profile": {}
+  },
+  "timetable": { "unit_count": 12 },
+  "semester": { "display_fallback": "2026-2027学年第1学期" },
+  "free_room": { "max_periods": null },
+  "chaoxing": { "fid": null },
+  "update": { "page_base": "http://__PC_IP__:8090/daxiaozhu", "github_user": "TBD", "enabled": false }
+}

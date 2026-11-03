@@ -1,4 +1,4 @@
-/* 郑航课表 · 手机端逻辑
+/* 达小助 · 手机端逻辑
    纯原生 JS，无框架、无构建步骤。
    数据来源：同源的本地服务（bridge.py），由它去登录教务系统。 */
 
@@ -34,16 +34,16 @@ const NATIVE = !!window.NativeApi;
 const envText = (web, app) => (NATIVE ? app : web);
 
 /* 默认作息：按常见高校排布填的，**不是从教务系统读的**（教务系统不给时间）。
-   和实际不一样，在「我的 → 上课时间」里改，改完存本地。 */
-// 🔴 郑航真实作息（2026-10-18 从 WakeUp 课表的左侧时间轴实测抄下来的）。
-//    之前那套是按「常见作息」猜的，整体偏了：第 2→3 节、第 6→7 节之间是
-//    20 分钟大课间（09:40→10:00、16:10→16:30），不是 10 分钟；
-//    第 3 节是 10:00 而不是 09:55。别凭印象改，要改先对一遍课表。
+   和实际不一样，在「我的 → 上课时间」里改，改完存本地。
+   🔴 达小助改造（W6）：底座这份是郑航实测作息（2→3、6→7 节之间 20 分钟大课间），
+      对升达不成立，退回「常见排布」当占位。升达每节多长、课间几分钟，
+      和每日节数上限一起在阶段2确认（config/shengda.json 的 free_room.max_periods）。
+      确认之前别把它当事实宣传 —— 这是用户一眼能看到、也最容易改的东西。 */
 const DEFAULT_TIMES = [
   ['08:00', '08:45'], ['08:55', '09:40'],
-  ['10:00', '10:45'], ['10:55', '11:40'],
+  ['09:50', '10:35'], ['10:45', '11:30'],
   ['14:30', '15:15'], ['15:25', '16:10'],
-  ['16:30', '17:15'], ['17:25', '18:10'],
+  ['16:20', '17:05'], ['17:15', '18:00'],
   ['19:30', '20:15'], ['20:25', '21:10'],
 ];
 
@@ -606,10 +606,11 @@ function visibleDays() {
    `calendar` / `rooms` 不是 tab，是**从课表页进去的子页**：
    底部继续亮着「课表」—— 校历和空教室本来就是「同一时间维度的另一面」，
    放在课表底下比单独占一个位置更顺。 */
-/* 底部 5 格（0.27.0 起）：课表 / 学习 / WIKI / 功能 / 我的。
-   中间那格原来是「公告」，用户 2026-10-30 要求换成 WIKI —— 公告是低频内容，
-   并进了「功能」页；攻略是新生天天翻的。 */
-const TABS = ['schedule', 'exams', 'wiki', 'campus', 'me'];
+/* 底部 4 格（达小助改造）：课表 / 学习 / 功能 / 我的。
+   底座这里是 5 格，中间那格是「WIKI」（郑航攻略 wiki.zua.fan）——
+   那是别的学校的内容，整块删除，不保留占位。
+   公告仍在「功能」页里（见 SUB_PARENT.notice），抓到本校公告源后再说要不要升格。 */
+const TABS = ['schedule', 'exams', 'campus', 'me'];
 const SUBPAGES = ['calendar', 'rooms', 'accounts', 'notice'];
 /* 子页是从哪个 tab 进去的 —— 返回时回那里，底部也要高亮那一个。
    原来只有校历/空教室两个、都挂在课表下，所以写死成 'schedule'；
@@ -636,7 +637,6 @@ function switchTab(name) {
   if (name === 'exams') { renderExamView(); renderExams(); renderGrades(); cxEnter(); }
   if (name === 'me') renderMe();
   if (name === 'accounts') renderAccounts();
-  if (name === 'wiki') renderWikiPage();
   // 功能：直饮水是这一页的主体，先画本机缓存再探一次网（见 renderWater）
   if (name === 'campus') { renderCampus(); renderWater(); }
   // 校历纯本地计算，没有网络，每次进来重画一遍就行（跨零点后周次会变）
@@ -2599,7 +2599,7 @@ function renderCredit() {
   if (p.catSum > 0 && Math.abs(p.catSum - p.total) >= 0.01) {
     html += '<div class="crnote">上面各类加起来是 ' + n(p.catSum) + ' 学分，' +
       '总计写的是 ' + n(p.total) + '。差的那 ' + n(p.total - p.catSum) +
-      ' 学分教务系统没单列（郑航是通识选修课的额度），不是算漏了。</div>';
+      ' 学分教务系统没单列，不是算漏了。</div>';
   }
 
   // 挂科
@@ -4405,9 +4405,9 @@ function accState() {
 }
 
 const ACC_SYS = [
-  { id: 'jw', k: '教务系统', host: 'jwglxt.zua.edu.cn' },
+  { id: 'jw', k: '教务系统', host: 'jw.shengda.edu.cn' },
   { id: 'cx', k: '学习通', host: 'chaoxing.com' },
-  { id: 'portal', k: '智慧门户', host: 'rhmh.zua.edu.cn' },
+  { id: 'portal', k: '智慧门户', host: 'my.shengda.edu.cn' },
 ];
 
 function renderAccounts() {
@@ -6474,13 +6474,6 @@ $('wtUseOff').addEventListener('click', () => {
 });
 $('wtStop').addEventListener('click', () => { wtStop(); });
 $('wtTermsOk').addEventListener('click', () => { wtTermsOk(); });
-// 返回回「校园」—— 百科 0.21.0 从「我的」搬到「校园」了（见 SUB_PARENT）。
-// ⚠️ 这里和 SUB_PARENT 必须一致：不一致的话，点返回去的页面和底部高亮的
-//    tab 是两个东西，用户会以为自己点错了。
-// 头卡上那个「打开原站首页」。走 openWiki 同一条路 —— 白名单、开不了时说一句，
-// 一个都不能少。别在这里另写 openApp / openExternal。
-$('wikiHome').addEventListener('click', () => { openWiki(WIKI_HOME + '/'); });
-
 /** 安卓返回键：先关浮层，再回课表，最后才退出 App。
  *
  *  不加这个的话，课程详情弹着的时候按返回会直接把 App 退掉，
@@ -9376,97 +9369,6 @@ async function wtLogout(kind) {
   wtShowOff();
 }
 
-/* ---- 郑航百科（wiki.zua.fan）------------------------------------------
-   学长们写的非官方百科。**我们只做入口，不复制正文**：
-   站上「关于本项目」写着「任何复制、转载请注明出处！严禁用于商业用途！」，
-   而且它目前还没开源（原文：「预计近期上线 GitHub」）。
-   ⇒ 这里只存「标题 + 相对路径」，点了打开原站那一页。
-
-   ⚠️ 路径是手抄的，对方改结构就会 404。缓解办法：
-      · 全部写成 `/xxx` 相对路径拼在 WIKI_HOME 后面 —— 换域名只改一处
-      · `check_wiki_links.py` 盯着两件事：路径必须是相对路径、
-        拼出来的 URL 必须还在 wiki.zua.fan 里（离线跑，不联网）
-   ⚠️ 别用 `<a href>`：MainActivity 拦掉一切非 app.local 的跳转，
-      点了毫无反应、也不报错 —— 必须走 openWiki → openApp。 */
-const WIKI_HOME = 'https://wiki.zua.fan';
-const WIKI_GROUPS = [
-  ['关于郑航', [
-    ['学校简介', '/aboutZUA/'],
-    ['映像郑航', '/aboutZUA/videos'],
-    ['校园地图', '/map/'],
-  ]],
-  ['招生与入学', [
-    ['招生章程', '/enroll/brochure'],
-    ['招生计划', '/enroll/plan'],
-    ['新生入学须知', '/enroll/starting'],
-  ]],
-  ['校园生活', [
-    ['宿舍', '/life/hostel'],
-    ['日常消费', '/life/consumption'],
-    ['交通出行', '/life/transportation'],
-  ]],
-  ['人才培养', [
-    ['大类分流', '/education/MajorSelection'],
-    ['转专业', '/education/ChangingMajors'],
-  ]],
-  ['其他', [
-    ['社区（QQ 频道 / 贴吧群）', '/community/'],
-    ['关于这个站', '/aboutUs/'],
-  ]],
-];
-
-/** 把 4 组 13 条填进独立页（`#page-wiki`）。
- *
- *  🔴 为什么是页面不是弹层：11 条 + 4 个组标题在 `.sheet` 里放不下 ——
- *     实测内容 839px、可用高度 641px（`max-height:76%`），底部按钮被滚出屏幕
- *     （按钮底边 1009 / 视口 844）。一页装得下，也不用内部滚动。
- *     弹层那版是做完才量出来的，量完就改了 —— 「代码里写着对」和「画出来对」是两件事。
- */
-function renderWikiPage() {
-  // 组名在卡片**外面**、条目在一张白卡里 —— iOS 分组列表的样子。
-  // 旧版是「组名 + 13 行全塞进同一张卡」，组与组之间只靠一条 14px 的间距分开，
-  // 扫起来分不清哪几行是一组的（用户 2026-10-28 说的「审美」就是这个）。
-  //
-  // 🔴 0.33.0：组内改成**两列**（用户：「每个界面的内容都放在一页内」）。
-  //    单列 13 行 = 802px，一页 1026、可用只有 731，怎么压都装不下；
-  //    两列后 8 行装完。`lastrow` 是给 CSS 用的：最后一行不画分隔线 ——
-  //    两列时最后一个格子可能落在**左列**，`:last-child` 算不准。
-  $('wikiList').innerHTML = WIKI_GROUPS.map(([g, items]) => {
-    const lastRowStart = Math.max(0, (Math.ceil(items.length / 2) - 1) * 2);
-    return '<div class="wikigroup">' +
-      '<div class="gname">' + esc(g) + '</div>' +
-      '<div class="card wcard">' +
-        items.map(([name, path], i) =>
-          '<button class="wikilink' + (i >= lastRowStart ? ' lastrow' : '') +
-          '" data-path="' + escAttr(path) + '">' +
-          '<span class="t">' + esc(name) + '</span>' +
-          '<svg class="go" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>' +
-          '</button>').join('') +
-      '</div>' +
-    '</div>';
-  }).join('');
-  // innerHTML 会把旧节点连同监听一起扔掉，所以每次重画都重新绑一遍。
-  // 不重绑的话第二次进来点了没反应，而且**不报错**。
-  $('wikiList').querySelectorAll('.wikilink').forEach((b) => {
-    b.addEventListener('click', () => { openWiki(WIKI_HOME + b.dataset.path); });
-  });
-}
-
-/** 百科的外链统一走这里 —— **只允许 wiki.zua.fan**，别的一律不开。
- *  白名单是必须的：URL 来自 DOM 的 `data-path`，将来有人往里塞绝对地址，
- *  `WIKI_HOME + x` 会拼出别的站（`https://wiki.zua.fan` + `https://evil`）。
- *  这也是「跨产品复用页面必断言外链白名单」那条红线的具体落点。 */
-function openWiki(url) {
-  if (!/^https:\/\/wiki\.zua\.fan\//.test(url)) {
-    toast('链接不对，没打开');
-    return;
-  }
-  // 0.17.3 起在 App 内打开：这个站没有登录态，所以不是为了免登录 ——
-  // 纯粹是别把人踢出去再跳回来。外面那套（白名单 → 有反馈）一条都不少。
-  // warn=false：公开站，别弹「门户登录已过期」。
-  if (!openApp(url, '郑航百科', false)) toast('打不开，可以复制链接手动打开');
-}
-
 /** 「我的 → 检查更新」：开关 + 频率 + 立即检查，一屏放完。 */
 function openUpdateSheet() {
   const on = CFG.updOn !== false;
@@ -9566,53 +9468,17 @@ new MutationObserver(() => {
 }).observe($('sheetMask'), { attributes: true, attributeFilter: ['hidden'] });
 
 // ------------------------------------------------------------------ 校历
-/* 数据来源：学校发布的《2026–2027 学年校历》（外国语学院转载的公开页面
-   https://wyx.zua.edu.cn/info/1051/8303.htm），关键日期逐条人工核对过。
+/* 🔴 校历数据：底座这份是**郑航**《2026–2027 学年校历》（外国语学院转载页
+   https://wyx.zua.edu.cn/info/1051/8303.htm，逐条人工核对过），对升达无效，
+   已清空。升达校历要从学校官网/教务处通知里取，取到后填进 CAL_TERMS。
 
-   🔴 为什么写死在代码里，而不是每次去抓：
-      ① 校历一个学年只变一次，天天去抓 364 天是白抓；
-      ② 它是一张 3504×5096 的图片，没有结构化接口，抓回来也解析不出日期；
-      ③ 抓不到的时候只能显示「没有校历」—— 把「没抓到」说成「没有」，
-         正是红线 40 那种错。
-      代价是每学年要改一次，所以只留 CAL_TERMS 一个入口。
-
-   每周的起止是**算出来的**，不是抄的：第 1 周一定是周一
-   （2026-09-07、2027-02-22 都核对过是星期一），第 n 周 = 开学 + (n-1)×7 天。
-   拿它跟校历图上印的日期对过，19 周末正好是放假前一天。 */
-const CAL_YEAR = '2026–2027';
-const CAL_TERMS = [
-  {
-    name: '第一学期',
-    start: '2026-09-07',        // 第 1 周的周一
-    weeks: 19,
-    holiday: { d: '2027-01-18', label: '寒假' },
-    marks: [
-      { d: '2026-09-05', e: '2026-09-06', t: '在校生、第二学士学位新生报到注册' },
-      { d: '2026-09-07', t: '在校生开始上课' },
-      { d: '2026-09-07', e: '2026-09-08', t: '新生（研究生、本科、专升本）报到注册' },
-      { d: '2026-09-09', t: '专升本新生开始上课' },
-      { d: '2026-09-14', t: '研究生新生开始上课' },
-      { d: '2026-10-08', t: '本科新生开始上课' },
-      // 这两条跨整学期，日期列改成「第几周」，比印两个日期好读
-      { d: '2026-09-07', e: '2027-01-10', w: '1–18 周', t: '理论教学' },
-      { d: '2027-01-11', e: '2027-01-17', w: '19 周', t: '考试周' },
-      { d: '2027-01-18', t: '放寒假' },
-    ],
-  },
-  {
-    name: '第二学期',
-    start: '2027-02-22',
-    weeks: 19,
-    holiday: { d: '2027-07-05', label: '暑假' },
-    marks: [
-      { d: '2027-02-22', e: '2027-02-23', t: '在校生报到注册' },
-      { d: '2027-02-24', t: '开始上课' },
-      { d: '2027-02-22', e: '2027-06-27', w: '1–18 周', t: '理论教学' },
-      { d: '2027-06-28', e: '2027-07-04', w: '19 周', t: '考试周' },
-      { d: '2027-07-05', t: '放暑假' },
-    ],
-  },
-];
+   为什么仍然写死在代码里、而不是每次去抓：
+     ① 校历一学年只变一次，天天抓是白抓；
+     ② 官网那张校历通常是图片，没有结构化接口，抓回来也解析不出日期；
+     ③ 抓不到时显示「没有校历」比显示一套假日期诚实 —— 这也是本项目的红线。
+   代价是每学年手改一次，所以入口只留 CAL_TERMS 这一个。 */
+const CAL_YEAR = '';
+const CAL_TERMS = [];
 
 const calYmd = (d) => d.getFullYear() + '-' +
   String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -9658,6 +9524,23 @@ function calCurrent(today) {
   return { term: lastTerm, st: calState(lastTerm, today) };
 }
 
+  // 🔴 达小助改造（W6）：校历数据还没换成升达的 —— **空着，不拿郑航的日期冒充**。
+  //   底座这份写的是郑航 2026–2027 校历（含研究生/专升本报到、寒暑假具体日），
+  //   对升达学生全是错的；宁可显示「待录入」，也不能显示一个看着可信的假日期。
+  //   本校校历拿到后填进 CAL_TERMS 即可，这一页其余渲染逻辑不用动。
+  if (!CAL_TERMS.length) {
+    $('calLab').textContent = '校历待录入';
+    $('calWeek').textContent = '—';
+    $('calRange').textContent = '';
+    $('calFill').style.width = '0%';
+    $('calFind').textContent = '';
+    $('calBody').innerHTML =
+      '<div class="card"><h2>本校校历还没录入</h2>' +
+      '<p class="sub">开学日、寒暑假、考试周这些日期要按学校发布的校历填进来。' +
+      '在这之前这一页不放任何日期 —— 放一个别的学校的日期，比不放更容易出错。</p>' +
+      '<p class="sub small">课表上的周次不受影响：它来自教务系统给的开学日与总周数。</p></div>';
+    return;
+  }
 function renderCalendar() {
   const today = today0();
   const cur = calCurrent(today);
@@ -10438,23 +10321,19 @@ async function unbindPortal() {
 // 用户 2026-10-22：「很多时候用户可能忘记了密码，再去找官网改密码之类的很麻烦」
 // +「在输入密码的密码框右侧加个显示密码的按键吧」。
 //
-// 🔴 三个找回地址都是**当天实测打开过的**，别凭印象改：
-//      · 教务 `/eams/resetPassword.action` —— 正方 EAMS 的密码重置，
-//        页面只有「账号所用邮箱」一个框。**没在教务里绑过邮箱就用不了**，
-//        所以文案不能写成「一定能自助找回」。
-//      · 学习通 `fid=1286` —— 郑航的学校 id，跟抓作业用的是同一个。
-//      · 门户 `/aqzx/#/password/passwordFound` —— 统一身份认证的安全中心，
-//        要 学号 + 姓名 + 身份证号 + 验证码。它自己写着：不行就找辅导员，
-//        或者带证件去信息管理中心（0371-61912710）。
-//   写错的代价比不给还大：点开一个 404，用户会以为整个 App 坏了。
-
+// 🔴 达小助改造（W6）：底座这三个地址是**郑航**当天实测打开过的，对升达全是错链：
+//      · 教务 `jwglxt.zua.edu.cn/eams/resetPassword.action` —— 郑航是正方 EAMS，
+//        升达是青果（jw.shengda.edu.cn:8090），根本没有这个路径；
+//      · 门户 `sfrz.zua.edu.cn/aqzx/...` —— 郑航的统一认证，升达是 cas.shengda.edu.cn，
+//        它的自助找回页地址要阶段2 确认（任务 2.7）。
+//   留错链比不给更糟：点开一个 404，用户会以为整个 App 坏了。
+//   所以 url 置空 ⇒ 按钮变成一个「地址待配置」的提示，不发请求也不跳转。
+//   学习通那条不带 fid 就能用（fid 只是预选学校），保留。
 const PWD_HELP = {
-  jw: { name: '教务系统',
-        url: 'http://jwglxt.zua.edu.cn/eams/resetPassword.action' },
+  jw: { name: '教务系统', url: '' },
   cx: { name: '学习通',
-        url: 'https://passport2.chaoxing.com/pwd/findpwd?version=1&fid=1286' },
-  portal: { name: '智慧门户',
-            url: 'https://sfrz.zua.edu.cn/aqzx/#/password/passwordFound' },
+        url: 'https://passport2.chaoxing.com/pwd/findpwd?version=1' },
+  portal: { name: '统一身份认证', url: '' },
 };
 
 /** 「显示密码」眼睛按钮。`id` 是要切换的那个输入框。
@@ -10466,12 +10345,15 @@ function pwdEyeHtml(id) {
     '<svg class="eye-off"><use href="#i-eye-off"/></svg></button>';
 }
 
-/** 密码框下面那行「忘记密码」。`sys` 是 PWD_HELP 的键。 */
+/** 密码框下面那行「忘记密码」。`sys` 是 PWD_HELP 的键。
+ *  url 为空 = 本校的找回页还没确认（见 PWD_HELP 上面那段），
+ *  这时仍然渲染一个按钮，但点下去只说明情况，不跳任何地址。 */
 function pwdHelpHtml(sys) {
   const h = PWD_HELP[sys];
   if (!h) return '';
   return '<button type="button" class="pwdlost" data-pwdhelp="' + escAttr(sys) +
-    '">忘记密码？去' + escAttr(h.name) + '重置</button>';
+    '">' + (h.url ? '忘记密码？去' + escAttr(h.name) + '重置'
+                  : '忘记密码？' + escAttr(h.name) + '的找回地址待配置') + '</button>';
 }
 
 /** 切换明文/密文。
@@ -10512,7 +10394,11 @@ document.addEventListener('click', (e) => {
     e.stopPropagation();
     const h = PWD_HELP[lost.getAttribute('data-pwdhelp') || ''];
     if (!h) return;
-    // 0.17.3 起在 App 内打开：jwglxt / sfrz 都在学校域名下，门户连着就直接进。
+    if (!h.url) {
+      toast('本校这个系统的自助找回页还没确认，先别乱猜地址 —— 找辅导员或带证件去信息管理中心最快', 6000);
+      return;
+    }
+    // 0.17.3 起在 App 内打开：找回页在学校域名下，门户连着就直接进。
     // 以前交给系统浏览器 —— 那是第三个 cookie 罐子，找回密码页先让你登一次，
     // 而用户点「忘记密码」的原因恰恰是登不进去。
     // 兜底仍是系统浏览器（openApp 内部），网页版退成新标签页。

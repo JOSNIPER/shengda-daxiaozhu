@@ -86,7 +86,7 @@ import org.json.JSONTokener;
  * ================================================================
  * 0.17.3 补上的三件「点了没反应」（原来写在「已知缺口」里）
  * ================================================================
- * 这一版把公告正文、郑航百科、找回密码也从系统浏览器搬进来了，进来的流量
+ * 这一版把公告正文、找回密码、其它公开页也从系统浏览器搬进来了，进来的流量
  * 变多，那三个坑就从「偶尔撞上」变成「迟早撞上」：
  *
  * 1. **文件上传**（`<input type=file>`）：原来没接 `onShowFileChooser`，
@@ -104,7 +104,7 @@ public class WebActivity extends Activity {
 
     public static final String EXTRA_URL = "url";
     public static final String EXTRA_TITLE = "title";
-    /** false = 这个地址本来就不用登录（公告正文、百科）⇒ 别弹「登录已过期」。
+    /** false = 这个地址本来就不用登录（公告正文这类公开页）⇒ 别弹「登录已过期」。
      *  缺省 true，保持老行为：老版本 JS 只传两个参数，那时候只用来开办事系统。 */
     public static final String EXTRA_WARN = "warn";
 
@@ -638,7 +638,7 @@ public class WebActivity extends Activity {
         //   - 用户手动选过 ⇒ 听用户的（`PREF_MODE`，-1 表示没选过）；
         //   - 没选过 ⇒ 「要登录的办事系统」给**电脑版**（教务/请假/学生信息
         //     本来就是桌面布局，手机版下右栏被挤成一条缝）；
-        //     学习通和公开站（公告正文、百科，`warn == false`）给**手机版**
+        //     学习通和公开站（公告正文，`warn == false`）给**手机版**
         //     —— 它们本来就是给手机做的，硬上桌面版只会字更小。
         int saved = getSharedPreferences(PREF, MODE_PRIVATE).getInt(PREF_MODE, -1);
         applyMode(saved == 1 || (saved == -1 && warn && !isChaoxing(url)), false);
@@ -652,8 +652,8 @@ public class WebActivity extends Activity {
         if (!hasId && warn) {
             // 没有登录态 ⇒ 进去要重新登一次。提前说，别让人以为是 App 坏了。
             // 🔴 只在 `warn` 时才说。以前不管打开什么都提示一句，那会儿这个窗口
-            //    只用来开办事系统，所以没露馅。现在公告正文（www/jwc/tuanwei
-            //    这些**公开**新闻站）和郑航百科（wiki.zua.fan）也走这里了，
+            //    只用来开办事系统，所以没露馅。现在公告正文（学校各部门的
+            //    **公开**新闻站）也走这里了，
             //    对它们说「登录已过期」就是假消息 —— 用户会以为看个公告还得
             //    重连门户，然后白跑一趟。
             // 🔴 文案要分家：学习通和学习门户是两套账号，说错了比不说更糟 ——
@@ -1293,8 +1293,8 @@ public class WebActivity extends Activity {
      * 返回：罐子里**有没有这次要用的那张「身份证」**（不是「倒了几条」）。
      *
      * 🔴 两种身份不能混判：
-     *    - 学习门户认 `CASTGC`（在 `sfrz.zua.edu.cn` 上）。用户点的应用在
-     *      `xssq.zua.edu.cn` 上 —— 按「目标域名有没有 cookie」判断会永远是 0，
+     *    - 统一认证把 `CASTGC` 种在 `cas.shengda.edu.cn` 上。用户点开的门户页
+     *      在 `my.shengda.edu.cn` 上 —— 按「目标域名有没有 cookie」判断会永远是 0，
      *      但免登录其实是能成的。
      *    - 学习通认 `.chaoxing.com` 域下的 `UID` / `_uid`。拿 CASTGC 去判断
      *      学习通，会在「门户登着、学习通没登」时给出「已过期」的假提示；
@@ -1427,17 +1427,19 @@ public class WebActivity extends Activity {
 
     /** 要问哪些 host。学习通跨的子域是固定的那几个（见 CxNet 顶部那张表）。
      *
-     *  🔴 2026-10-28：非学习通原来只问**当前 host 这一个**。那是错的，症状正好
+     *  🔴 2026-10-28（底座）：非学习通原来只问**当前 host 这一个**。那是错的，症状正好
      *    是用户报的「在 App 里登录了智慧门户，别的入口还是要重登」：
-     *      - 用户在门户里走完 CAS 登录，最后停在哪一页取决于门户，可能是
-     *        `rhmh.zua.edu.cn`（门户首页）、也可能是 `xssq` 之类某个应用；
-     *      - 而**身份证 `CASTGC` 在 `sfrz.zua.edu.cn` 域上**，从来没被问过；
+     *      - 用户走完 CAS 登录，最后停在哪一页取决于门户；
+     *      - 而**身份证 `CASTGC` 在 CAS 那个域上**，从来没被问过；
      *      - 于是 java.net 罐子里始终没有 CASTGC ⇒ 主界面判「未登录」⇒
      *        下一个入口打开时没东西可灌 ⇒ 又要登一次。
      *    搬运的方向一直是对的，漏的是「问哪个 host」。
      *
      *  多问两个 host 是安全的：没 cookie 的 host 返回 null，直接跳过。
-     *  ⚠️ 只对学校域名放宽 —— 别把 `wiki.zua.fan`（百科，独立站）也带进来。
+     *  ⚠️ 只对学校域名放宽 —— 别把第三方独立站也带进来。
+     *  🔴 达小助改造（W6）：升达的统一认证是 `cas.shengda.edu.cn/lyuapServer`、
+     *    门户是 `my.shengda.edu.cn`，跟郑航那套 sfrz/rhmh 不是一回事，
+     *    按本校域名放宽。
      */
     private static String[] hostsToAsk(String url) {
         if (isChaoxing(url)) {
@@ -1453,9 +1455,10 @@ public class WebActivity extends Activity {
             host = host.toLowerCase(java.util.Locale.ROOT);
             java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<String>();
             set.add(host);                       // 当前这页自己的
-            if (host.equals("zua.edu.cn") || host.endsWith(".zua.edu.cn")) {
-                set.add("sfrz.zua.edu.cn");      // 身份证（CAS）在这儿
-                set.add("rhmh.zua.edu.cn");      // 门户首页
+            if (host.equals("shengda.edu.cn") || host.endsWith(".shengda.edu.cn")) {
+                set.add("cas.shengda.edu.cn");   // 身份证（CAS）在这儿
+                set.add("my.shengda.edu.cn");    // 门户首页
+                set.add("jw.shengda.edu.cn");    // 教务（青果，8090）
             }
             return set.toArray(new String[0]);
         } catch (Throwable t) {

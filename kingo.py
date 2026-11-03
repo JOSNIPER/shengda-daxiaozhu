@@ -56,6 +56,11 @@ _WRITE_PATTERNS = re.compile(
     r"|electiveCourseForm|pingjia|evaluate|doXk|submit.*course)", re.I)
 
 
+def _host_of(url: str) -> str:
+    m = re.match(r"https?://([^/?#:]+)", str(url or ""), re.I)
+    return m.group(1).lower() if m else ""
+
+
 class KingoClient:
     """升达教务只读客户端。tableId/menucode 全部来自 config，不硬编码。"""
 
@@ -67,6 +72,11 @@ class KingoClient:
         self.s.verify = self.cfg["jw"].get("verify_tls", True)
         self.jw_base = self.cfg["jw"]["base"].rstrip("/")
         self.cas_base = self.cfg["cas"]["base"].rstrip("/")
+        # 域名白名单（见 _assert_allowed_host）：config 里出现过的 host 才算本校
+        self._allow_hosts = {h for h in (
+            _host_of(self.jw_base), _host_of(self.cas_base),
+            _host_of(self.cfg["cas"].get("portal", "")),
+            _host_of(self.cfg["jw"].get("cas_service", ""))) if h}
         self.username = ""
         self._logged_in = False
         self._ready = False           # 教务会话（换票+菜单上下文）是否建好
@@ -85,14 +95,26 @@ class KingoClient:
         return self.jw_base + path
 
     def _request(self, method: str, url: str, **kw):
-        """唯一出口。写端点一律拒绝发出。"""
+        """唯一出口。写端点一律拒绝发出；域名不在白名单也拒绝发出。"""
         if _WRITE_PATTERNS.search(url):
             raise EamsError("达小助是只读客户端，该操作(写)不被允许: %s" % url)
+        self._assert_allowed_host(url)
         self._sleep()
         kw.setdefault("timeout", 30)
         r = self.s.request(method, url, **kw)
         self._last = time.time()
         return r
+
+    def _assert_allowed_host(self, url: str) -> None:
+        """🔴 域名硬白名单（与 native.js 的 guardUrl 同构）。
+        白名单从 config 现算，不写死域名：这样 mock（内网 IP）照样放行，
+        换正式域名也不用改代码。留这条闸的原因是底座里残留过郑航地址，
+        只要有一条路径忘了停用，学生的账密就发到别的学校去了。"""
+        host = _host_of(url)
+        if not host:
+            raise EamsError("请求地址解析不出域名，已拦截: %s" % url)
+        if host not in self._allow_hosts and not host.endswith(".chaoxing.com"):
+            raise EamsError("已拦截：%s 不在本校白名单内（凭据不发往第三方）" % host)
 
     def _jw_get(self, path, **kw):
         r = self._request("GET", self._jw_url(path), **kw)

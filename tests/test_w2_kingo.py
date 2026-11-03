@@ -10,6 +10,7 @@
   T6 频控负例：连打 >6 次 → 识别为"请求太频繁"**而不是**"会话过期"
   T7 写端点护栏：saveElectiveCourse 等 URL 一律拒绝发出
   T8 未登录/配置缺失：报可操作错误，不编数据
+  T9 域名硬白名单：非本校/非学习通的地址一律不发（W6 安全收口）
 """
 import subprocess
 import sys
@@ -141,6 +142,30 @@ def run_tests():
     except EamsError:
         pass
     check("T7 写端点 URL 一律拒绝发出", blocked)
+
+    # ---- T9 域名硬白名单（W6 安全收口）----
+    #   底座残留的郑航地址：任何一条路径忘了停用，账密就发到别的学校去了。
+    hit9 = ""
+    for bad in ("https://sfrz.zua.edu.cn/lyuapServer/v1/tickets",
+                "https://jwglxt.zua.edu.cn/eams/tskcbF!query.action",
+                "http://rhmh.zua.edu.cn/api/upp/cardFrontlist/getCard/x"):
+        try:
+            c3._request("GET", bad)
+            hit9 = "竟然发出去了：" + bad
+            break
+        except EamsError as e:
+            if "白名单" not in str(e):
+                hit9 = "报错语义不对：" + str(e)
+                break
+    ok9 = not hit9
+    # 本校与 mock 的 host 必须照常放行（白名单是从 config 现算的）
+    try:
+        c3._request("GET", c3._jw_url("/frame/homes.html"))
+    except EamsError as e:
+        if "白名单" in str(e):
+            ok9 = False
+            hit9 = "误拦了本校/mock 地址：" + str(e)
+    check("T9 非白名单域名一律拒绝发出（本校与 mock 照常放行）", ok9, hit9)
 
     # ---- T8 配置缺失行为 ----
     cfg8 = json_copy(CFG)

@@ -1,4 +1,4 @@
-"""郑航课表 · 手机端本地服务
+"""达小助 · 手机端本地服务（网页版第二轨）
 
 作用：把教务系统（只支持 HTTP、且有同源限制）的数据，转成手机浏览器能直接用的 JSON。
 
@@ -1620,7 +1620,7 @@ def print_qr(url: str) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="郑航课表手机端本地服务")
+    ap = argparse.ArgumentParser(description="达小助手机端本地服务（网页版第二轨）")
     ap.add_argument("--port", type=int, default=8788)
     ap.add_argument("--no-qr", action="store_true")
     args = ap.parse_args()
@@ -1644,7 +1644,7 @@ def main() -> int:
 
     ips = lan_ips() or ["127.0.0.1"]
     print()
-    print("  郑航课表 · 手机端服务已启动")
+    print("  达小助 · 手机端服务已启动")
     print("  " + "-" * 46)
     print("  电脑上打开：  http://127.0.0.1:%d/?k=%s" % (args.port, token))
     for ip in ips:

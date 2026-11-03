@@ -98,7 +98,7 @@ public class NativeBridge {
     private String doReq(String method, String path, String body, String referer,
                          String headersJson) throws Exception {
         // 传绝对地址（http:// 或 https:// 开头）就按原样发，否则拼在教务系统的 BASE 后面。
-        // 为什么需要：校园公告要访问 www.zua.edu.cn / jwc.zua.edu.cn 等 6 个站，
+        // 为什么需要：校园公告要访问学校各部门的公开站点（多个域名），
         // 它们跟教务系统不是同一个域名，写死 BASE + path 根本发不出去。
         // 保持「相对路径拼 BASE」这条老行为不变，是为了不动现有的教务逻辑。
         boolean absolute = path != null
@@ -117,7 +117,7 @@ public class NativeBridge {
                     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
             if (referer != null && !referer.isEmpty()) {
                 // 绝对地址的 referer 也按原样用，不然会拼成
-                // http://jwglxt.zua.edu.cnhttp://www.zua.edu.cn 这种鬼东西
+                // http://a.example.comhttp://b.example.com 这种鬼东西
                 boolean refAbsolute = referer.startsWith("http://") || referer.startsWith("https://");
                 c.setRequestProperty("Referer", refAbsolute ? referer : BASE + referer);
             }
@@ -722,7 +722,7 @@ public class NativeBridge {
      * 同 openWeb，多一个「要不要提示登录已过期」（0.17.3 起）。
      *
      * `warn = false` 用于**公开页**：公告正文（www / jwc / tuanwei 这些新闻站）、
-     * 郑航百科（wiki.zua.fan）。这些页面没有 CASTGC 也照样能看，拿
+     * 公开页（公告正文这类）。这些页面没有 CASTGC 也照样能看，拿
      * 「门户登录已过期」去提示它们就是**假消息** —— 用户会以为看个公告还得
      * 重连门户，白跑一趟。
      *

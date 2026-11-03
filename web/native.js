@@ -82,6 +82,45 @@
 
   function cfgUrl(u) { return String(u || '').replace(/\/+$/, ''); }
 
+  /* 🔴 域名硬白名单 —— 三个请求出口（http / pfHttp / cxHttp）共用的一道闸。
+   *
+   *  为什么要有它：底座是从郑航改来的，代码里还残留着郑航门户、公告站、
+   *  找回密码这些外部地址。只要有一条路径忘了停用，用户输进去的学号密码
+   *  就发到**别的学校**的服务器上去了。红线是「凭据只在本机与本校之间流动」，
+   *  这种事不能靠「我记得停用了」，得在发出去之前拦一道。
+   *
+   *  白名单是**从 CFG 现算**的，不是写死的域名 —— 这样 config.json 指向
+   *  内网 mock（W6 调试包）时照样放行，换成正式域名也不用改这段代码。
+   *  学习通按 *.chaoxing.com 整段放行：它的子域有 passport2 / mooc1 /
+   *  mooc2-ans / mobilelearn 四五个，逐个列反而容易漏。
+   */
+  function hostOf(u) {
+    var m = /^https?:\/\/([^\/?#:]+)/i.exec(String(u || ''));
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  function allowHosts() {
+    var hs = [];
+    function add(u) { var h = hostOf(u); if (h && hs.indexOf(h) < 0) hs.push(h); }
+    add(CFG.cas && CFG.cas.base);
+    add(CFG.cas && CFG.cas.portal);
+    add(CFG.jw && CFG.jw.base);
+    add(CFG.jw && CFG.jw.cas_service);
+    return hs;
+  }
+
+  /** 放行就原样返回 url（相对路径仍然交给原生拼 BASE），否则抛错。 */
+  function guardUrl(url) {
+    var s = String(url || '');
+    // 相对路径 = 拼在教务 BASE 上发的，按 BASE 的域名判定
+    var host = /^https?:\/\//i.test(s) ? hostOf(s) : hostOf(CFG.jw && CFG.jw.base);
+    if (!host) throw new Error('已拦截：请求地址解析不出域名');
+    var hs = allowHosts();
+    for (var i = 0; i < hs.length; i++) if (hs[i] === host) return s;
+    if (/(^|\.)chaoxing\.com$/i.test(host)) return s;
+    throw new Error('已拦截：' + host + ' 不在本校白名单内（凭据不会发往第三方）');
+  }
+
   // ------------------------------------------------------------------ 工具
 
   function sleep(ms) {
@@ -187,6 +226,7 @@
    */
   function http(method, path, body, referer, gapMs, headers) {
     return new Promise(function (resolve, reject) {
+      try { guardUrl(path); } catch (e) { reject(e); return; }
       var polite = gapMs == null ? POLITE_MS : gapMs;
       var gap = Date.now() - lastReq;
       var wait = gap < polite ? polite - gap : 0;
@@ -1491,19 +1531,14 @@
 
   // 选源时先看栏目还在不在更新：教务处「教务通知」「教学通知」都停在 2023 年，
   // 停更栏目留着只会让公告栏看起来像坏了。
-  // 🔴 达小助改造（W4）：公告路由已停用（见 NativeApi.handle），下面这份郑航
-  //   六部门源表仅作历史参照；升达公告站与链接形状待阶段2抓包确认后重建。
-  var NOTICE_SOURCES = [
-    ['校级通知', 'https://www.zua.edu.cn/xwzx/tzgg.htm', '学校'],
-    ['学籍通知', 'https://jwc.zua.edu.cn/xjgl/xjtz.htm', '教务处'],
-    ['实践通知', 'https://jwc.zua.edu.cn/sjjx/sjtz.htm', '教务处'],
-    ['团委通知', 'https://tuanwei.zua.edu.cn/tzgg.htm', '团委'],
-    ['后勤动态', 'https://hqfwzgs.zua.edu.cn/', '后勤管理处'],
-    ['信息中心', 'https://xxglzx.zua.edu.cn/xwzx/tzgg.htm', '信息管理中心']
-  ];
+  // 🔴 达小助改造（W4 停用 / W6 清源）：公告路由已停用（见 NativeApi.handle），
+  //   这份郑航六部门源表已从文件里删掉 —— 留着它，任何一条漏停的路径
+  //   都会拿用户的手机去访问别的学校的站。升达公告站与链接形状待阶段2抓包，
+  //   届时在这里填本校源。郑航原表见 vendor/hangyuantong/web/native.js:1497。
+  var NOTICE_SOURCES = [];
   // 详情只允许抓校内域名。否则 ?u=http://evil/... 就成了
   // 「让用户的手机替我访问内网」的一个洞。
-  var NOTICE_HOSTS = ['zua.edu.cn'];
+  var NOTICE_HOSTS = ['shengda.edu.cn'];
 
   var N_DROP = [
     ['附小', ['附小', '附属小学', '幼儿园']],
@@ -1849,19 +1884,20 @@
   //   （card/apps 已返回「未适配」）。升达门户 my.shengda.edu.cn 的会话机制不同
   //   （走 CASTGC），待阶段2抓包确认后重写这一段。下面常量保留仅作历史参照。
   var PF = {
-    SF: 'https://sfrz.zua.edu.cn/lyuapServer',
-    RH: 'https://rhmh.zua.edu.cn',
-    SERVICE: 'https://rhmh.zua.edu.cn/shiro-cas',
-    CARD: '1b1029d961e94aa196fb7f0ec072d622',
+    // 🔴 达小助改造（W6）：郑航那套门户地址、卡 id、RSA 公钥全部**清空**。
+    //   留着它们没有任何用处（四条门户路由都已停用），但只要还在文件里，
+    //   哪天有人照着 pfLogin 接一条新路由，就会把学生的账密送到别的学校去。
+    //   要恢复这一段：底座原文在 vendor/hangyuantong/web/native.js。
+    SF: '',
+    RH: '',
+    SERVICE: '',
+    CARD: '',
     KEY: 'hyPortal',
     // 上次「保活」的时间戳（毫秒）。见 pfKeepAlive。
     TOUCH: 'hyPortal.touchAt',
     EXP: 65537,
-    // 门户 app.js 里的 public_exponent / modulus 两个字面量
-    N: '00b5eeb166e069920e80bebd1fea4829d3d1f3216f2aabe79b6c47a3c18dcee5' +
-       'fd22c2e7ac519cab59198ece036dcf289ea8201e2a0b9ded307f8fb704136eaeb' +
-       '670286f5ad44e691005ba9ea5af04ada5367cd724b5a26fdb5120cc95b6431604' +
-       'bd219c6b7d83a6f8f24b43918ea988a76f93c333aa5a20991493d4eb1117e7b1',
+    // 门户 app.js 里的 public_exponent / modulus 两个字面量（已清空，见上）
+    N: '',
   };
 
   var pfCap = null;          // {uid, at} 验证码是一次性的，只活在这台手机的内存里
@@ -2028,6 +2064,7 @@
    */
   function pfHttp(method, url, body, headers) {
     return new Promise(function (resolve, reject) {
+      try { guardUrl(url); } catch (e0) { reject(e0); return; }
       var id = ++seq;
       waiting[id] = { resolve: resolve, reject: reject };
       try {
@@ -2107,9 +2144,9 @@
   function pfTgtCands() {
     var out = [];
     var st = pfState();
-    var cands = ['https://sfrz.zua.edu.cn/lyuapServer/',
-                 'https://sfrz.zua.edu.cn/lyuapServer/login',
-                 'https://sfrz.zua.edu.cn/'];
+    var casBase = cfgUrl(CFG.cas.base);            // .../lyuapServer
+    var casRoot = casBase.replace(/\/lyuapServer.*$/, '') || casBase;
+    var cands = [casBase + '/', casBase + '/login', casRoot + '/'];
 
     function add(v, from) {
       v = String(v || '').trim();
@@ -2421,7 +2458,7 @@
         code: code,
         otpcode: '',
       }), { referer: PF.SF + '/login?service=' + PF.SERVICE,
-            origin: 'https://sfrz.zua.edu.cn',
+            origin: (String(CFG.cas.base).match(/^https?:\/\/[^/]+/i) || [''])[0],
             'x-requested-with': 'XMLHttpRequest',
             accept: 'application/json, text/plain, */*' });
     } catch (e) {
@@ -2710,6 +2747,7 @@
    *  32 门课就是 77 秒白等。节奏由 cxScan 自己按 CX_GAP 控制。 */
   function cxHttp(method, url, body, referer, headers) {
     return new Promise(function (resolve, reject) {
+      try { guardUrl(url); } catch (e0) { reject(e0); return; }
       var id = ++seq;
       waiting[id] = { resolve: resolve, reject: reject };
       try {
@@ -5078,80 +5116,25 @@
           } catch (e3) { /* 清不掉也只能这样 */ }
           return { ok: true };
         }
-        // ---- 智慧门户：一卡通 + 19 个办事应用 ----
-        // 契约与 bridge.py 的 do_GET / do_POST 完全一致（app.js 只写一套分支）。
+        // ---- 智慧门户：一卡通 + 办事应用 ----
+        // 🔴 达小助改造（W6 安全收口）：这一段**全部短路**。
+        //   底座里门户走的是郑航 sfrz/rhmh 那套（RSA 加密账密 + 算术验证码），
+        //   app.js 的「连接门户」弹层会把用户输入的学号密码原样送进来 ——
+        //   留着这条路径，升达学生的凭据就会发到别的学校的认证服务器上。
+        //   升达门户 my.shengda.edu.cn 走 CASTGC，机制不同，等阶段2抓包重写。
+        //   下面 pfLogin/pfCard/pfApps 那一大段保留作结构参照，已无路由可达；
+        //   真正的兜底是 guardUrl()：PF 里的郑航域名已置空，发不出去。
         if (path === '/api/portal/status') {
-          var pst = pfState();
-          var pj = pfJwt();
-          // `saved` = 本机存着门户密码 ⇒ 过期后只需算一道验证码。
-          // 只回「存的是哪个学号」，密码本身不出原生层。
-          var pcr = pfCredLoad();
-          var savedInfo = { saved: !!pcr, savedUser: pcr ? pcr.u : '',
-                            pwdState: pfCredState() };
-          if (!pst.tgt && !pj) {
-            // 没连过。密码可能还存着（比如只断开了会话），「连接门户」照样能省一步。
-            return { ok: true, state: 'none', saved: savedInfo.saved,
-                     savedUser: savedInfo.savedUser, pwdState: savedInfo.pwdState };
-          }
-          // 只做本地判断，不探网：这个接口每次切到「校园」页都会调，
-          // 探一次网就多几百毫秒。真正的死活由 card/apps 的 needLogin 决定。
-          //
-          // 🔴 唯一例外是**保活**（2026-10-28）：它确实要发请求，但
-          //    `pfKeepAlive` 不 await、自己限频（2 小时一次）、失败不出声，
-          //    所以这里既不会变慢也不会因为门户抽风而报错。
-          //    放这儿是因为「进校园页」是用户一天里最稳定的那个动作。
-          pfKeepAlive();
-          return { ok: true, state: 'ok', user: pst.user || pfSub(pj),
-                   saved: savedInfo.saved, savedUser: savedInfo.savedUser,
-                   pwdState: savedInfo.pwdState };
+          return { ok: false, unsupported: true,
+                   error: '门户未适配本校系统（待校内抓包确认学校用哪套门户）' };
         }
         if (path === '/api/portal/captcha') {
-          try { return await pfCaptcha(); }
-          catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+          return { ok: false, unsupported: true, needCaptcha: false,
+                   error: '门户未适配本校系统，不需要验证码' };
         }
         if (path === '/api/portal/login') {
-          var pu = String(body.user || '').trim();
-          var pp = body.pass || '';
-          var pc = String(body.code || '').trim();
-          // 密码留空 = 「用本机存着的那份」。过期重登时人只需要算一道算术题。
-          var usedSaved = false;
-          if (!pp) {
-            var sc = pfCredLoad();
-            if (!sc) return { ok: false, error: '学号和密码都要填', needCaptcha: true };
-            // 🔴 存的是另一个学号的密码就**不许**拿去试：门户错 5 次锁号。
-            if (sc.u && pu && sc.u !== pu) {
-              return { ok: false, needCaptcha: true,
-                       error: '本机存的是 ' + sc.u + ' 的门户密码，跟这个学号对不上，请手动输入' };
-            }
-            pp = sc.p;
-            pu = pu || sc.u;
-            usedSaved = true;
-          }
-          // 🔴 一律带 needCaptcha：验证码是一次性的，哪一步失败这张都不能再用
-          if (!pu || !pp) return { ok: false, error: '学号和密码都要填', needCaptcha: true };
-          if (!pc) return { ok: false, error: '还没算验证码', needCaptcha: true };
-          var lr;
-          try { lr = await pfLogin(pu, pp, pc); }
-          catch (e) {
-            return { ok: false, error: '登录出错：' + ((e && e.message) || e),
-                     needCaptcha: true };
-          }
-          if (lr && lr.ok) {
-            // 这次用的密码是对的（不管是手输的还是存的）⇒ 存下来，下次省一步。
-            // 把「存没存住」如实带回去：存不上必须让人知道，否则下次又白输一遍。
-            lr.pwdSave = pfCredSave(pu, pp);
-            return lr;
-          }
-          var out = lr || { ok: false, error: '登录失败', needCaptcha: true };
-          // 用着本机存的密码、门户又明确说「密码/账号不对」⇒ 把密码和会话都扔了。
-          // 不扔的话下次还会拿一个错密码去撞，撞 5 次号就锁了。
-          if (usedSaved && PF_PWD_BAD.indexOf(String(out.code || '')) >= 0) {
-            pfCredClear();
-            try { localStorage.removeItem(PF.KEY); } catch (e2) { /* 无所谓 */ }
-            out.pwdStale = true;
-            out.error = String(out.error || '密码不对') + ' —— 存着的那份密码已经删掉，请手动输入一次';
-          }
-          return out;
+          return { ok: false, unsupported: true,
+                   error: '门户未适配本校系统：不会把学号密码发往任何第三方' };
         }
         // 🔴 达小助改造（W4）：一卡通/办事应用入口停用 —— 升达用哪套系统未确认，
         //   郑航的网关地址、CARD id、RSA modulus 全部作废。返回明确「未配置」，
@@ -5163,16 +5146,13 @@
           return { ok: false, error: '办事应用未适配本校系统（待抓包确认）' };
         }
         // 给某个办事系统换一张 CAS 票。
-        // 🔴 白名单只放**本校**的地址：这张票等于一次登录态，
-        //    拼到别人的域名上就是把登录态送出去了。
-        //    `([a-z0-9-]+\.)*` 让 shengda.edu.cn 本身和各级子域都算，
-        //    但不接受 `shengda.edu.cn.evil.com` 这种（后面必须紧跟 / 或结尾）。
+        // 🔴 达小助改造（W6）：连同上面的登录一起停用 —— 换票要先有门户会话，
+        //   而门户没适配。留着就是把「一张等于登录态的票」的发出口空对着外面。
+        //   将来接升达门户时，白名单规则照旧：只给 shengda.edu.cn 及其子域换票，
+        //   `([a-z0-9-]+\.)*` 不接受 `shengda.edu.cn.evil.com` 这种拼接。
         if (path === '/api/portal/ticket') {
-          var svc = String(q.service || '').trim();
-          if (!/^https:\/\/([a-z0-9-]+\.)*shengda\.edu\.cn(\/|$)/i.test(svc)) {
-            return { ok: false, error: '只给学校（shengda.edu.cn）的地址换票' };
-          }
-          return await pfServiceTicket(svc);
+          return { ok: false, unsupported: true,
+                   error: '门户未适配本校系统，暂不提供换票' };
         }
         if (path === '/api/portal/logout') {
           pfCap = null;

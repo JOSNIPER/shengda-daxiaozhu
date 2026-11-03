@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "code": 60,
   "date": "2026-11-03",
-  "size": 0,
-  "sha256": "",
+  "size": 575512,
+  "sha256": "d400205920886a710eeb63744ac4c67613f877f0fb1e5b1487c2a413d8893204",
   "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.0.apk",
-  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.0/达小助.apk",
+  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.0/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
   "page": "https://johan.ccwu.cc/daxiaozhu/",
   "notes": [
-    "达小助首个内测版（改造自航院通，数据层适配升达教务中）"
+    "第一个公开版本：课表、考试、成绩、空闲教室都能用了",
+    "课表按周翻页，支持单双周和连堂课",
+    "绑定一次账号，之后打开就自动同步",
+    "数据只从学校教务系统读，账号密码只加密保存在本机"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date；发布前把 TBD-github-user 换成真实 GitHub 用户名，并确认 johan.ccwu.cc 已 CNAME 到托管页。自更新在 app.js UPD_SRC 处恢复。"
 }

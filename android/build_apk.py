@@ -274,9 +274,28 @@ def stage_assets():
             shutil.copy2(f, dst / f.name)
     names = sorted(x.name for x in dst.iterdir())
     print("  assets/web: " + ", ".join(names))
+    # 🔴 达小助改造（W6）：native.js 运行时 fetch('config.json') 拿学校配置。
+    #    优先用 config/build.json（打包专用，可指 mock），否则用 config/shengda.json。
+    cfg_src = MOBILE / "config" / ("build.json" if (MOBILE / "config" / "build.json").exists()
+                                   else "shengda.json")
+    cfg_text = cfg_src.read_text(encoding="utf-8")
+    # build.json 是模板：__PC_IP__ 换成构建机局域网 IP（手机连电脑跑 mock 用）
+    if "__PC_IP__" in cfg_text:
+        import socket
+        ip = ""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 53)); ip = s.getsockname()[0]; s.close()
+        except Exception:
+            ip = "127.0.0.1"
+        cfg_text = cfg_text.replace("__PC_IP__", ip)
+        print("  [debug包] __PC_IP__ -> %s（手机需与本机同网段、mock 用 --lan 起）" % ip)
+    (dst / "config.json").write_text(cfg_text, encoding="utf-8", newline="\n")
+    print("  config.json <- %s" % cfg_src.name)
     # 网页版那套 Python 服务不在包里，但页面里引用了它 —— 少个文件会白屏，
     # 所以这里硬检查一遍必需文件，别等到手机上才发现。
-    for need in ("index.html", "app.js", "app.css", "native.js", "icon-180.png"):
+    for need in ("index.html", "app.js", "app.css", "native.js",
+                 "icon-180.png", "config.json"):
         if not (dst / need).exists():
             raise SystemExit("assets/web 里缺 %s" % need)
 
