@@ -20,3 +20,5 @@ package-lock.json
 *.log
 .DS_Store
 Thumbs.db
+tests/_js_err.txt
+tests/_py_err.txt
