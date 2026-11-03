@@ -2,15 +2,14 @@
   "name": "达小助",
   "version": "0.1.0",
   "code": 60,
-  "date": "2026-11-01",
-  "size": 575444,
-  "sha256": "e736a6c70ac08aa456bfcbc266dc9ee25faa5d6fd26bab93bdf68586c43249e9",
-  "apk": "https://johan.dpdns.org/daxiaozhu/dl/daxiaozhu-0.1.0.apk",
-  "apk_cn": "https://maven.cnb.cool/johan/campus-login/-/packages/cnb/daxiaozhu/0.1.0/%E8%88%AA%E9%99%A2%E9%80%9A.apk",
-  "page": "https://johan.dpdns.org/daxiaozhu/",
+  "date": "2026-11-03",
+  "size": 0,
+  "sha256": "",
+  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.0.apk",
+  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.0/达小助.apk",
+  "page": "https://johan.ccwu.cc/daxiaozhu/",
   "notes": [
-    "修好「检查更新」：之前每次都提示失败，现在能正常查到新版本",
-    "删掉一句解释后台怎么实现的说明文字（「只发一个几百字节的请求」这类），这种话对你没用",
-    "出错时不再甩出「HTTP 404」「接口返回的不是 JSON」这种看不懂的词，只说发生了什么、你该做什么"
-  ]
+    "达小助首个内测版（改造自航院通，数据层适配升达教务中）"
+  ],
+  "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date；发布前把 TBD-github-user 换成真实 GitHub 用户名，并确认 johan.ccwu.cc 已 CNAME 到托管页。自更新在 app.js UPD_SRC 处恢复。"
 }
