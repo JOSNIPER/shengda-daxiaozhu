@@ -900,11 +900,11 @@ class Handler(SimpleHTTPRequestHandler):
             # 🔴 只给学校的地址换票：这张票**等于一次登录态**，
             #    拼到别人的域名上就是把登录态送出去了。
             #    先解析 host 再比，别用 startswith 比字符串 ——
-            #    `https://zua.edu.cn.evil.com` 也满足 startswith。
+            #    `https://shengda.edu.cn.evil.com` 也满足 startswith。
             host = (urlparse(svc).hostname or "").lower()
             if not svc.startswith("https://") or not (
-                    host == "zua.edu.cn" or host.endswith(".zua.edu.cn")):
-                self._json({"ok": False, "error": "只给学校（zua.edu.cn）的地址换票"})
+                    host == "shengda.edu.cn" or host.endswith(".shengda.edu.cn")):
+                self._json({"ok": False, "error": "只给学校（shengda.edu.cn）的地址换票"})
                 return
             out = self._portal_call(lambda c: {"ticket": c.ticket_for(svc)})
             if out is not None:

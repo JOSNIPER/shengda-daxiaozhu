@@ -19,7 +19,8 @@
   // 网页版没有 Android 桥，直接不加载（同一个 app.js 两边共用）
   if (!window.Android || typeof window.Android.req !== 'function') return;
 
-  var BASE = 'http://jwglxt.zua.edu.cn';
+  // 🔴 达小助改造（W3）：BASE 只作「相对路径」兜底 —— Kingo 段一律发绝对地址。
+  var BASE = 'https://jw.shengda.edu.cn:8090';
   var UA = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 ' +
            '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
@@ -1483,6 +1484,8 @@
 
   // 选源时先看栏目还在不在更新：教务处「教务通知」「教学通知」都停在 2023 年，
   // 停更栏目留着只会让公告栏看起来像坏了。
+  // 🔴 达小助改造（W4）：公告路由已停用（见 NativeApi.handle），下面这份郑航
+  //   六部门源表仅作历史参照；升达公告站与链接形状待阶段2抓包确认后重建。
   var NOTICE_SOURCES = [
     ['校级通知', 'https://www.zua.edu.cn/xwzx/tzgg.htm', '学校'],
     ['学籍通知', 'https://jwc.zua.edu.cn/xjgl/xjtz.htm', '教务处'],
@@ -1834,6 +1837,10 @@
   //   而 `Authorization` 是服务器 Set-Cookie 下发的，JS 读不到，
   //   只能通过 Android.cookie() 从原生的 CookieStore 里取。
 
+  // 🔴 达小助改造（W4）：一卡通/门户段停用 —— PF.SF/RH/SERVICE、CARD id、RSA modulus
+  //   全是郑航系统的实测值，对升达无效。pfLogin/pfCard/pfApps 不再被路由调用
+  //   （card/apps 已返回「未适配」）。升达门户 my.shengda.edu.cn 的会话机制不同
+  //   （走 CASTGC），待阶段2抓包确认后重写这一段。下面常量保留仅作历史参照。
   var PF = {
     SF: 'https://sfrz.zua.edu.cn/lyuapServer',
     RH: 'https://rhmh.zua.edu.cn',
@@ -5139,24 +5146,24 @@
           }
           return out;
         }
+        // 🔴 达小助改造（W4）：一卡通/办事应用入口停用 —— 升达用哪套系统未确认，
+        //   郑航的网关地址、CARD id、RSA modulus 全部作废。返回明确「未配置」，
+        //   app.js 的校园页会显示未连接状态而不是报错崩页面。
         if (path === '/api/portal/card') {
-          try { var pcard = await pfCard(); pcard.ok = true; return pcard; }
-          catch (e) { return pfFailBody(e); }
+          return { ok: false, error: '一卡通未适配本校系统（待抓包确认）' };
         }
         if (path === '/api/portal/apps') {
-          try { var papps = await pfApps(); papps.ok = true; return papps; }
-          catch (e) { return pfFailBody(e); }
+          return { ok: false, error: '办事应用未适配本校系统（待抓包确认）' };
         }
-        // 给某个办事系统换一张 CAS 票（见 pfServiceTicket 的注释）。
-        // app.js 拿到票会拼在地址后面再打开，这样进门就是登录态。
+        // 给某个办事系统换一张 CAS 票。
+        // 🔴 白名单只放**本校**的地址：这张票等于一次登录态，
+        //    拼到别人的域名上就是把登录态送出去了。
+        //    `([a-z0-9-]+\.)*` 让 shengda.edu.cn 本身和各级子域都算，
+        //    但不接受 `shengda.edu.cn.evil.com` 这种（后面必须紧跟 / 或结尾）。
         if (path === '/api/portal/ticket') {
           var svc = String(q.service || '').trim();
-          // 🔴 白名单只放学校的地址：这张票**等于一次登录态**，
-          //    拼到别人的域名上就是把登录态送出去了。
-          //    `([a-z0-9-]+\.)*` 让 `zua.edu.cn` 本身和各级子域都算，
-          //    但不接受 `zua.edu.cn.evil.com` 这种（后面必须紧跟 / 或结尾）。
-          if (!/^https:\/\/([a-z0-9-]+\.)*zua\.edu\.cn(\/|$)/i.test(svc)) {
-            return { ok: false, error: '只给学校（zua.edu.cn）的地址换票' };
+          if (!/^https:\/\/([a-z0-9-]+\.)*shengda\.edu\.cn(\/|$)/i.test(svc)) {
+            return { ok: false, error: '只给学校（shengda.edu.cn）的地址换票' };
           }
           return await pfServiceTicket(svc);
         }
@@ -5170,18 +5177,18 @@
           // 用户只是不想看一卡通了，课表不该跟着掉线。
           try {
             if (window.Android && typeof Android.clearCookiesFor === 'function') {
-              Android.clearCookiesFor('zua.edu.cn');
+              Android.clearCookiesFor('shengda.edu.cn');
             }
           } catch (e2) { /* 清不掉也只是本地不再用它 */ }
           return { ok: true };
         }
-        // 考试页「选学期」用。学期 id 由 /api/sync 或 /api/semesters 给，
-        // 界面只把用户点的那个原样送回来。
+        // 考试页「选学期」用。青果版 semesters() 给的是 xn-xqM 形态的 id，
+        // 界面只把用户点的那个原样送回来 —— 🔴 不再按郑航的纯数字校验。
         if (path === '/api/exams') {
           var acc2 = loadCred();
           if (!acc2) return { ok: false, error: '还没绑定账号', needBind: true };
           var sid = String(body.semesterId == null ? '' : body.semesterId).trim();
-          if (!/^\d+$/.test(sid)) {
+          if (sid && !/^[\w.\-\/]+$/.test(sid)) {
             // 不猜、不兜底：id 不对就说，别默默拿当前学期的数据
             // 冒充用户点的那一学期。
             return { ok: false, error: '学期编号不对' };
@@ -5230,18 +5237,16 @@
           one.ok = true;
           return one;
         }
-        // 校园公告：抓的是学校各部门的**公开页面**，所以不校验凭据。
-        // 这也是有意的 —— 公告是唯一「没绑教务账号也能看」的栏目。
+        // 校园公告：🔴 达小助改造（W4）—— 郑航六部门站源表随 CMS 确认前**停用**。
+        //   返回空列表而不是报错：公告页显示「暂无」，不会把错误说成事实；
+        //   升达公告站与链接形状待阶段2抓包确认后恢复。
         if (path === '/api/notice') {
-          var lim = parseInt(q.limit, 10);
-          if (!(lim >= 1)) lim = 60;
-          if (lim > 200) lim = 200;
-          return await nFetchList(lim, q.force === '1');
+          return { ok: true, at: Math.floor(Date.now() / 1000), cached: true,
+                   total: 0, items: [], failed: [], sources: 0,
+                   note: '升达公告源未配置（待抓包确认学校CMS）' };
         }
         if (path === '/api/notice/detail') {
-          var u = String(q.u || '').trim();
-          if (!u) return { ok: false, error: '通知打不开，请重试' };
-          return await nFetchDetail(u);
+          return { ok: false, error: '升达公告源未配置（待抓包确认学校CMS）' };
         }
         return { ok: false, error: '这个功能用不了（App 版本太旧）' };
       } catch (e) {
