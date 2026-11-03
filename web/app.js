@@ -1146,8 +1146,26 @@ function dayAnchor() {
   return addDays(startDate(), (w - 1) * 7 + wd);
 }
 
+/** 让课表「占满」可视区：格子高度按剩余高度摊。
+
+ *  写死 56px 的结果是：矮屏上第 10 节被顶出屏幕，高屏下面空一大截。
+ *  现在量「滚动容器的可视高度 - 表头 40px」，除以节次总数，
+ *  上下限 48~110px 兜底（太扁字放不下，太高翻起来累）。
+ *  `--cell-h` 设在滚动容器上，节次栏和网格都从它继承 —— 两边永远对齐。
+ */
+function fitGridHeight() {
+  const scroll = $('schScroll');
+  if (!scroll || !scroll.clientHeight) return;
+  const units = (curTT().unitCount || 10);
+  const avail = scroll.clientHeight - 46;          // 40 表头 + 6 padding
+  let cell = Math.floor((avail - (units - 1)) / units);   // 行间还有 1px gap
+  cell = Math.max(48, Math.min(110, cell));
+  scroll.style.setProperty('--cell-h', cell + 'px');
+}
+
 function renderSchedule() {
   syncToday();
+  fitGridHeight();
   const rows = (DATA && curTT().courses) || [];
   const hasData = !!(DATA && rows.length);
   // 🔴 青果这一轨现在给的是**原样解析出来的行**（kingo.py / native.js 都标
@@ -2208,6 +2226,7 @@ $('wkDays').addEventListener('click', () => {
     if (!w || Math.abs(w - last) < 1) return;
     last = w;
     centerTrack(track);
+    fitGridHeight();
   });
   const wrap = document.querySelector('.grid-wrap');
   if (wrap) ro.observe(wrap);
@@ -2452,7 +2471,7 @@ function renderGrades() {
       if (btn) btn.hidden = false;
     } else if (g && g.error) {
       h.textContent = '这次没读到成绩';
-      p.textContent = '课表、考试这些都正常，只有成绩这一块没取到：' + g.error;
+      p.textContent = '课表这些都正常，只有成绩这一块没取到：' + g.error;
       if (btn) btn.hidden = true;
     } else {
       h.textContent = '还没有成绩';
@@ -2730,23 +2749,14 @@ function renderCredit() {
   $('crEmpty').hidden = p.ok;
   $('crBody').hidden = !p.ok;
   if (!p.ok) {
+    // 🔴 2026-11-03 用户要求：学分这块没做完就直说「暂未完善，敬请期待」，
+    //    别把「培养计划没取到 / 算不出进度」这种内部原因摆给用户看 ——
+    //    那是在把我们的进度问题转嫁成他的困惑。
+    //    没绑定的人仍然给「去绑定」按钮（那是他现在唯一能做的事）。
     const t = $('crEmptyTitle'), d = $('crEmptyText');
-    if (!bound) {
-      t.textContent = '还没绑定账号';
-      d.textContent = '绑定教务处账号后，会自动同步培养计划和成绩，算出还差多少学分毕业。';
-    } else if (!hasPlan) {
-      t.textContent = '培养计划没取到';
-      // 0.39.1：「这是附加信息」是在替用户判断要不要在意，去掉；
-      // 留「不影响课表和成绩」—— 这句才是他会担心的。
-      d.textContent = p.why + '。不影响课表和成绩。';
-    } else if (!hasGrade) {
-      t.textContent = '还没有成绩';
-      d.textContent = '没有成绩就没法算已修学分。点右上角刷新试试。';
-    } else {
-      t.textContent = '算不出进度';
-      d.textContent = p.why;
-    }
-    $('goBind5').hidden = bound;
+    t.textContent = '暂未完善';
+    d.textContent = '敬请期待';
+    if ($('goBind5')) $('goBind5').hidden = bound;
     return;
   }
 

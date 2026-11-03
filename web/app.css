@@ -1711,7 +1711,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 /* 日视图的裁剪盒。滚动容器的 `overflow: hidden` 裁在内边距盒上，
    直接让轨道溢到 padding 里会漏出上一页的一条彩边。 */
-.day-wrap { overflow: hidden; }
+.day-wrap {
+  overflow: hidden;
+  /* 🔴 必须是 flex：周视图的 .grid-wrap 是 flex，轨道 flex:1 1 0 / width:0
+     能拿到真实宽度；这里原来不是 flex，轨道 width:0 就真的塌成 0 ——
+     三页全部变成 0 宽，文字逐字竖排，整页错乱（2026-11-03 真机截图）。 */
+  display: flex;
+  align-items: flex-start;
+}
 
 /* ---------------- 日视图 ---------------- */
 /* 日视图的左右留白 = scroll 的 7px + 这里的 7px = 14px。
