@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -35,7 +36,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class NativeBridge {
 
-    private static final String BASE = "http://jwglxt.zua.edu.cn";
+    // 🔴 达小助改造（W3）：BASE 不再是郑航教务，改成升达青果（HTTPS/8090）。
+    //    native.js 的 Kingo 段发**绝对地址**为主；相对路径兜底也指向这里。
+    private static final String BASE = "https://jw.shengda.edu.cn:8090";
     private static final String UA =
             "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
@@ -135,7 +138,7 @@ public class NativeBridge {
 
             int code = c.getResponseCode();
             InputStream in = (code >= 400) ? c.getErrorStream() : c.getInputStream();
-            String text = readAll(in);
+            String text = readAll(in, charsetOf(c.getHeaderField("Content-Type")));
             String finalUrl = String.valueOf(c.getURL());
 
             // 兜底：HttpURLConnection 只自动跟 301/302/303（会把 POST 改成 GET），
@@ -152,7 +155,8 @@ public class NativeBridge {
                         c2.setRequestProperty("User-Agent", UA);
                         c2.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
                         code = c2.getResponseCode();
-                        text = readAll(code >= 400 ? c2.getErrorStream() : c2.getInputStream());
+                        text = readAll(code >= 400 ? c2.getErrorStream() : c2.getInputStream(),
+                                       charsetOf(c2.getHeaderField("Content-Type")));
                         finalUrl = String.valueOf(c2.getURL());
                     } finally {
                         c2.disconnect();
@@ -197,15 +201,43 @@ public class NativeBridge {
         return hasCt;
     }
 
-    private static String readAll(InputStream in) throws Exception {
+    private static String readAll(InputStream in, Charset charset) throws Exception {
         if (in == null) return "";
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n;
         while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
         in.close();
-        // 教务系统是 UTF-8；用 Python 版对照过，别改成平台默认编码
-        return new String(bos.toByteArray(), StandardCharsets.UTF_8);
+        byte[] raw = bos.toByteArray();
+        // 🔴 达小助改造（W3）：升达青果的 DataTable.jsp 回 **GBK**，郑航教务是 UTF-8。
+        //    响应头带 charset 就按它解；没带先按 GBK 猜（中文教务系统最常见），
+        //    猜错会出一堆 U+FFFD 替换符，检测到就退回 UTF-8 重解。
+        //    （UTF-8 遇非法字节静默替换、不抛异常，所以必须靠"含替换符"发现猜错。）
+        if (charset != null) {
+            try { return new String(raw, charset); } catch (Throwable ignored) { }
+        }
+        try {
+            String gbk = new String(raw, Charset.forName("GBK"));
+            if (gbk.indexOf('\uFFFD') < 0 && raw.length > 0) return gbk;
+        } catch (Throwable ignored) { /* 设备没带 GBK */ }
+        return new String(raw, StandardCharsets.UTF_8);
+    }
+
+    /** 从 Content-Type 头里抠 charset。解析失败返回 null（交给猜序）。 */
+    private static Charset charsetOf(String contentType) {
+        if (contentType == null) return null;
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("charset=([\\w-]+)",
+                        java.util.regex.Pattern.CASE_INSENSITIVE).matcher(contentType);
+        if (!m.find()) return null;
+        try {
+            String cs = m.group(1).replace("\"", "");
+            // Windows-936/GB2312 一律归到 GBK：够宽且兼容
+            if (cs.equalsIgnoreCase("gb2312") || cs.equalsIgnoreCase("windows-936")) cs = "GBK";
+            return Charset.forName(cs);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private static String fail(String msg) {
@@ -390,6 +422,30 @@ public class NativeBridge {
     @JavascriptInterface
     public void clearCxPwd() {
         CredStore.clearCxPwd();
+    }
+
+    /** 往 **java.net 罐子**里种一条 cookie（JS 拼好的完整 Set-Cookie 串）。
+     *
+     * 🔴 为什么需要：升达门户的 CASTGC 是**前端 JS 手动写进 cookie** 的，
+     *    CAS 服务器不 Set-Cookie。原生请求走 java.net.CookieManager，
+     *    WebView 的 CookieManager 它看不见 —— 所以必须由桥给这个罐子种。
+     *    （航院通 portal.py:504-505 在 Python 侧干的是同一件事。）
+     */
+    @JavascriptInterface
+    public boolean setCookie(String url, String cookieHeader) {
+        if (url == null || cookieHeader == null || cookieHeader.isEmpty()) return false;
+        try {
+            java.net.CookieHandler h = java.net.CookieHandler.getDefault();
+            if (!(h instanceof java.net.CookieManager)) return false;
+            java.util.List<java.net.HttpCookie> cks =
+                    java.net.HttpCookie.parse(cookieHeader);
+            java.net.URI uri = new java.net.URI(url);
+            java.net.CookieStore store = ((java.net.CookieManager) h).getCookieStore();
+            for (java.net.HttpCookie ck : cks) store.add(uri, ck);
+            return !cks.isEmpty();
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /**

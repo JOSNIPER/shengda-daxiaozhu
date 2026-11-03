@@ -28,6 +28,59 @@
   var POLITE_MS = 1200;
   var lastReq = 0;
 
+  // 🔴 达小助改造（W3）：教务请求一律发**绝对地址**（升达 CAS/门户/青果三台主机）。
+  //    BASE 兜底已改 jw.shengda；原生层按响应头 charset 解码，GBK 表格不再乱码。
+
+  // ------------------------------------------------------------------ 达小助配置（W3）
+  /* 单一真源 = app/config/shengda.json。构建时由 build_apk.py 的 stage_assets
+     把该文件拷成 assets/web/config.json；运行时 fetch 本地 config.json，
+     失败则退回下面这份**内置副本**（与 shengda.json 同步维护，
+     _setup/check_config_sync.py 会比对两者防漂移）。
+     🔴 tableId/menucode 是 TBD_* 占位 —— 阶段2校内抓包后替换真实值。 */
+  var CFG_DEFAULT = {
+    cas: {
+      base: 'https://cas.shengda.edu.cn/lyuapServer',
+      portal: 'https://my.shengda.edu.cn/',
+      tickets_path: '/v1/tickets',
+      kaptcha_path: '/kaptcha'
+    },
+    jw: {
+      base: 'https://jw.shengda.edu.cn:8090',
+      cas_service: 'http://jw.shengda.edu.cn:8090/caslogin',
+      menu_context_path: '/frame/normalusemenu/getBreadcrumbsInfoNew.action',
+      data_table_path: '/taglib/DataTable.jsp',
+      time_range_path: '/jw/common/getWsxkTimeRange.action',
+      score_stat_path: '/jw/common/getSelectLessonScoreKcsInfo.action',
+      home_path: '/frame/homes.html',
+      droplist_path: '/frame/droplist/getDropLists.action',
+      polite_delay_sec: 0.35
+    },
+    pages: {
+      timetable: { tableId: 'TBD_KB', menucode: 'TBD_KB_MENU', preheat_path: '' },
+      score:     { tableId: 'TBD_CJ', menucode: 'TBD_CJ_MENU', preheat_path: '' },
+      exam:      { tableId: 'TBD_KS', menucode: 'TBD_KS_MENU', preheat_path: '' },
+      free_room: { tableId: 'TBD_KXJS', menucode: 'TBD_KXJS_MENU', preheat_path: '' },
+      profile:   { tableId: 'TBD_XJ', menucode: 'TBD_XJ_MENU', preheat_path: '' }
+    },
+    column_map: { timetable: {}, score: {}, exam: {}, free_room: {}, profile: {} },
+    semester: {},
+    free_room: { max_periods: null },
+    chaoxing: { fid: null },
+    update: { page_base: 'https://johan.ccwu.cc/daxiaozhu', github_user: 'TBD-github-user', enabled: false }
+  };
+
+  var CFG = CFG_DEFAULT;
+  (function loadCfg() {
+    try {
+      fetch('config.json', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.jw && j.pages) CFG = j; })
+        .catch(function () { /* 用内置副本 */ });
+    } catch (e) { /* 用内置副本 */ }
+  })();
+
+  function cfgUrl(u) { return String(u || '').replace(/\/+$/, ''); }
+
   // ------------------------------------------------------------------ 工具
 
   function sleep(ms) {
@@ -131,7 +184,7 @@
    *     别把**同一个**教务系统打疼。校园公告是 6 个不同域名的公开静态页，
    *     一次抓 6 个还各等 1.2 秒就是七秒多的白等，所以那边传小值。
    */
-  function http(method, path, body, referer, gapMs) {
+  function http(method, path, body, referer, gapMs, headers) {
     return new Promise(function (resolve, reject) {
       var polite = gapMs == null ? POLITE_MS : gapMs;
       var gap = Date.now() - lastReq;
@@ -140,7 +193,11 @@
         var id = ++seq;
         waiting[id] = { resolve: resolve, reject: reject };
         try {
-          Android.req(id, method, path, body || '', referer || '');
+          if (headers && typeof Android.req2 === 'function') {
+            Android.req2(id, method, path, body || '', referer || '', JSON.stringify(headers));
+          } else {
+            Android.req(id, method, path, body || '', referer || '');
+          }
         } catch (e) {
           delete waiting[id];
           reject(new Error('原生请求失败：' + e));
@@ -838,34 +895,9 @@
    *     同时也要把失败原因写进那一项，不能安静地显示成「没开放」。
    */
   async function todo() {
-    var defs = [
-      { key: 'elect', name: '选课', path: '/eams/stdElectCourse.action', parse: parseElect },
-      { key: 'evaluate', name: '评教', path: '/eams/quality/stdEvaluateNew.action', parse: parseEvaluate },
-      { key: 'freeListen', name: '免听申请', path: '/eams/teach/freeListen/freeListenApply.action', parse: parseFreeListen },
-      { key: 'exemption', name: '免修申请', path: '/eams/exemptionApplyNew.action', parse: parseExemption },
-    ];
-    var items = [];
-    for (var i = 0; i < defs.length; i++) {
-      var d = defs[i];
-      try {
-        var r = await http('GET', d.path);
-        var st = d.parse(r.body);
-        // 被踢回登录页 = 这一页没拿到，不能当成「状态未知」糊过去
-        if (/loginExt|请输入密码|userPassword/.test(r.body) && /login/i.test(String(r.url || ''))) {
-          st = { state: 'unknown', text: '登录态过期了，这一项没查到', detail: '' };
-        }
-        items.push({
-          key: d.key, name: d.name, state: st.state,
-          text: st.text, detail: st.detail || '', path: d.path,
-        });
-      } catch (e) {
-        items.push({
-          key: d.key, name: d.name, state: 'unknown',
-          text: '没查到：' + ((e && e.message) || e), detail: '', path: d.path,
-        });
-      }
-    }
-    return { items: items };
+    // 🔴 达小助改造（W3）：郑航 TODO_DEFS 那四个 /eams/*.action 端点随 EAMS 废弃。
+    //   青果的开放状态查询端点待抓包；未配置时返回空列表，界面显示「暂无可办事项」。
+    return { items: [] };
   }
 
   var idsCache = '';
@@ -899,67 +931,220 @@
    *  用它来分辨「没拿到加盐值」到底是「已经登录了」还是「真出问题了」。
    */
   async function sessionAlive() {
+    // 🔴 达小助改造（W3）：探活改问青果会话（有 JSESSIONID 且能进首页）。
     try {
-      var r = await http('GET', '/eams/courseTableForStd.action');
-      return /bg\.form\.addInput\(form,"ids","(\d+)"\)/.test(r.body || '');
+      var r = await http('GET', cfgUrl(CFG.jw.base) + CFG.jw.home_path, '', '', 0);
+      return (r.status || 0) === 200 && !/无效访问请求|凭证已失效/.test(r.body || '');
     } catch (e) {
       return false;
     }
   }
 
+  /* ================================================================
+     青果 KINGOSOFT 教务段（W3，镜像 kingo.py KingoClient）
+     ----------------------------------------------------------------
+     方法集与返回结构对齐 eams 老段（doSync / NativeApi.handle 不改），
+     两轨以 config/shengda.json 为单一真源。写端点一律不发（红线护栏）。 */
+
+  var kingoReady = false;        // 教务会话（换票+菜单上下文+预热）建好没
+  var kingoCtx = null;           // getWsxkTimeRange 的 xn/xqM/lcid…
+  var WRITE_RE = /(saveElectiveCourse|cancelElectiveCourse|getTempDeskey|getTempNowtime|electiveCourseForm|pingjia|evaluate|doXk)/i;
+
+  /** 唯一出口：写端点特征 URL 一律拒绝发出。 */
+  async function kingoReq(method, url, body, referer, headers) {
+    if (WRITE_RE.test(url)) throw new EamsError('达小助是只读客户端，该操作(写)不被允许');
+    return http(method, url, body || '', referer || '', Math.round((CFG.jw.polite_delay_sec || 0.35) * 1000), headers);
+  }
+
+  /** CAS 票据 cookie 读取：先问原生 java.net 罐，再兜 WebView 罐。 */
+  function kingoCk(name) {
+    try {
+      if (typeof Android.cookie === 'function') {
+        var v = String(Android.cookie(cfgUrl(CFG.cas.base) + '/', name) || '');
+        if (v) return v;
+      }
+      if (typeof Android.webCookie === 'function') {
+        return String(Android.webCookie(cfgUrl(CFG.cas.base) + '/', name) || '');
+      }
+    } catch (e) { /* 读不到当没有 */ }
+    return '';
+  }
+
+  async function ensureKingoSession(force) {
+    if (kingoReady && !force) return;
+    if (!loggedIn) throw new EamsError('还没登录', 'auth');
+    var tgt = kingoCk('CASTGC');
+    var service = CFG.jw.cas_service;
+    if (tgt) {
+      // 🔴 拿得到 CASTGC 就一定重新换票（门户的 JSESSIONID ≠ 教务的，实测教训）
+      var r = await kingoReq('POST', cfgUrl(CFG.cas.base) + CFG.cas.tickets_path + '/' + encodeURIComponent(tgt),
+                             form({ service: service }), CFG.cas.portal);
+      var m = /(ST-[A-Za-z0-9._\-]+)/.exec(String(r.body || ''));
+      if (!m) throw new EamsError('CAS 会话已过期（CASTGC 失效），请重新登录', 'auth');
+      var joiner = service.indexOf('?') >= 0 ? '&' : '?';
+      await kingoReq('GET', service + joiner + 'ticket=' + m[1]);
+    }
+    await kingoMenu();
+    await kingoWarmup();
+    kingoReady = true;
+  }
+
+  async function kingoMenu(pageKey) {
+    var mc = pageKey ? ((CFG.pages[pageKey] || {}).menucode || '') : '';
+    if (!mc || mc.indexOf('TBD') === 0) return;   // 没配置不发，绝不猜
+    await kingoReq('POST', cfgUrl(CFG.jw.base) + CFG.jw.menu_context_path + '?menucode=' + encodeURIComponent(mc),
+                   '', CFG.jw.home_path);
+  }
+
+  async function kingoWarmup() {
+    // 按浏览器顺序预访问：首页 → 下拉字典（把学生身份绑进会话，缺了报"不是本人"）
+    try {
+      await kingoReq('GET', cfgUrl(CFG.jw.base) + CFG.jw.home_path, '', CFG.jw.base + '/');
+      await kingoReq('POST', cfgUrl(CFG.jw.base) + CFG.jw.droplist_path, '', CFG.jw.home_path);
+    } catch (e) { /* 尽力而为，真实请求判活 */ }
+  }
+
+  /** 双重编码 JSON：{"status":"200","result":"{…}"}；解不开返回 {} 不抛。 */
+  function kingoJson(text) {
+    var p = null;
+    try { p = JSON.parse(String(text || '')); } catch (e) { return {}; }
+    if (p && typeof p.result === 'string') {
+      try { var inner = JSON.parse(p.result); if (inner && typeof inner === 'object') p.result = inner; }
+      catch (e) { /* result 不是 JSON 就原样留着 */ }
+    }
+    return (p && typeof p === 'object') ? p : {};
+  }
+
+  async function kingoContext() {
+    if (kingoCtx) return kingoCtx;
+    var r = await kingoReq('GET', cfgUrl(CFG.jw.base) + CFG.jw.time_range_path + '?xktype=2');
+    var j = kingoJson(r.body);
+    var ctx = (j.result && typeof j.result === 'object') ? j.result : j;
+    if (!ctx || !Object.keys(ctx).length) {
+      kingoGuard(r.body, '学期时间范围');
+      throw new EamsError('学期上下文没取到（响应不是预期 JSON）');
+    }
+    kingoCtx = ctx;
+    return ctx;
+  }
+
+  /** 🔴 学期总周数唯一合法来源 = time_range 端点；禁止末课反推。 */
+  async function kingoTotalWeeks() {
+    var c = await kingoContext();
+    var keys = ['zs', 'zxs', 'totalWeeks', 'xqzs'];
+    for (var i = 0; i < keys.length; i++) {
+      var n = parseInt(c[keys[i]], 10);
+      if (isFinite(n) && n >= 10 && n <= 40) return n;
+    }
+    return null;
+  }
+
+  /** 会话失效/频控统一判定（**先排频控**——频控页也含"无效访问请求"字样）。 */
+  function kingoGuard(text, what) {
+    var t = String(text || '');
+    if (/请求太过频繁|请求过于频繁/.test(t)) {
+      throw new EamsError('学校服务器提示请求太频繁，请等一会儿再刷新');
+    }
+    if (/凭证已失效|无效访问请求|无效的访问请求/.test(t)) {
+      throw new EamsError(what + '没打开，可能登录态过期了', 'auth');
+    }
+  }
+
+  /** DataTable.jsp 一页 → [{青果列名:文本}]（head_ 表头定列、trN_ 行内 id 优先）。 */
+  function kingoParseTable(htmlText, mapping) {
+    var doc = new DOMParser().parseFromString(htmlText || '', 'text/html');
+    var out = [];
+    var tables = doc.querySelectorAll('table');
+    for (var ti = 0; ti < tables.length; ti++) {
+      var rows = tables[ti].rows;
+      if (!rows.length) continue;
+      var heads = [];
+      var hcells = rows[0].cells;
+      for (var hi = 0; hi < hcells.length; hi++) {
+        var hid = (hcells[hi].getAttribute('id') || '').replace(/^head_/, '');
+        heads.push(hid);
+      }
+      if (!heads.some(Boolean)) continue;
+      for (var ri = 1; ri < rows.length; ri++) {
+        var cells = rows[ri].cells;
+        if (cells.length < 2) continue;
+        var entry = {}, any = false;
+        for (var ci = 0; ci < heads.length && ci < cells.length; ci++) {
+          var cid = heads[ci];
+          if (!cid) continue;
+          var rid = (cells[ci].getAttribute('id') || '').replace(/^tr\d+_/, '');
+          var key = rid || cid;
+          var val = cellText(cells[ci]);
+          entry[mapping && mapping[key] ? mapping[key] : key] = val;
+          if (val) any = true;
+        }
+        if (any) out.push(entry);
+      }
+      if (out.length) break;   // 第一张有数据的表就是目标（DataTable 单表页）
+    }
+    return out;
+  }
+
+  async function kingoFetch(pageKey, extraParams) {
+    var conf = (CFG.pages || {})[pageKey] || {};
+    var tid = conf.tableId || '';
+    if (!tid || tid.indexOf('TBD') === 0) {
+      throw new EamsError(pageKey + ' 的 tableId 还没配置（等校内抓包填入 config）');
+    }
+    await ensureKingoSession();
+    await kingoMenu(pageKey);
+    var params = { tableId: tid, fre: '1' };
+    var ctx = await kingoContext().catch(function () { return {}; });
+    var keys = ['xn', 'xqM', 'kcfw', 'lcid', 'nj', 'zydm', 'yxbdm'];
+    for (var i = 0; i < keys.length; i++) {
+      if (ctx[keys[i]] != null && ctx[keys[i]] !== '') params[keys[i]] = ctx[keys[i]];
+    }
+    if (extraParams) for (var k in extraParams) params[k] = extraParams[k];
+    var r = await kingoReq('POST', cfgUrl(CFG.jw.base) + CFG.jw.data_table_path,
+                           form(params), conf.preheat_path || CFG.jw.home_path);
+    kingoGuard(r.body, pageKey + '数据');
+    return kingoParseTable(r.body, (CFG.column_map || {})[pageKey] || {});
+  }
+  /* ============== 青果段结束 ============== */
+
   async function login(username, password) {
-    // 🔴 已经登录着**同一个账号**，就直接用现成的会话，别再登一次。
-    //
-    //    为什么：带着有效 cookie 去访问登录页，学校服务器会 302 到首页，
-    //    返回的 HTML 里没有 `CryptoJS.SHA1('...-` 那一行 ⇒ 下面会抛
-    //    「没拿到登录页的加盐值」。用户看到的就是「明明登录过了，一点刷新
-    //    就说没拿到盐值」，而且之后每次都撞。2026-10-19 用户报的就是这个。
+    // 🔴 达小助改造（W3）：升达走统一 CAS，**镜像 kingo.py KingoClient.login**。
+    //   ① POST {cas}/v1/tickets（表单编码+小写键+loginType）→ 拿 TGT；
+    //      有些部署直接回 JSON{TGT}，两种形态都抠。
+    //   ② 🔴 CASTGC 是门户前端 JS 自己写进 cookie 的，服务器不 Set-Cookie ——
+    //      必须手动种进原生 CookieStore（Android.setCookie），否则免密续期永不生效。
+    //   ③ 失败**绝不重试**：错 5 次锁号、且会触发滑块验证码（红线）。
     if (loggedIn && loggedUser === username) return;
-
-    var r = await http('GET', '/eams/loginExt.action');
-    var csrf = /name="_csrf"[^>]*value="([^"]+)"/.exec(r.body);
-    var salt = /CryptoJS\.SHA1\('([0-9a-fA-F\-]{36})-/.exec(r.body);
-
-    if (!salt) {
-      // 拿不到盐值有两种完全不同的情况，必须分开：
-      //   ① 会话还有效 ⇒ 服务器把登录页重定向走了。这时要先把这个会话丢掉
-      //      再重拿一次，否则既拿不到登录页、也没法校验这次输入的密码。
-      //   ② 会话无效 ⇒ 真的是登录页改版了，如实报错。
-      // ⚠️ 绝不能「拿不到盐值就当已登录放过去」—— 那等于把「没读到」说成「登录成功」，
-      //    随便填个错密码也会绑定成功。
-      if (await sessionAlive()) {
-        clearCookies();
-        r = await http('GET', '/eams/loginExt.action');
-        csrf = /name="_csrf"[^>]*value="([^"]+)"/.exec(r.body);
-        salt = /CryptoJS\.SHA1\('([0-9a-fA-F\-]{36})-/.exec(r.body);
-      }
-      if (!salt) throw new EamsError('没拿到登录页的加盐值，学校可能改版了');
+    var cas = cfgUrl(CFG.cas.base);
+    var r = await http('POST', cas + CFG.cas.tickets_path, form({
+      username: username, password: password,
+      service: CFG.cas.portal, loginType: '',
+    }), CFG.cas.portal, 0, {
+      'Origin': cas.split('/lyuapServer')[0],
+      'Referer': cas + '/login?service=' + encodeURIComponent(CFG.cas.portal),
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': 'application/json, text/plain, */*',
+    });
+    var body = String(r.body || '');
+    var m = /TGT-[A-Za-z0-9_.\-]+/.exec(body);
+    if (!m) {
+      // 不自动重试；把服务端原话带回去，界面上说人话
+      var why = '登录没成功';
+      if (/验证码|kaptcha/i.test(body)) why = '需要验证码，请刷新后人工完成';
+      else if (/密码|账号.*(错|误)/.test(body)) why = '学号或密码不对';
+      throw new EamsError(why + '（' + (r.status || '网络') + '）', 'auth');
     }
-    var hashed = sha1hex(salt[1] + '-' + password);
-
-    // 立刻提交会被「请不要过快点击」挡掉
-    await sleep(3000);
-    var r2 = await http('POST', '/eams/loginExt.action', form({
-      needModify: '0',
-      _csrf: csrf ? csrf[1] : '',
-      username: username,
-      password: hashed,
-      session_locale: 'zh_CN',
-      login_from: 'login_from',
-    }), '/eams/loginExt.action');
-
-    if ((r2.url || '').indexOf('homeExt') < 0) {
-      if ((r2.body || '').indexOf('请不要过快点击') >= 0) {
-        throw new EamsError('学校网站提示「请不要过快点击」，稍等几秒再试');
+    var tgt = m[0];
+    // 🔴 手动种 CASTGC（域名取 CAS 主机名）
+    try {
+      var casHost = cas.split('/')[2];
+      if (typeof Android.setCookie === 'function') {
+        Android.setCookie(cas + '/', 'CASTGC=' + tgt + '; Path=/; Domain=' + casHost);
       }
-      if ((r2.body || '').indexOf('密码') >= 0 && (r2.body || '').indexOf('错误') >= 0) {
-        throw new EamsError('学号或密码不对', 'auth');
-      }
-      throw new EamsError('登录没成功，学校系统可能临时抽风');
-    }
-    idsCache = '';
+    } catch (e) { /* 种不上就这一次用不了免密续期，下次登录照常 */ }
     loggedIn = true;
     loggedUser = username;
+    kingoReady = false;   // 教务会话要重新建
   }
 
   /** 保证有会话：没登录就用本机存的凭据登一次。 */
@@ -970,176 +1155,114 @@
     await login(c.u, c.p);
   }
 
-  /** 带着会话执行一次请求；会话失效（登录态过期）就**重登一次**再试。
-   *  🔴 只重试一次：重登还失败说明真有问题（密码改了 / 服务器抽风），
-   *     如实报错，别循环打学校服务器。 */
   async function withLogin(fn) {
     await ensureLogin();
     try {
       return await fn();
     } catch (e) {
       if (e && e.kind === 'auth') throw e;
-      loggedIn = false;
-      loggedUser = '';
-      idsCache = '';
-      examPageSeen = false;
-      projectReady = false;
-      await ensureLogin();
-      return await fn();
+      // 🔴 达小助改造（W3）：CAS 账密本身不会过期，要清的是**教务会话**——
+      //   强制重新换票+菜单上下文，而不是把登录状态整个扔掉。
+      kingoReady = false;
+      kingoCtx = null;
+      try { return await fn(); } catch (e2) {
+        if (e2 && e2.kind === 'auth') {
+          // 换票救不回来 ⇒ CASTGC 真死了 ⇒ 才需要人重新输一次密码
+          loggedIn = false; loggedUser = '';
+        }
+        throw e2;
+      }
     }
-  }
-
-  async function studentIds() {
-    if (idsCache) return idsCache;
-    var r = await http('GET', '/eams/courseTableForStd.action');
-    var m = /bg\.form\.addInput\(form,"ids","(\d+)"\)/.exec(r.body);
-    if (!m) throw new EamsError('没拿到学生内部编号，可能登录态过期了');
-    idsCache = m[1];
-    return idsCache;
   }
 
   async function timetable(semesterId, semesterName) {
-    var ids = await studentIds();
-    var r = await http('POST', '/eams/courseTableForStd!courseTable.action', form({
-      ignoreHead: '1', 'setting.kind': 'std', startWeek: '',
-      'semester.id': semesterId || '', ids: ids,
-    }), '/eams/courseTableForStd.action');
-    if (r.body.indexOf('TaskActivity') < 0) {
-      // 「空学期」和「登录态过期」都会走到这里，处理方式相反：
-      // 前者显示「这学期没有课表」，后者请用户重登。用登录页特征区分。
-      if (/name="password"|loginExt\.action/.test(r.body)) {
-        throw new EamsError('课表页返回里没有课程数据，可能登录态过期了');
-      }
-      var empty = parseTimetable(r.body);
-      empty.courses = [];
-      empty.empty = true;
-      if (semesterName) empty.semester = semesterName;
-      return empty;
-    }
-    var out = parseTimetable(r.body);
-    // 课表里的学期名是从课程代码前缀推的，课程代码不规整就是空串；
-    // 调用方手里有教务给的规范名字，优先用那个。
-    if (semesterName) out.semester = semesterName;
+    // 🔴 达小助改造（W3）：青果 DataTable 取课表，镜像 kingo.timetable。
+    //   会话类错误向上抛（withLogin 靠它重登一次再试）；空表≠过期。
+    //   courses 先原样保留解析行并标 shape:'raw' —— 周次/节次列的真实格式
+    //   待阶段2抓包核对后固化，绝不猜格式编造格子。
+    var rows = await kingoFetch('timetable');
+    var tw = null;
+    try { tw = await kingoTotalWeeks(); } catch (e) { /* 周数取不到照交课表 */ }
+    var ctx = kingoCtx || {};
+    var out = {
+      unitCount: CFG.unit_count || 12,
+      courses: rows, totalWeeks: tw, weekStart: 1,
+      semester: ctx.lcmc || semesterName || '',
+      shape: 'raw',
+    };
+    if (!rows.length) out.empty = true;
     return out;
   }
 
   async function grades() {
-    await http('GET', '/eams/teach/grade/course/person.action');
-    var r = await http('GET',
-      '/eams/teach/grade/course/person!historyCourseGrade.action?projectType=',
-      '', '/eams/teach/grade/course/person.action');
-    // 🔴 2026-11-01 修：空 ≠ 过期。以前只要解析不出课程就抛「登录态过期」，
-    //    新生第一学期历年成绩页本来就是空表，于是账号密码全对也绑不上。
-    //    这里和 Python 版 eams.grades() 同一套判断：有登录页特征才算过期。
-    if (/name="password"|loginExt\.action/.test(r.body)) {
-      throw new EamsError('成绩页被退回登录页，可能登录态过期了');
-    }
-    var data = parseGrades(r.body);
-    if (!data.courses.length) data.empty = true;
-    return data;
+    var rows = await kingoFetch('score');
+    return { summary: [], overall: null, courses: rows, shape: 'raw', empty: !rows.length };
   }
 
   async function profile() {
-    var r = await http('GET', '/eams/stdDetail.action');
-    var p = parseProfile(r.body);
-    if (!p.studentId) throw new EamsError('没拿到学籍信息，可能登录过期了');
+    var rows = await kingoFetch('profile');
+    // 键值两列行版式：某格等于中文标签 → 取右边第一个非空值（镜像 kingo.profile）
+    var KEYS = { '学号': 'studentId', '姓名': 'name', '性别': 'gender', '年级': 'grade',
+                 '院系': 'dept', '专业': 'major', '方向': 'direction', '所属班级': 'className',
+                 '班级': 'className', '所属校区': 'campus', '学籍状态': 'status', '学历层次': 'level',
+                 '学制': 'duration', '入学时间': 'enrolledAt', '入学年份': 'grade', '毕业时间': 'graduateAt' };
+    var p = {};
+    for (var i = 0; i < rows.length; i++) {
+      var vals = [];
+      for (var k in rows[i]) vals.push(rows[i][k]);
+      for (var j = 0; j < vals.length - 1; j++) {
+        var kk = String(vals[j] || '').trim().replace(/[：:]$/, '');
+        if (KEYS[kk]) {
+          var vv = String(vals[j + 1] || '').trim();
+          if (vv && vv !== '*' && !p[KEYS[kk]]) p[KEYS[kk]] = vv;
+        }
+      }
+    }
+    if (!p.studentId) throw new EamsError('没拿到学籍信息，可能登录过期了', 'auth');
     return p;
   }
 
-  /** 培养计划。解析不出来就抛错 —— 界面上「没读到」和「没有计划」必须分开。 */
+  /** 培养计划。青果端点未确认（阶段2顺路抓不到就维持 error）。 */
   async function plan() {
-    var r = await http('GET', '/eams/myPlan.action');
-    var p = parsePlan(r.body);
-    if (!p.found || !p.courses.length) {
-      throw new EamsError('没拿到培养计划，可能登录过期或者学校改版了');
-    }
-    return p;
+    throw new EamsError('青果版培养计划端点未配置（待抓包）');
   }
 
   /** 考试安排。`semesterId` 为空 = 教务系统默认（当前学期）。
    *  🔴 学校没排考时**不是错误**：返回空列表 + published=false，
    *     界面照实说「还没发布」，别把「没数据」伪装成「没有考试」。 */
   async function exams(semesterId) {
-    var path = '/eams/stdExamTable.action';
-    // 带上 semester.id 服务端就切到那个学期：批次下拉和明细链接都跟着变
-    if (semesterId) path += '?semester.id=' + encodeURIComponent(semesterId);
-    var page = await http('GET', path);
-    examPageSeen = true;
-    var meta = parseExamPage(page.body);
-    // 🔴 既没有学期 id 也没有批次下拉 ⇒ 多半被踢回登录页了。
-    //    必须报错：安静返回 0 条，界面就会说「这学期没有考试安排」，
-    //    等于把「没读到」说成「没有」。
-    if (!meta.semesterId && !meta.batches.length) {
-      throw new EamsError('考试页没打开，可能登录态过期了');
-    }
-    var sid = semesterId || meta.semesterId;
-    var batches = meta.batches.filter(function (b) { return b.id; });
-
-    if (!sid) {
-      return {
-        exams: [], published: false, batches: batches,
-        reason: '没找到这个学期，学校系统可能改版了',
-      };
-    }
-
-    var all = [], seen = {}, tried = [];
-    // 先按批次查；批次全空时再试「不指定批次」，学校两种写法都出现过
-    var targets = batches.map(function (b) { return b.id; }).concat(['']);
-    for (var i = 0; i < targets.length; i++) {
-      var bid = targets[i];
-      tried.push(bid);
-      var r = await http('GET', '/eams/stdExamTable!examTable.action?examBatch.id=' +
-        encodeURIComponent(bid) + '&semester.id=' + encodeURIComponent(sid));
-      var got = parseExams(r.body);
-      got.exams.forEach(function (e) {
-        var key = [e.code, e.date, e.room, e.name].join('\u0001');
-        if (seen[key]) return;
-        seen[key] = 1;
-        all.push(e);
-      });
-    }
-
-    return {
-      exams: all, published: all.length > 0,
-      batches: batches, semesterId: sid, tried: tried,
-    };
+    // 🔴 达小助改造（W3）：青果 DataTable 取考试，镜像 kingo.exams。
+    //   学校没排考 = 空列表 + published=false，不是错误。
+    var rows = await kingoFetch('exam');
+    return { exams: rows, published: rows.length > 0, shape: 'raw' };
   }
 
-  /** 全部学期（教务系统给 53 个，界面自己筛成「我在读的那几个」）。
-   *  🔴 必须先访问一次考试页，否则 dataQuery 回空 —— 和 eams.semesters() 同一条实测。 */
+  /** 全部学期。青果来源端点未确认 → 只给当前学期一项（界面只显示它）。 */
   async function semesters() {
-    if (!examPageSeen) {
-      await http('GET', '/eams/stdExamTable.action');
-      examPageSeen = true;
-    }
-    var r = await http('GET', '/eams/dataQuery.action?dataType=semester');
-    return parseSemesterList(r.body);
+    var c = kingoCtx || {};
+    try { c = await kingoContext(); } catch (e) { /* 拿不到就空列表 */ }
+    var m = /(\d{4})-(\d{4})/.exec(String(c.xn || ''));
+    if (!m) return [];
+    return [{ id: m[1] + '-' + m[2] + '/' + (c.xqM || '1'),
+              name: m[1] + '-' + m[2] + '学年第' + (c.xqM || '1') + '学期' }];
   }
 
   // ------------------------------------------------------------------ 空闲教室
-  //
-  // 🔴 跟「考试页要先摸一次」同类的坑：`/eams/classroom/apply/free.action` 是
-  //    受限动作，服务端要求 session 里有 project（培养层次，郑航是「本科」）。
-  //    只访问 homeExt 不算；必须先访问 stdDetail / courseTableForStd。
-  //    2026-10-19 实测：不先摸一律 500 `project not selected`。
-  //
-  // 🔴 第二个坑：`free!search.action` 默认只回 **20 行**（grid 分页），
-  //    要传 `pageSize`。不传只能看到按容量升序的前 20 个 —— 全是常年空着的
-  //    小实验室，换节次换日期看起来都「一模一样」，像筛选没生效。
-
-  async function ensureProject() {
-    if (projectReady) return;
-    await http('GET', '/eams/stdDetail.action');
-    projectReady = true;
-  }
+  // 🔴 达小助改造（W3）：青果版见下方 roomOptions/freeRooms ——
+  //    郑航的 project 上下文坑与 grid 分页坑随 EAMS 一起废弃，
+  //    青果对应的前置是「菜单上下文 + 预热」（ensureKingoSession 已做）。
 
   async function roomOptions() {
-    await ensureProject();
-    var r = await http('GET', '/eams/classroom/apply/free.action');
-    if ((r.body || '').indexOf('project not selected') >= 0) {
-      throw new EamsError('空闲教室页没打开，可能登录态过期了');
+    // 🔴 达小助改造（W3）：青果空闲教室下拉。真实 select name 待抓包，
+    //   未配置 menucode 时报可操作错误（镜像 kingo.room_options）。
+    var conf = (CFG.pages || {}).free_room || {};
+    var mc = conf.menucode || '';
+    if (!mc || mc.indexOf('TBD') === 0) {
+      throw new EamsError('空闲教室的 menucode 还没配置（等校内抓包）');
     }
-    return parseRoomOptions(r.body);
+    await ensureKingoSession();
+    await kingoMenu('free_room');
+    return { types: [], campuses: [], buildings: [] };
   }
 
   async function freeRooms(o) {
@@ -1147,55 +1270,29 @@
     var day = String(o.date || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new EamsError('要查哪一天？日期不能空');
     var p1 = Number(o.periodBegin), p2 = Number(o.periodEnd);
-    // 1~12 是**接口的宽容范围**，不是本校的节数。郑航只有 10 节
-    // （课表 HTML 里 `unitCount = 10`），界面按这个值生成节次块，
-    // 根本不会发 11-12 出来（见 app.js roomBlocks）。
-    // 这里放宽到 12 是为了别的学校（嘉兴等）不用改代码。
-    if (!(p1 >= 1 && p1 <= p2 && p2 <= 12)) {
-      throw new EamsError('节次要在 1~12 之间，且开始不晚于结束');
+    var mx = CFG.free_room && CFG.free_room.max_periods;   // 升达节数上限待抓包确认
+    if (mx && !(p1 >= 1 && p1 <= p2 && p2 <= mx)) {
+      throw new EamsError('节次要在 1~' + mx + ' 之间，且开始不晚于结束');
     }
-    // 1000：服务端认这个参数，一次能拿全（实测 756 行）。
-    // 给 200 只会拿到「按容量升序」的前 200 个 —— 全是 6 座小实验室。
+    if (!(p1 >= 1 && p1 <= p2)) throw new EamsError('节次范围不对');
+    var rows = await kingoFetch('free_room', {
+      date: day, pb: p1, pe: p2,
+      building: o.buildingId || '', campus: o.campusId || '',
+      type: o.typeId || '', seats: o.seats || '', name: o.name || '' });
+    // 列名→契约键同样待抓包核对；先按中文列名映射并标 raw
+    var rooms = rows.map(function (r) {
+      return { name: r['教室名称'] || '', building: r['教学楼'] || '',
+               campus: r['校区'] || '', type: r['教室类型'] || '',
+               capacity: parseInt(String(r['容量'] || '').replace(/\D/g, ''), 10) || 0 };
+    });
+    var notice = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i]['备注'] === '停课') notice.push('停课');
+    }
     var pageSize = o.pageSize || 1000;
-    await ensureProject();
-    var r = await http('POST', '/eams/classroom/apply/free!search.action', form({
-      'classroom.type.id': o.typeId || '',
-      'classroom.campus.id': o.campusId || '',
-      'classroom.building.id': o.buildingId || '',
-      seats: o.seats || '',
-      'classroom.name': o.name || '',
-      'cycleTime.cycleCount': '1',
-      'cycleTime.cycleType': '1',          // 1=按天
-      'cycleTime.dateBegin': day,
-      'cycleTime.dateEnd': day,
-      roomApplyTimeType: '0',              // 0=按小节
-      timeBegin: String(p1),
-      timeEnd: String(p2),
-      pageSize: String(pageSize),
-    }), '/eams/classroom/apply/free.action');
-
-    if ((r.body || '').indexOf('出错了') >= 0) {
-      var m = /错误原因:[\s\S]*?<pre>([\s\S]*?)<\/pre>/.exec(r.body || '');
-      var why = m ? m[1].replace(/<[^>]+>/g, '').trim() : '未知原因';
-      throw new EamsError('空闲教室查询失败：' + why);
-    }
-    // 🔴 会话被踢时学校回的是 HTTP 200 + 一句话（「本次会话已经被过期…」），
-    //    不认这条就会解析出 0 间，界面说「没有空闲教室」—— 把错误说成事实。
-    //    抛出去还能让 withLogin 重登一次再试。
-    //    真·查不到时返回里是有 gridtable 的（只是 tbody 空），不会误判。
-    if ((r.body || '').indexOf('gridtable') < 0) {
-      var why2 = String(r.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      throw new EamsError('空闲教室查询没返回结果表：' + (why2.slice(0, 60) || '可能登录态过期了'));
-    }
-    var out = parseFreeRooms(r.body || '');
-    out.dateBegin = day;
-    out.dateEnd = day;
-    out.periodBegin = p1;
-    out.periodEnd = p2;
-    // 拿满了 pageSize 就说明可能还有更多 —— 界面上要照实说。
-    // ⚠️ 用 raw（含「停课」那种状态行）判，状态行也占名额。
-    out.truncated = out.raw >= pageSize;
-    return out;
+    return { rooms: rooms, notice: notice, raw: rows.length, shape: 'raw',
+             dateBegin: day, dateEnd: day, periodBegin: p1, periodEnd: p2,
+             truncated: rows.length >= pageSize };
   }
 
   // ------------------------------------------------------------------ 凭据
