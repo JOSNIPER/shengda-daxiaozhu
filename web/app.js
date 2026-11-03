@@ -604,8 +604,22 @@ function weekCourseCount(occ) {
  *  ⚠️ 返回值仍是「真实星期几」的数组，不是列号 —— 以后要是再想隐藏某天，
  *     记得 `cols[ci]` 才是星期几，`ci` 只是第几列。
  */
+/** 显示哪几天。
+ *
+ *  🔴 2026-11-03：加「只看工作日」开关（CFG.fiveDay）。
+ *  7 列挤在 390dp 里每列只有 44px，课名被拆成两三个字一行，读起来很费劲；
+ *  只看周一到周五时每列 62px，同样的课名少折一半。WakeUp / 小爱课程表
+ *  都有这个选项，默认给全 7 天（不藏课），要宽一点自己切。
+ *  切到 5 天时，如果本周周末其实有课，顶栏会给一句提醒 —— 不能让课悄悄消失。 */
 function visibleDays() {
-  return [0, 1, 2, 3, 4, 5, 6];
+  if (!CFG.fiveDay) return [0, 1, 2, 3, 4, 5, 6];
+  return [0, 1, 2, 3, 4];
+}
+
+/** 本周周末有没有课（只在「只看工作日」时才需要提示）。 */
+function weekendBusy(week) {
+  const occ = week >= 1 ? occupancy(week) : {};
+  return Object.keys(occ).some((k) => Number(String(k).split(':')[0]) >= 5);
 }
 
 // ------------------------------------------------------------------ 切换页
@@ -1217,6 +1231,13 @@ function renderWeek() {
   // 不标的话用户会以为按钮坏了。
   // 历史学期下这个按钮变成「回到现在」—— 否则它点了会跳到「历史学期的今天」，
   // 而那个日期根本不存在（week 被夹到 1，看着像没反应）。
+  // 只看工作日时，若本周周末有课必须说一声 —— 否则课就「消失」了。
+  // 拼在副标题后面（复用 .wk-cnt 的样式），不额外占一行。
+  if (CFG.fiveDay && weekendBusy(week)) {
+    $('wkRange').innerHTML += '<i class="wk-cnt"> · 周末也有课</i>';
+  }
+  const daysLab = $('wkDaysLab');
+  if (daysLab) daysLab.textContent = CFG.fiveDay ? '5天' : '7天';
   $('wkToday').classList.toggle('is-here', ttIsNow() && week === currentWeek());
   $('wkToday').classList.toggle('is-back', !ttIsNow());
   $('wkToday').textContent = ttIsNow() ? '今天' : '现在';
@@ -1233,6 +1254,10 @@ function renderWeek() {
   });
   fitRoomLines(track);
   centerTrack(track);
+  // 🔴 首帧量出来的页宽常常不是最终值（表格还在布局/滚动条还没出现），
+  //    平移量就会多出几十像素：左边漏出上一周的一条、右边第 7 列被裁。
+  //    下一帧再核一次，代价是零。
+  requestAnimationFrame(function () { centerTrack($('wkTrack')); });
 }
 
 /** 放不下的单行文本：量一下宽度，放不下就把字号往下压（最低 8px）。
@@ -1275,15 +1300,40 @@ function fitRoomLines(root) {
 }
 
 /** 左边固定的「节次 / 起止时间」栏。它不跟着翻页走，所以只画一次。 */
+/** 哪几节是「换半天」的第一节（上午 / 下午 / 晚上）。
+ *  判据是时间间隔，不是写死第几节：课间只有几分钟，跨午别至少隔一个多小时。
+ *  换作息（比如晚上从第 9 节开始）时这个函数不用改。 */
+function blockStarts(tt, units) {
+  const out = [];
+  for (let p = 1; p < units; p++) {
+    const prevEnd = tt[p - 1] && tt[p - 1][1];
+    const curStart = tt[p] && tt[p][0];
+    if (!prevEnd || !curStart) continue;
+    const a = toMin(prevEnd), b = toMin(curStart);
+    if (a == null || b == null) continue;
+    if (b - a >= 50) out.push(p);
+  }
+  return out;
+}
+
+/** "08:45" → 526。解析不出来返回 null。 */
+function toMin(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
 function renderGutter() {
   const units = (curTT().unitCount || 10);
   const tt = times();
   const g = $('wkGutter');
   g.style.setProperty('--units', units);
+  const seps = blockStarts(tt, units);
   let html = '<div class="g-corner"></div>';
   for (let p = 0; p < units; p++) {
     // 节次 + 起 + 止（WakeUp 那样三行）。只写开始时间看不出上到几点。
-    html += '<div class="g-slot"><b>' + (p + 1) + '</b>' +
+    html += '<div class="g-slot' + (seps.indexOf(p) >= 0 ? ' g-slot-sep' : '') +
+      '"><b>' + (p + 1) + '</b>' +
       (tt[p][0] ? '<i>' + tt[p][0] + '</i><i>' + tt[p][1] + '</i>' : '') + '</div>';
   }
   g.innerHTML = html;
@@ -1416,6 +1466,13 @@ function buildWeekGrid(week) {
       p = q;
     }
   }
+  // 半天之间的分隔线：横跨所有列的一条虚线，扫一眼就知道上午过完了
+  blockStarts(tt, units).forEach((p) => {
+    const sep = document.createElement('div');
+    sep.className = 'g-sep';
+    sep.style.gridRow = String(p + 2);      // 第 1 行是星期表头
+    frag.appendChild(sep);
+  });
   grid.appendChild(frag);
   return grid;
 }
@@ -2129,6 +2186,32 @@ document.addEventListener('visibilitychange', () => {
    进出都走 switchTab —— 不要自己改 hidden，否则 CUR_PAGE、底部高亮、
    系统返回键三处会互相打架。 */
 $('calBack').addEventListener('click', () => switchTab('schedule'));
+$('wkDays').addEventListener('click', () => {
+  CFG.fiveDay = !CFG.fiveDay;
+  store.set(KEY.settings, CFG);
+  renderSchedule();
+});
+
+/* 轨道宽度变了就重新居中。
+   真机截图里「周日被裁掉半列」就是这个原因：首帧量到的页宽比最终宽度大，
+   平移量一直停在旧值上。resize 事件不够用 —— 侧栏/键盘/滚动条出现时
+   窗口宽度可能不变，只有容器的宽度变了。
+   宽度变化只发生在转屏/分屏/滚动条出现这些时刻，不是每帧都触发，
+   所以不用担心和拖动抢。 */
+(function watchTrackWidth() {
+  if (typeof ResizeObserver !== 'function') return;
+  let last = 0;
+  const ro = new ResizeObserver(function () {
+    const track = $('wkTrack');
+    if (!track) return;
+    const w = Math.round(pageW(track));
+    if (!w || Math.abs(w - last) < 1) return;
+    last = w;
+    centerTrack(track);
+  });
+  const wrap = document.querySelector('.grid-wrap');
+  if (wrap) ro.observe(wrap);
+})();
 
 // ------------------------------------------------------------------ 成绩
 

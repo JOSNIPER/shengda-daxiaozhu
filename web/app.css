@@ -425,7 +425,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
       裁剪窗口也就跟着跑了：当前页被裁在轨道盒子里，点不动也看不全。
       裁剪交给外面不动的 `.grid-wrap`。 */
 .track {
-  flex: 1 1 auto;
+  /* 🔴 flex-basis 必须是 0、width 必须是 0：写成 auto 时轨道按**内容**撑宽度，
+     而三页各是 100% ⇒ 互相撑大，最后每页都宽于可视区，
+     第 7 列（周日）就被裁掉半列，左边还会漏出上一周的一小条。
+     2026-11-03 真机截图就是这个症状。 */
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -2771,3 +2776,25 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-size: 15px; font-weight: 600; color: var(--sub);
 }
 .ci-n span { display: block; font-size: 10px; font-weight: 400; color: var(--ter); }
+
+/* 上午 / 下午 / 晚上之间的分隔线。
+   依据是「上一节结束到这节开始隔了多久」——课间只有几分钟，
+   跨午别至少隔一个多小时。所以不用写死第几节，换了作息也不会错。 */
+.g-sep {
+  grid-column: 1 / -1;
+  height: 0;
+  border-top: 1px dashed var(--line-strong);
+  opacity: .7;
+  pointer-events: none;
+  z-index: 3;
+}
+/* 节次栏同一条位置也给个更明显的记号，扫一眼就知道换半天了 */
+.g-slot.g-slot-sep { border-top: 1px dashed var(--line-strong); }
+
+/* 顶栏的「5天 / 7天」开关。和「周/日」那个一样只在格子里写一个字，
+   不占图标位 —— 顶栏已经够挤了。 */
+.wk-days { min-width: 34px; padding-left: 2px; padding-right: 2px; }
+.wk-days span {
+  font-size: 12px; font-weight: 500; letter-spacing: -.2px;
+  white-space: nowrap;      /* 「5 天」不能折成两行 —— 折了就比旁边的按钮高一截 */
+}
