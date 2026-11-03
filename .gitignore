@@ -1,0 +1,15 @@
+# 构建产物
+android/build/
+android/dist/
+__pycache__/
+*.pyc
+*.pyo
+
+# 签名密钥只在本地，绝不进仓库（丢了就只能卸载重装）
+*.keystore
+*.jks
+
+# 本机临时文件
+*.log
+.DS_Store
+Thumbs.db

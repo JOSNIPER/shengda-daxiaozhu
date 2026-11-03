@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>航院通 · 郑航课表</title>
+<meta name="description" content="郑州航空工业管理学院的课表、考试、成绩、空闲教室、校园公告。一个 APK，装到手机上就能用。">
+<meta name="theme-color" content="#edf2fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101828" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+/* 单文件、零外部请求：整个页面就这一个 HTML，拷走也能打开。
+   站点 CSP 是 default-src 'self'，所以图片只能是同源的
+   icon-*.png / hero*.webp（那两张头图由 make_hyt_site.py 一起拷进来）。 */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  /* 🔴 2026-10-31 整套换成「淡蓝灰底 + 纯白卡」。
+     和 make_site.py 的 palette_css() **同名同值**，也和历史版本页的
+     HIST_CSS 一字不差 —— check_site_design.py 会把五页的渲染值对账。
+     为什么换：`#f5f5f7` 和白卡只差 3 点亮度，卡片「浮」不起来，
+     只能靠描边和阴影补层次 —— 那两样正是 DESIGN.md 第五节要消掉的。
+     带一点蓝调之后白卡靠色差就立住了，于是整页一个阴影都不需要。 */
+  --bg:#edf2fb; --card:#fff; --text:#0e1522; --sub:#5a6b85; --line:rgba(14,21,34,.08);
+  --accent:#2f6bee; --accent-soft:#e7effe;
+  /* 全页唯一允许的投影：App 图标是「浮在页面上的物体」，不是卡片。 */
+  --shadow:0 4px 14px -4px rgba(24,42,80,.35);
+  /* 圆角四档。一屏最多出现 3 种 —— check_site_design 会数。 */
+  --r-chip:6px;--r-sm:10px; --r-md:14px; --r-lg:22px; --r-pill:999px;
+  /* 功能色：整页**只有下载卡**能用，它承载这一页的主数值（哪个包、多大）。
+     和主站 .getcard 同一组值。深色下不沿用米黄 —— 深底上放米黄会把
+     明暗关系整个顶翻，换成同色相的暗棕，保住「暖」而不亮。 */
+  --warm:#fbf0d6;
+  /* 头图底部渐隐的目标色，写成 RGB 三元组：渐变里用 rgba(var(--scrim), .42)，
+     深浅两套只换这一个值，不用把整条 gradient 抄两遍。 */
+  --scrim:237, 242, 251;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#101828;--card:#1a2436;--text:#f2f6ff;--sub:#97a9c2;
+        --line:rgba(255,255,255,.08);
+        --accent:#5a8cff;--accent-soft:#1b2a45;
+        --shadow:0 4px 14px -4px rgba(0,0,0,.6);
+        --warm:#3a2e1c; --scrim:16, 24, 40}
+}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font:17px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:0 48px 96px}
+
+/* ---------- 顶部导航 ----------
+   sticky + 毛玻璃；左右留白跟着 .wrap 走（写死 48 的话宽屏上会和正文错开）。
+   毛玻璃的底色是写死的：它要跟着页面底色一起换，`var(--bg)` 是实色、不能半透明。 */
+.topnav{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:12px;
+  padding:12px max(48px,calc((100vw - 1280px)/2 + 48px));
+  font-size:15px;
+  background:rgba(237,242,251,.82);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:.5px solid var(--line);
+}
+.topnav .brand{
+  font-weight:600;color:var(--text);text-decoration:none;
+  flex:none;white-space:nowrap;
+}
+.topnav .tlinks{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.topnav .tlinks a{
+  color:var(--sub);text-decoration:none;padding:6px 12px;border-radius:var(--r-pill);
+  white-space:nowrap;
+}
+.topnav .tlinks a:hover{color:var(--accent);background:var(--accent-soft)}
+.topnav .tlinks a.on{color:var(--accent);background:var(--accent-soft);font-weight:600}
+
+/* ---------- 头图 ----------
+   🔴 2026-10-31：浅底大标题 -> 天空插画。
+   插画铺满整宽，所以 hero 在 .wrap **外面**；文字用内层 .wrap 对齐正文。
+   深浅两个模式各用**一张真图**（picture + media）：把白天图用 filter
+   压暗只会得到一张褪色的旧照片 —— 米黄变灰褐，一处都不像夜里。
+   窄屏另有两张（hero-m / hero-night-m），由 _lab/out/make_hero_mobile.py
+   从宽幅图裁出来 —— 为什么不是让浏览器 cover 去裁，见下面 @media 里的说明。
+   四张合计 ~63KB，同源、零外链，CSP 不受影响。 */
+.sky{
+  position:relative;height:500px;overflow:hidden;margin:0;
+  background:var(--sky-bg);
+}
+/* 六档天色（2026-11-01）：纯 CSS 渐变，一张图都没有。色值取自参考项目
+   khkdfsj/campus-frontend-template（MIT）的 .preview-* 那六条 linear-gradient；
+   它 hero 里除了插画就只剩 glaze / 日 月 / 底部渐隐三块，这里去掉插画那层。
+   🔴 为什么不留图：头图只负责「给整页一个上方」，不承载信息。为它多下载
+      700KB、按六个时段 × 两种宽度各备一张不划算；站内本来没有任何照片，
+      插一张写实插画进去，头图和下面的白卡立刻像两个人做的。
+   ⚠️ 每档在参考项目那两色之间补了一个色停：它是给 60px 高的色卡用的，
+      两端直连搬到 500px 高的框里，中段是一条线性色带，一眼就是渐变卡。
+   🔴 第 4、5 档（晚上 / 深夜）无论页面深浅都用白字，连底部渐隐也换成暗色
+      （--sky-scrim）—— 浅色主题下渐隐原本往白色走，白字压上去正好看不见。 */
+.sky{
+  --sky-bg:linear-gradient(180deg,#ffd8ba 0%,#ffe6cc 44%,#fff7ee 100%);
+  --sky-fg:#0f1c2f;
+  --sky-sub:rgba(11,26,46,.74);
+  --sky-chip:rgba(255,255,255,.66);
+  --sky-chip-fg:#16324f;
+  --sky-glow:rgba(255,255,255,.88);
+  --sky-scrim:237,242,251;
+  --sky-glaze:linear-gradient(90deg,rgba(255,255,255,.42) 0%,
+                rgba(255,255,255,0) 66%);
+
+}
+html[data-p="1"] .sky{--sky-bg:linear-gradient(180deg,#a9d5fb 0%,#cbe8ff 46%,#eef9ff 100%)}
+html[data-p="2"] .sky{--sky-bg:linear-gradient(180deg,#ffdba2 0%,#ffeac4 48%,#fffaf1 100%)}
+html[data-p="3"] .sky{--sky-bg:linear-gradient(180deg,#ffa894 0%,#ffc8ba 44%,#fff1eb 100%)}
+html[data-p="4"] .sky{--sky-bg:linear-gradient(180deg,#2b416a 0%,#445e8a 50%,#7c96bc 100%)}
+html[data-p="5"] .sky{--sky-bg:linear-gradient(180deg,#0a1226 0%,#17264a 52%,#35496f 100%)}
+html[data-p="4"] .sky,html[data-p="5"] .sky{
+  --sky-fg:#f4f8ff;
+  --sky-sub:rgba(226,236,250,.88);
+  --sky-chip:rgba(255,255,255,.14);
+  --sky-chip-fg:#eaf1ff;
+  --sky-glow:rgba(4,10,24,.92);
+  --sky-scrim:15,23,44;
+  --sky-glaze:linear-gradient(90deg,rgba(6,12,28,.34) 0%,rgba(6,12,28,0) 66%);
+}
+.sky::before{
+  content:"";position:absolute;inset:0;z-index:1;
+  background:var(--sky-glaze);
+}
+/* 底部渐隐到页面底色，否则天色会在下载卡上方画出一条硬线。 */
+.sky::after{
+  content:"";position:absolute;inset:0;z-index:1;
+  background:linear-gradient(to bottom, rgba(var(--sky-scrim), 0) 42%,
+               rgba(var(--sky-scrim), .46) 70%, var(--bg) 96%);
+}
+.sky .shead{position:absolute;left:0;right:0;bottom:96px;z-index:2}
+/* 内层 .wrap 只借它的左右留白和对齐，不要它那 96px 的底 */
+.sky .shead .wrap{padding-bottom:0;margin:0 auto}
+.sky h1{margin:0;font-size:56px;line-height:1.05;letter-spacing:-.035em;
+        font-weight:700;color:var(--sky-fg);text-shadow:0 1px 24px var(--sky-glow)}
+.sky .ssub{margin:12px 0 0;font-size:17px;color:var(--sky-sub);letter-spacing:.1px}
+/* 时段问候语（「早安 · 记得吃早餐」）。
+   它是头图上最小的一行，压在 h1 上面，一层与背景同向的柔光就够 ——
+   浅色模式压白晕、深色模式压深晕（`--sky-glow`）。试过加半透明胶囊：
+   读得清，但一大块深色方块贴在纯渐变上，像贴了张标签。
+   13px/600 是上限，再重光晕就救不回来了。
+   `visibility` 而不是 `display`：高度要一直占着，否则脚本填字时标题会跳。 */
+.sky .sgreet{
+  margin:0 0 10px;min-height:20px;visibility:hidden;
+  font-size:13px;line-height:20px;font-weight:600;letter-spacing:.1em;
+  color:var(--sky-sub);
+  text-shadow:0 1px 10px var(--sky-glow),0 0 18px var(--sky-glow);
+}
+/* 版本胶囊。⚠️ 不能用 inset 描边来「勾一圈」—— 判据把任何 box-shadow
+   都算成投影（静止的面不投影），而一枚胶囊不需要靠线立住。 */
+.sky .spill{
+  display:inline-block;margin-top:16px;padding:6px 14px;
+  border-radius:var(--r-pill);font-size:13px;font-weight:600;
+  background:var(--sky-chip);color:var(--sky-chip-fg);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+}
+
+/* ---------- 下载卡 ----------
+   压在插画下沿一点（负 margin），让它「接住」头图。
+   🔴 2026-11-01：底色从 --card 换成 --warm。这是全页**唯一**一块暖色，
+   理由只有一条：一页要有一个主角。之前三张卡都是白的，大小一样、
+   亮度一样，看的人得先读一遍才知道该点哪里。下载卡是这一页的
+   「主数值」所在，它暖起来之后，下面的白卡自然退成配角。
+   ⚠️ 仍然不用阴影：暖底压在有蓝调的页面上色差已经够了，加阴影反而糊。 */
+.dl{
+  position:relative;z-index:3;margin-top:-72px;
+  background:var(--warm);border-radius:var(--r-lg);
+  padding:26px 28px;
+}
+.dl .row{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.dl .appic{
+  width:58px;height:58px;border-radius:var(--r-md);flex:none;
+  box-shadow:var(--shadow);
+}
+.dl .tt{flex:1 1 260px;min-width:0}
+.dl .tt b{display:block;font-size:17px;font-weight:700;letter-spacing:-.2px}
+.dl .tt span{display:block;font-size:13px;color:rgba(14,21,34,.62);margin-top:3px}
+.dl .btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{
+  flex:0 1 auto;min-width:200px;max-width:320px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:48px;padding:0 26px;border-radius:var(--r-pill);
+  font-size:17px;font-weight:600;text-decoration:none;
+  background:var(--accent);color:#fff;
+  transition:transform .12s ease,opacity .12s;
+}
+.btn:active{transform:scale(.985);opacity:.9}
+/* 备用线路：淡底 + 主色，不用实心 —— 两个实心按钮用户不知道点哪个。 */
+.btn.alt{background:var(--accent-soft);color:var(--accent)}
+.btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.meta{margin:14px 0 0;font-size:13px;color:var(--sub)}
+.meta b{font-weight:600;color:var(--text)}
+.tip{margin:14px 0 0;padding-left:26px;position:relative;
+  color:var(--sub);font-size:15px;line-height:1.7}
+/* 自绘的信息图标（圆圈 + 一点 + 一竖）。用字符 ⓘ 的话各系统字形差太多。 */
+.tip::before{content:"";position:absolute;left:4px;top:5px;width:14px;height:14px;
+  border-radius:var(--r-pill);border:1.5px solid var(--sub)}
+.tip::after{content:"";position:absolute;left:10.4px;top:9.4px;width:1.6px;height:4px;
+  background:var(--sub);border-radius:1px;box-shadow:0 5.6px 0 var(--sub)}
+.tip b{font-weight:700;color:var(--text)}
+.dl-note{margin:12px 0 0;font-size:13px;color:rgba(14,21,34,.62);line-height:1.7}
+.dl-note strong{color:var(--text)}
+
+/* ---------- 三张小卡（源码 / 历史 / 制品库） ---------- */
+.links{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+.links a{
+  position:relative;display:flex;flex-direction:column;gap:3px;
+  background:var(--card);border-radius:var(--r-lg);padding:20px 22px;
+  text-decoration:none;color:var(--text);
+}
+.links a:active{background:var(--accent-soft)}
+.links .k{font-size:17px;font-weight:700;letter-spacing:-.2px}
+.links .v{font-size:13px;color:var(--sub)}
+.links .arw{position:absolute;right:20px;top:17px;color:var(--sub);font-size:17px}
+
+/* ---------- 区块 ---------- */
+h2{
+  font-size:22px;line-height:1.2;font-weight:700;letter-spacing:-.5px;
+  margin:56px 0 18px;
+}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (min-width:1024px){
+  .grid{grid-template-columns:repeat(3,1fr)}
+}
+.card{background:var(--card);border-radius:var(--r-lg);padding:22px}
+/* 图标底板是圆的（999 已在档位里），不再引入第五种圆角。
+   颜色只有一组蓝：DESIGN.md「图标徽章只保留 blue 一组」——
+   六种颜色一样亮一样大，正是「AI 味」的主要来源。 */
+.card .ic{
+  width:38px;height:38px;border-radius:var(--r-pill);
+  display:grid;place-items:center;background:var(--accent-soft);margin-bottom:14px;
+}
+.card .ic svg{width:19px;height:19px;fill:none;stroke:var(--accent);stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+.card h3{margin:0 0 6px;font-size:17px;font-weight:700;letter-spacing:-.2px}
+.card p{margin:0;font-size:15px;line-height:1.68;color:var(--sub)}
+.card p b{color:var(--text);font-weight:600}
+.card.span{grid-column:1/-1}
+
+.note{
+  background:var(--card);border-radius:var(--r-lg);
+  padding:26px 28px;font-size:17px;line-height:1.75;color:var(--sub);
+}
+.note p{margin:0 0 12px}
+.note p:last-child{margin-bottom:0}
+.note b{color:var(--text);font-weight:600}
+.note ul{margin:0;padding-left:20px}
+.note li{margin:6px 0}
+
+ol{margin:0;padding:0;list-style:none;counter-reset:s}
+ol li{
+  counter-increment:s;position:relative;padding-left:38px;margin-bottom:18px;
+  font-size:17px;line-height:1.6;color:var(--text);
+}
+ol li:last-child{margin-bottom:0}
+ol li::before{
+  content:counter(s);position:absolute;left:0;top:1px;
+  width:26px;height:26px;border-radius:var(--r-pill);background:var(--accent-soft);
+  color:var(--accent);font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+ol li small{display:block;color:var(--sub);font-size:15px;margin-top:4px}
+ol li b{font-weight:600;color:var(--text)}
+
+footer{
+  margin-top:56px;padding-top:24px;border-top:.5px solid var(--line);
+  font-size:13px;color:var(--sub);line-height:1.8;
+}
+footer p{margin:0 0 4px}
+footer a{color:var(--accent);text-decoration:none}
+
+/* ---------- 窄屏 ----------
+   DESIGN.md 第六节的页边距 48 是**桌面**值；手机上 48px 是 1/8 屏宽，
+   收成 16。大标题 56 -> 34（借手机端「页面大标题」，不是另立一套）。
+   断点 900 以下是「平板竖屏 / 半屏窗口」：三列卡挤成 200 多像素，退回一列。 */
+@media (max-width:900px){
+  .links{grid-template-columns:1fr}
+}
+/* 641–1023：半屏窗口 / 平板竖屏。天色是渐变、没有构图，
+   这一档只需要把框压矮 —— 500 高在 700 宽时会占掉大半个窗口。 */
+@media (min-width:641px) and (max-width:1023px){
+  .sky{height:300px}
+  /* 文字块压到 56、标题收到 34（借手机端那一档，不再另立 36 这种半档）：
+     300 高的框里字块占比更大，标题 56 会显得挤。 */
+  .sky .shead{bottom:56px}
+  .sky h1{font-size:34px}
+  /* 卡片默认是 -72：那是给 430 高的头图配的。头图收到 300 之后，
+     卡片会往上多咬 16px，把版本胶囊压掉半行。 */
+  .dl{margin-top:-40px}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px 64px}
+  .topnav{padding:12px 16px;font-size:13px;flex-wrap:wrap;row-gap:4px}
+  .topnav .tlinks{margin-left:0;gap:2px}
+  .topnav .tlinks a{padding:6px 8px}
+  /* 360，不是 290。一开始这里是 290：270 时月盘下沿离标题只有 6px，
+     光晕整片糊在「航院通」顶上，所以先抬到 290 —— 但 290 时文字块 136px
+     只剩 98px 上留白，而首页 / 校园网 / 宛师通都是 156+，标题明显贴着日晕。
+     同一个站不该有两个天空高度，统一到 360（下留白也统一成 64）。 */
+  /* 窄屏只调高度：渐变没有「构图」，不需要像插画那样另裁一套。
+     日月收到右上角 —— 这里标题是通栏的，弧线位置没有意义，放哪都压字。 */
+  .sky{height:360px}
+  .sky .shead{bottom:64px}
+  .sky h1{font-size:34px;letter-spacing:-.02em}
+  .sky .sgreet{font-size:12px;margin-bottom:7px;min-height:18px;line-height:18px}
+  .sky .ssub{font-size:15px;margin-top:8px}
+  /* 13px 而不是 11px：全站字号只有 13/15/17/22/56 这几档，
+     11 是档外值，判据会拦（而且和 .spill 桌面版不一致）。 */
+  .sky .spill{margin-top:12px;font-size:13px;padding:5px 11px}
+  .dl{margin-top:-40px;padding:20px}
+  /* 图标和标题必须同处一行，否则图标独占一行、上方空一片 ——
+     flex-basis 在窄屏会把它挤下去，所以这里换成两列网格。 */
+  .dl .row{display:grid;grid-template-columns:48px 1fr;gap:14px 12px}
+  .dl .appic{width:48px;height:48px}
+  .dl .tt{min-width:0}
+  .dl .btns{grid-column:1/-1;width:100%}
+  .btn{flex:1 1 0;min-width:0;padding:0 14px;font-size:15px}
+  .links{gap:10px;margin-top:10px}
+  .links a{padding:16px 18px}
+  .grid{grid-template-columns:1fr;gap:10px}
+  .card{padding:18px}
+  h2{margin:40px 0 14px}
+  .note{padding:20px;font-size:15px}
+  ol li{font-size:15px}
+  ol li small{font-size:13px}
+  footer{margin-top:40px;padding-top:20px}
+}
+/* 深色：头图已换成夜景图，压在图上那几行文字得单独给一套 ——
+   它们不落在卡片上，`:root` 换了色它们也换不过来。 */
+@media (prefers-color-scheme:dark){
+  .topnav{background:rgba(16,24,40,.82)}
+  /* 系统深色时一律白字 + 暗雾，和 4/5 档那组是同一套值。 */
+  .sky{
+    --sky-fg:#f4f8ff;
+    --sky-sub:rgba(226,236,250,.88);
+    --sky-chip:rgba(255,255,255,.14);
+    --sky-chip-fg:#eaf1ff;
+    --sky-glow:rgba(4,10,24,.92);
+    /* 底部渐隐也要跟着变深：页面底下是深色，渐隐却往白走，中间浮一条灰带。 */
+    --sky-scrim:15,23,44;
+    --sky-glaze:linear-gradient(90deg,rgba(6,12,28,.34) 0%,rgba(6,12,28,0) 66%);
+  }
+  .sky::after{background:linear-gradient(to bottom, rgba(var(--scrim),0) 46%,
+                 rgba(var(--scrim),.60) 74%, var(--bg) 100%)}
+  /* 深棕底上的字：米黄那套深字会糊进去 */
+  .dl .tt span, .dl-note{color:rgba(242,246,255,.62)}
+}
+</style>
+<script>
+/* 头图按时段换档（2026-11-01）。放 head 里、body 解析之前跑：图在第一次
+   绘制前就定下来，不会「先停在清晨、再跳一下」。
+   5-10 清晨 / 10-14 中午 / 14-17 下午 / 17-19 傍晚 / 19-23 晚上 / 其余深夜。
+   深色模式下抬到 >=4：系统深色、头图却是正午蓝天，那一屏像拼错了。 */
+(function () {
+  var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function set() {
+    var h = new Date().getHours();
+    var p = h >= 5 && h < 10 ? 0 : h >= 10 && h < 14 ? 1 : h >= 14 && h < 17 ? 2
+          : h >= 17 && h < 19 ? 3 : h >= 19 && h < 23 ? 4 : 5;
+    if (mq && mq.matches) {
+      if (p < 4) { p = 4; }
+    } else if (p >= 4) {
+      /* 浅色主题不进「晚上 / 深夜」两档（2026-11-01）。
+         🔴 这两档的天色是深的、字是白的，而底部渐隐必须落到页面底色上 ——
+            页面是浅的，白字就落在一条浅灰的过渡带里，读不动（截图实测）。
+            参考项目里夜间档和深色页面是**绑死的**（`dark = index >= 4` 同时
+            换底色和头图），它从不出现「浅页面 + 夜空」这种组合。
+            我们站的主题跟系统走，所以在这边让档位也跟主题走：
+            晚上退回傍晚、深夜退回清晨，浅色站永远是暖调，深色站才有夜。 */
+      p = p === 4 ? 3 : 0;
+    }
+    document.documentElement.setAttribute('data-p', p);
+  }
+  set();
+  if (mq && mq.addEventListener) { mq.addEventListener('change', set); }
+  setInterval(set, 60000);
+})();
+</script>
+</head>
+<body>
+
+<nav class="topnav">
+  <a class="brand" href="/">{{BRAND}}</a>
+  <div class="tlinks">
+    <a href="/">首页</a>
+    <a href="/campus/">校园网</a>
+    <a class="on" href="/hangyuantong/">航院通</a>
+    <a href="/wanshitong/">宛师通</a>
+    <a href="/hangyuantong/history">历史版本</a>
+    <a href="https://cnb.cool/Hobson2233/hangyuantong">源码</a>
+  </div>
+</nav>
+
+<!-- 插画铺满整宽，所以 hero 在 .wrap 外面；文字用内层 .wrap 对齐正文。 -->
+<header class="sky">
+  <div class="shead"><div class="wrap">
+    <p class="sgreet" id="greet"></p>
+    <h1>航院通</h1>
+    <p class="ssub">郑航课表 · 考试 · 成绩 · 学分 · 空闲教室 · 校园公告</p>
+    <span class="spill">v{{VERSION}}</span>
+  </div></div>
+</header>
+
+<div class="wrap">
+
+  <section class="dl">
+    <!-- 两条线路 = 同一个包，只是服务器不同。
+         主站走 Cloudflare，国内下起来慢；CNB 是腾讯云的，国内快得多。
+         ⚠️ 窄屏放不下两个按钮，会各自占满一行 —— 宁可换行也不能把
+            「国内线路下载」压成半截。 -->
+    <div class="row">
+      <img class="appic" src="icon-192.png" alt="航院通">
+      <div class="tt">
+        <b>下载 Android 安装包</b>
+        <span>一个 APK，装上就能用 · Android 7.0 以上</span>
+      </div>
+      <div class="btns">
+        <a class="btn" href="/hangyuantong/dl/hangyuantong-{{VERSION}}.apk" download>
+          <svg viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
+          下载 APK
+        </a>
+        {{CNB_BTN}}
+      </div>
+    </div>
+    <p class="meta">{{SIZE}}{{DATE_TAIL}}</p>
+    <p class="tip">装之前先看一眼：教务系统<b>校外也能连</b>，
+      手机流量、家里 WiFi 都行，不用挂 VPN。</p>
+    {{CNB_NOTE}}
+  </section>
+
+  <!-- 「我还想看看别的」的入口。放在下载区正下方，而不是塞进页尾 ——
+       会找源码 / 仓库的人，通常在下载按钮那儿就已经开始找了。
+       ⚠️ 2026-10-21：GitHub 那两条换成了腾讯云 CNB。原来链到
+         github.com/Hobson2233/hangyuantong，账号被停用之后两条全 404 ——
+         而「源码」这条链接恰恰是给最愿意动手的人看的，断了最难堪。 -->
+  <div class="links">
+    <a href="/hangyuantong/history">
+      <span class="k">历史版本</span>
+      <span class="v">每一版都能下</span><span class="arw">›</span>
+    </a>
+    <a href="https://cnb.cool/Hobson2233/hangyuantong">
+      <span class="k">源码仓库（CNB）</span>
+      <span class="v">MIT 开源 · 国内可访问</span><span class="arw">›</span>
+    </a>
+    <a href="https://cnb.cool/Hobson2233/campus-login">
+      <span class="k">腾讯云 CNB 制品库</span>
+      <span class="v">国内线路的安装包</span><span class="arw">›</span>
+    </a>
+  </div>
+
+  <h2>能干什么</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3.5"/><path d="M3 10h18M8 2.6v4.4M16 2.6v4.4"/></svg></div>
+      <h3>课表</h3>
+      <p>按周翻页，单双周、连堂课都对。正在上的那节课会亮起来，
+        日视图顶上还写着还剩几分钟。</p>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 4h11l4 4v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 13.5l2.6 2.6L16 10"/></svg></div>
+      <h3>考试 + 成绩</h3>
+      <p>同一页顶部切换。考试每场都写还有几天；成绩能看每学期绩点走势，
+        能搜课程名、能按分数或学分排。考完的场次收成一行，不占地方。</p>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="9.5" r="5.5"/><path d="M8.6 14.2 7 22l5-2.4 5 2.4-1.6-7.8"/></svg></div>
+      <h3>学分进度</h3>
+      <p>毕业要修多少、已经修到哪、还差哪几门。挂科的单独列，不算进已修；
+        培养计划里没有的课会标「计划外」。</p>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19.5" cy="18" r="1.6"/></svg></div>
+      <h3>该办的事</h3>
+      <p>选课、评教、免听、免修现在开没开。只显示状态、不替你提交 ——
+        真要办还是去教务系统点。</p>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V6.5A1.5 1.5 0 0 1 5.5 5h6A1.5 1.5 0 0 1 13 6.5V20"/><path d="M13 20V10h5.5A1.5 1.5 0 0 1 20 11.5V20"/><path d="M3 20h18"/></svg></div>
+      <h3>空闲教室</h3>
+      <p>选日期和节次，查这一刻哪间空着。可按教学楼筛，按座位数排序。</p>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></div>
+      <h3>校园公告</h3>
+      <p>六个部门的通知聚到一页，自动分出「影响出行 / 要办事 / 活动」。
+        能看时间和地点。<b>不用登录</b>。</p>
+    </div>
+    <div class="card span">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M5.5 8.5a12 12 0 0 1 13 0"/><path d="M8.5 12a8 8 0 0 1 7 0"/><path d="M11 15.4a4 4 0 0 1 2 0"/><circle cx="12" cy="18.6" r="1.1"/></svg></div>
+      <h3>离线可看</h3>
+      <p>同步一次存本地，没网也能翻课表。改了作息时间也能自己调。</p>
+    </div>
+  </div>
+
+  <h2>怎么装</h2>
+  <div class="note">
+    <ol>
+      <li>点上面的按钮下载 <b>hangyuantong-{{VERSION}}.apk</b>
+        <small>手机浏览器下载最省事，微信里打开可能被拦</small></li>
+      <li>点开安装包，系统提示「未知来源」时选<b>仍要安装</b>
+        <small>这个包是自签名，不在应用商店里，所以会拦一下</small></li>
+      <li>打开 App → 我的 → 填学号和密码 → 绑定并同步
+        <small>用的是教务系统的账号，不是校园网认证那一套</small></li>
+    </ol>
+  </div>
+
+  <h2>更新内容</h2>
+  <div class="note">
+    {{NOTES}}
+    <p style="margin:14px 0 0"><a href="/hangyuantong/history">看全部历史版本 ›</a></p>
+  </div>
+
+  <h2>隐私与数据</h2>
+  <div class="note">
+    <p>数据只从学校教务系统读取，<b>不会提交任何申请、选课或修改</b>。
+       学号密码只加密存在你自己的手机里（Android Keystore，AES-256-GCM），
+       不经过任何第三方服务器。</p>
+    <p>App 对外的连接只有两类：学校教务系统，以及本项目的更新发布站
+       （hobson2233.dpdns.org 和腾讯云 CNB 国内线路）。
+       没有统计、上报、崩溃收集，也没有广告。</p>
+  </div>
+
+  <h2>免责声明</h2>
+  <div class="note">
+    <p>非官方项目，与学校教务处无关。本项目按现状提供，不对可用性、
+       准确性或使用结果作任何保证。请仅使用你本人有权访问的账号，
+       并遵守学校的规定，使用风险由使用者自行承担。</p>
+  </div>
+
+  <footer>
+    <p>开源（MIT）：<a href="https://cnb.cool/Hobson2233/hangyuantong">cnb.cool/Hobson2233/hangyuantong</a></p>
+    <p>同站还有：<a href="/campus/">校园网自动登录</a>（Windows 上用的）、
+       <a href="/wanshitong/">宛师通</a>（南阳师范学院，同一套界面）。</p>
+  </footer>
+
+</div>
+
+<script>
+/* 时段问候语。逻辑与主站 make_site.py 的 _greet_script() 是同一套：
+   六段、每段三句、45 秒轮换；分段也必须一致（5-10 / 10-14 / 14-17 /
+   17-19 / 19-23 / 其余），否则同一个人在同一天打开两个页面，
+   会看到两个不一样的「现在几点」。
+   不在构建时算：站点是发版才重建的，隔一个月打开还写着「早安」就是假话。
+   起始句按日期错开，回头客才不会以为这行字是死的。 */
+(function () {
+  var G = [["早安",["今天有早八的话，先看一眼教室。","记得吃早餐。","新的一天，课表已经帮你排好了。"]],["午安",["午餐时间。","记得喝水。","下午在哪个教室，扫一眼就行。"]],["下午好",["下午的课还长，撑住。","起身活动一下。","下节课要换教室的话，别走错了。"]],["傍晚好",["晚餐时间。","天要黑了，页面会跟着系统切深色。","晚课要用的东西先收好。"]],["晚上好",["睡前列一下明天要上的课。","看看今天有没有新版本。","留点时间休息。"]],["夜深了",["早点休息。","明天再看也不迟。","晚安。"]]];
+  var el = document.getElementById("greet");
+  if (!el) return;
+  function slot(h) {
+    return h >= 5 && h < 10 ? 0 : h >= 10 && h < 14 ? 1 : h >= 14 && h < 17 ? 2
+         : h >= 17 && h < 19 ? 3 : h >= 19 && h < 23 ? 4 : 5;
+  }
+  var i = slot(new Date().getHours()), k = new Date().getDate() % G[i][1].length;
+  function draw() {
+    var p = G[i];
+    el.textContent = p[0] + " · " + p[1][k % p[1].length];
+    el.style.visibility = "visible";
+  }
+  draw();
+  setInterval(function () {
+    var n = slot(new Date().getHours());
+    if (n === i) { k++; } else { i = n; k = 0; }
+    draw();
+  }, 45000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.hobson.hangyuantong">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 应用内下载更新后要拉起系统安装器。Android 8.0+ 还要用户单独
+         允许一次「安装未知应用」，代码里会引导，见 UpdateDownloader。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 扫码加饮水机（0.31.0）。只在用户点「添加设备」时才向网页批相机权限，
+         平时不会碰相机。
+         🔴 `required="false"`：没有相机的设备照样能装 —— 那种设备上
+            「添加设备」会退化成粘贴二维码内容。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- 🔴 包可见性（Android 11 / API 30 起）：不在这里点名，PackageManager
+         就**查不到**别的 App 装没装 —— getLaunchIntentForPackage 一律返回 null。
+         表现是「明明装了，App 却说没装」，而且**不报错、不抛异常**，
+         只有真机才看得出来。targetSdk 是 33，这段必须有。
+
+         两个包名对应同一件事（宿舍接水）：
+           com.cloudora.android  慧生活798 官方（长沙云多啦）
+           com.water.widget      WaterWidget，第三方客户端
+                                 （nocookies111/life-798，MIT）
+         ⚠️ 加包名要同时改 NativeBridge.ALLOWED_APPS —— 那边是白名单，
+            两处对不上时表现是「点了没反应」。 -->
+    <queries>
+        <package android:name="com.cloudora.android" />
+        <package android:name="com.water.widget" />
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 办事入口点进去之后的窗口（App 内 WebView，带门户 cookie）。
+             不导出：只有 App 自己能拉起它，别的应用调不动 ——
+             它会把门户的登录态倒进去，不能变成任何 App 都能借道的口子。 -->
+        <activity
+            android:name=".WebActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

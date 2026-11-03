@@ -1,0 +1,8 @@
+# 统一用 LF：Windows 上 core.autocrlf 默认会把换行改掉，
+# 每次提交都显示「整个文件都改了」，diff 就没法看了。
+* text=auto eol=lf
+
+*.png binary
+*.webp binary
+*.apk binary
+*.keystore binary

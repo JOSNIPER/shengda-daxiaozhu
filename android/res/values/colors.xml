@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 和 web/app.css 里的 bg / card 两个变量同色，避免启动瞬间闪一下别的颜色。
+         注意：XML 注释里不能出现连续两个减号，所以这里别写变量名的完整形式。 -->
+    <color name="bg">#f4f5f7</color>
+    <color name="card">#ffffff</color>
+    <color name="ic_launcher_bg">#344861</color>
+</resources>

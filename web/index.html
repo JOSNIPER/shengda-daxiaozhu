@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>航院通</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101114" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="航院通">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- 图标精灵表。目前只有「显示密码」那一对眼睛 —— 它在两个静态密码框
+     和两个动态渲染的密码框里都要用，内联四遍的话改一处必漏三处。 -->
+<svg class="sprite" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-eye" viewBox="0 0 24 24">
+    <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/>
+    <circle cx="12" cy="12" r="2.6"/>
+  </symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24">
+    <path d="M4 4l16 16"/>
+    <path d="M9.9 5.7A10.6 10.6 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a18 18 0 0 1-3.3 4.1"/>
+    <path d="M6.3 7.7A17.6 17.6 0 0 0 2 12s3.6 6.5 10 6.5a10.7 10.7 0 0 0 3.3-.5"/>
+    <path d="M9.6 9.9a2.9 2.9 0 0 0 4 4"/>
+  </symbol>
+</defs></svg>
+
+<div id="app">
+
+  <!-- ================= 课程表 ================= -->
+  <section class="page" id="page-schedule">
+    <header class="weekbar">
+      <button class="wk-btn" id="wkPrev" aria-label="上一个">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <!-- 这一整块点了会打开「跳到第几周」弹层（里面还有「看校历」「学期设置」）。
+           以前没有任何视觉暗示，等于藏起来了 —— 补一个 ▾，
+           用「能展开」这个通用符号把它露出来。
+           ⚠️ 它**不是**直接打开校历，aria-label 别写错。 -->
+      <button class="wk-title" id="wkTitle" aria-label="跳到第几周">
+        <span class="wk-t1">
+          <b id="wkNum">第 1 周</b>
+          <svg class="wk-caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <span class="wk-range" id="wkRange"></span>
+      </button>
+      <button class="wk-btn" id="wkNext" aria-label="下一个">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <button class="wk-today" id="wkToday">今天</button>
+      <!-- 空教室从底部 tab 收进来（底部固定 5 个）。放这里而不是藏进「我的」：
+           找自习室和看课表是同一件事的两个方向 —— 「我这会儿有课吗 / 哪间空着」。
+           🔴 以前这里只有一个门图标，用户根本不知道那是干嘛的（用户原话：
+              「就一个图标，用户很难知道那是干嘛的」）⇒ 改成**图标 + 文字**。
+              图标负责「教室」的联想，文字负责说清楚。 -->
+      <button class="wk-btn wk-lab" id="wkRooms" aria-label="找空教室">
+        <svg viewBox="0 0 24 24"><path d="M5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M3 20h18"/><circle cx="14.6" cy="13" r="1"/></svg>
+        <span class="wk-lab-t">空教室</span>
+      </button>
+      <!-- 视图切换以前是个网格图标 —— 网格能表示「周视图」，但表示不了
+           「点一下会换一种」。改成直接写当前视图的一个字，点了就换，
+           跟分段控件的习惯一致。 -->
+      <button class="wk-btn wk-view" id="viewToggle" aria-label="切换周视图和日视图">
+        <span id="wkViewLab">周</span>
+      </button>
+      <!-- 课表页也要能刷新：以前只有「我的」里那一行和成绩/考试页右上角能刷，
+           课表是每天看得最多的一页，想拉一次新课表得点进「我的」——
+           多绕一层，而且没人会想到刷新藏在设置里。 -->
+      <button class="wk-btn" id="schRefresh" aria-label="刷新课表">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+      </button>
+    </header>
+
+    <div class="scroll tight" id="schScroll">
+      <div class="empty" id="schEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        </div>
+        <h2>还没绑定教务处账号</h2>
+        <p>绑定后就能把课表和成绩同步到手机，之后断网也能看。</p>
+        <button class="btn primary" id="goBind">去绑定</button>
+        <!-- 电脑上已经绑过的时候不用再输一次密码（换手机、清了缓存都会遇到） -->
+        <button class="btn quickbox" id="goQuick" hidden>
+          直接同步 <span class="qwho"></span>
+        </button>
+      </div>
+
+      <!-- 翻页轨道：同时放「上一周 / 本周 / 下一周」三页。
+           只放一页的话，手指一拖就把唯一那页推走了，底下是空白 ——
+           看起来就是「先全白一下，再蹦出下一页」。
+           左边那条「节次 / 时间」栏**不在轨道里**，它固定不动：
+           放进轨道的话，滑到一半屏幕上会出现两条时间栏。 -->
+      <div class="grid-wrap" id="gridWrap" hidden>
+        <div class="gutter" id="wkGutter"></div>
+        <div class="track" id="wkTrack"></div>
+      </div>
+
+      <!-- 「现在这节 / 下一节」那条。
+           数据全是本地现成的（课表 + 上课时间 + 当前时间），不打服务器。
+           只在日视图看今天的时候出现 —— 翻到明天还写「下一节 14:00」
+           就成假话了。 -->
+      <div class="daynext" id="dayNext" hidden></div>
+
+      <!-- 日视图也用同一条轨道。外面必须再套一层负责裁剪的盒子：
+           `overflow: hidden` 是裁在**内边距盒**上的，直接放在滚动容器里，
+           上一页会从 padding 那 7px 里漏出一条彩边（实测就是这样）。 -->
+      <div class="day-wrap" id="dayWrap" hidden>
+        <div class="track" id="dayView"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 考试（成绩并进来了） ================= -->
+  <section class="page" id="page-exams" hidden>
+    <header class="pagehead">
+      <h1 id="exHead">学习</h1>
+      <button class="ghost-btn" id="examRefresh" aria-label="刷新">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+      </button>
+    </header>
+
+    <!-- 成绩原来单独占一个底部 tab。用户 2026-10-19 说：
+         「查询成绩使用的频率比较低，不需要单独列出」——
+         一个学期就期末看几次，占着一个常驻入口不值当。
+         现在几块内容共用这一屏，靠这个分段切换。
+         2026-10-22 又把学习通并进来、整个 tab 改叫「学习」：
+         进去先看学习通，考试 / 成绩 / 学分是它的子选项。 -->
+    <div class="seg" id="exSeg">
+      <button class="seg-btn on" data-view="cx">学习通</button>
+      <button class="seg-btn" data-view="exam">考试</button>
+      <button class="seg-btn" data-view="grade">成绩</button>
+      <button class="seg-btn" data-view="credit">学分</button>
+    </div>
+
+    <!-- ---------------- 学习通视图（作业待办） ----------------
+         只读 —— 不签到、不刷课、不自动答题、不代交。
+         作业挂在每门课下面，32 门课要 40 秒，所以是「检查一次 → 缓存 →
+         写清更新于何时」，不是实时。 -->
+    <div class="scroll" id="exViewCx">
+      <div id="cxBody"></div>
+    </div>
+
+    <!-- ---------------- 考试视图 ---------------- -->
+    <div class="scroll" id="exViewExam">
+      <!-- 选学期。放在 empty / body 两个分支**外面**：
+           某一学期没排考时列表是空的，chip 要是也跟着藏起来，
+           人就再也切不回别的学期了。 -->
+      <div class="chips" id="exChips" hidden></div>
+
+      <!-- 绑定后会把「他在读的每一学期」的考试都提前拉一遍，
+           这样切学期是瞬间出结果。这里只是把进度说出来 ——
+           不然用户会以为切过去那一下的等待是白等的。 -->
+      <div class="expf" id="exPrefetch" hidden></div>
+
+      <div class="exloading" id="exLoading" hidden>正在取这一学期的考试安排…</div>
+
+      <div class="empty" id="exEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-3.5L5 21V4a1 1 0 0 1 1-1z"/></svg>
+        </div>
+        <h2 id="exEmptyTitle">还没有考试安排</h2>
+        <p id="exEmptyText">绑定账号后会自动同步一次。</p>
+        <button class="btn primary" id="goBind3" hidden>去绑定</button>
+        <button class="btn" id="exRetry" hidden>再试一次</button>
+      </div>
+
+      <div id="exBody" hidden>
+        <div class="exsum" id="exSummary"></div>
+        <div class="exlist" id="exList"></div>
+      </div>
+    </div>
+
+    <!-- ---------------- 成绩视图 ---------------- -->
+    <div class="scroll" id="exViewGrade" hidden>
+      <div class="empty" id="grEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 15l4-5 3 3 4-6"/></svg>
+        </div>
+        <h2>还没有成绩数据</h2>
+        <p>绑定账号后会自动同步一次。</p>
+        <button class="btn primary" id="goBind2">去绑定</button>
+      </div>
+
+      <div id="grBody" hidden>
+        <div class="sumcard">
+          <div class="sum-main">
+            <span class="sum-label">平均绩点</span>
+            <b id="grGpa">—</b>
+          </div>
+          <div class="sum-side">
+            <div><b id="grCredits">—</b><span>总学分</span></div>
+            <div><b id="grCount">—</b><span>门数</span></div>
+          </div>
+        </div>
+
+        <!-- 每学期一根柱子。只有总绩点的话，3.11 → 2.06 这种「掉一档」
+             会被平均成 2.51，看上去什么事都没有。 -->
+        <div class="gptrend" id="grTrend" hidden></div>
+
+        <div class="chips" id="grChips"></div>
+        <div class="grfind">
+          <input class="grfind-in" id="grFind" type="search" inputmode="search"
+                 placeholder="搜课程名或课程号" autocomplete="off" enterkeyhint="search">
+          <button class="grfind-sort" id="grSort">默认排序</button>
+        </div>
+        <div class="gradelist" id="grList"></div>
+      </div>
+    </div>
+
+    <!-- ---------------- 学分视图 ----------------
+         培养计划（应修）和成绩（已修）对出来的进度。
+         放在这里而不是底部 tab：它跟成绩是同一件事的两种看法，
+         一学期看两三次，不值得再占一个常驻入口。 -->
+    <div class="scroll" id="exViewCredit" hidden>
+      <div class="empty" id="crEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 15l4-5 3 3 4-6"/></svg>
+        </div>
+        <h2 id="crEmptyTitle">还没算出来</h2>
+        <p id="crEmptyText">绑定账号后会自动同步培养计划和成绩。</p>
+        <button class="btn primary" id="goBind5" hidden>去绑定</button>
+      </div>
+
+      <div id="crBody" hidden></div>
+    </div>
+  </section>
+
+  <!-- ================= 校园公告 =================
+       为什么单独占一个 tab 而不是塞进课表页顶部：用户 2026-10-21 明确要
+       「独立列表页，放到中间栏」。它的性质和别的页不一样 —— 课表/考试/空教室
+       都是「查我自己的数据」，公告是「学校最近在干什么」，进来就是要扫一遍。
+
+       🔴 这一页**不需要登录**。六个源都是学校各部门的公开网页，
+          没绑教务账号也能看 —— 刚装完 App 的人至少有个东西是能用的。 -->
+  <section class="page" id="page-notice" hidden>
+    <header class="pagehead">
+      <!-- 0.38.0 补的。公告是从「功能」页进来的一行入口，是个**子页**，
+           可它原来只有右上角一颗刷新 —— 用户进来之后找不到出去的路
+           （网页版没有安卓那个返回键）。子页一律要有可见的返回。 -->
+      <button class="ghost-btn back" id="ntBack" aria-label="返回功能">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>公告</h1>
+      <button class="ghost-btn" id="ntRefresh" aria-label="刷新公告">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <!-- 分类 chip。数字是**这一层有几条**，让用户先看到分布：
+           大部分时候「要办事」二十几条、「影响出行」两三条，
+           一眼就知道哪些该看、哪些可以略过。 -->
+      <div class="chips" id="ntChips" hidden></div>
+
+      <!-- 「6 个来源 · 52 条 · 10-20 15:30 更新」。
+           来源数和条数都要露出来 —— 少一个源的时候用户得能发现，
+           不然「今天怎么只有 3 条」会被当成「学校没发通知」。 -->
+      <div class="ntsum" id="ntSum" hidden></div>
+
+      <!-- 有源没取到时单独警告一行。绝不安静地少一块。 -->
+      <div class="ntwarn" id="ntWarn" hidden></div>
+
+      <div class="exloading" id="ntLoading" hidden>正在从学校各部门的网站取公告…</div>
+
+      <div class="empty" id="ntEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><path d="M4 10v4a1 1 0 0 0 1 1h2.5L14 19V5L7.5 9H5a1 1 0 0 0-1 1z"/><path d="M17.5 8.5a5 5 0 0 1 0 7"/></svg>
+        </div>
+        <h2 id="ntEmptyTitle">还没取到公告</h2>
+        <p id="ntEmptyText">公告来自学校各部门的公开网页，不需要登录。</p>
+        <button class="btn primary" id="ntRetry">再试一次</button>
+      </div>
+
+      <div class="ntlist" id="ntList" hidden></div>
+
+      <div class="ntfoot" id="ntFoot" hidden></div>
+    </div>
+  </section>
+
+  <!-- ================= 校历 ================= -->
+  <!-- 为什么单独一页而不是塞进课表：课表回答「今天上什么」，校历回答
+       「现在第几周、下一件事什么时候、还有几天放假」—— 后者是一个学期
+       看十几次的查询，藏在课表里等于没有。
+       🔴 这一页**不打任何网络**：日期全写在 app.js 的 CAL_DATA 常量里，
+          学校改版、断网、账号过期都不影响。校历一个学期只变一次，
+          为它每次去抓网页不值得，抓不到还会显示成「没有校历」。 -->
+  <section class="page" id="page-calendar" hidden>
+    <header class="pagehead">
+      <!-- 校历和空教室不再是底部 tab，是从课表页进来的「子页」，
+           所以必须有可见的返回 —— 网页版没有安卓那个返回键。 -->
+      <button class="ghost-btn back" id="calBack" aria-label="返回课表">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>校历</h1>
+    </header>
+
+    <div class="scroll">
+      <!-- 这一屏唯一的问题：「现在第几周」。所以最大的字是周次，
+           下面那条进度条是同一个数的图形版，不重复放第二遍数字。 -->
+      <div class="calhero" id="calHero">
+        <div class="calhero-lab" id="calLab">2026–2027 学年 · 第一学期</div>
+        <div class="calhero-main">
+          <b id="calWeek">第 7 周</b>
+          <span id="calRange">10.19 – 10.25</span>
+        </div>
+        <div class="calprog"><i id="calFill"></i></div>
+        <p class="calfind" id="calFind"></p>
+      </div>
+
+      <div id="calBody"></div>
+
+      <p class="calnote">
+        数据来自学校发布的《2026–2027 学年校历》，只抄了关键日期。
+        法定假期按国家规定执行，临时调整以学校通知为准。
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 空闲教室 ================= -->
+  <section class="page" id="page-rooms" hidden>
+    <header class="pagehead">
+      <button class="ghost-btn back" id="rmBack" aria-label="返回课表">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>空闲教室</h1>
+      <button class="ghost-btn" id="rmRefresh" aria-label="重新查询">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="empty" id="rmEmpty" hidden>
+        <div class="empty-ico">
+          <svg viewBox="0 0 24 24"><path d="M5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M3 20h18"/><circle cx="14.6" cy="13" r="1"/></svg>
+        </div>
+        <h2>还没绑定教务处账号</h2>
+        <p>空教室是学校教务系统里的实时数据，要先绑定才能查。</p>
+        <button class="btn primary" id="goBind4">去绑定</button>
+      </div>
+
+      <div id="rmMain" hidden>
+        <!-- 查什么：日期 + 节次。这两项每次都会变，所以放在最上面，
+             而且只用点一下（chip），不让人去滚日期轮盘。 -->
+        <div class="card rmq">
+          <div class="rmq-row">
+            <span class="rmq-k">日期</span>
+            <div class="chips rmq-chips" id="rmDays"></div>
+          </div>
+          <div class="rmq-row">
+            <span class="rmq-k">节次</span>
+            <div class="chips rmq-chips" id="rmPeriods"></div>
+          </div>
+          <button class="btn primary block" id="rmGo">查询空闲教室</button>
+          <!-- 原生日期选择器：安卓 WebView 里点一下就是系统日历，
+               比自己做一套滚轮靠谱得多。放在按钮旁边看不见的地方，
+               由「其他」那个 chip 触发。 -->
+          <input type="date" id="rmDate" class="rmdate">
+        </div>
+
+        <!-- 筛选默认收起：绝大多数时候只想知道「这一节哪儿空着」，
+             三个下拉天天摆在最上面只会把结果挤到屏幕外。 -->
+        <div class="card">
+          <button class="row tap" id="rmFilterRow">
+            <span class="k">筛选</span>
+            <span class="rowend">
+              <span class="v muted" id="rmFilterSum">不限</span>
+              <svg class="rowico" id="rmFilterIco" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <div class="rmfilter" id="rmFilterBox" hidden></div>
+        </div>
+
+        <div class="rmloading" id="rmLoading" hidden>正在查空教室…</div>
+
+        <div class="card warncard" id="rmErrCard" hidden>
+          <h2>没查成</h2>
+          <p class="sub" id="rmErrText"></p>
+          <button class="btn block" id="rmRetry">再试一次</button>
+        </div>
+
+        <div class="empty rmfirst" id="rmFirst" hidden>
+          <h2>选好日期和节次，点查询</h2>
+        </div>
+
+        <div id="rmResult" hidden>
+          <div class="rmsum" id="rmSum"></div>
+          <!-- 容量是学校自己填的，四五百座那种明显不靠谱。一句话说清就够，
+               别解释我们为什么不知道（用户 2026-10-30：面向用户、极简）。 -->
+          <div class="rmnote">容量是学校系统里填的数，可能不准。</div>
+          <div class="rmnotice" id="rmNotice" hidden></div>
+          <div class="rmlist" id="rmList"></div>
+          <div class="rmtrunc" id="rmTrunc" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 我的 ================= -->
+  <!-- ================= 校园（智慧门户：一卡通 + 办事） =================
+       为什么单开一页而不是塞进「我的」：这一页装的是**门户**的东西（另一个密码、
+       另一套登录），而「我的」装的是本机设置。混在一起，用户会以为
+       「解除绑定」把门户也一起解了 —— 那两件事本来就是分开的。
+       为什么不用第 6 个 tab：底部只留 5 个，这一页把「一卡通」和「19 个办事入口」
+       合成一件事 —— 都是「去学校办事」。 -->
+  <section class="page" id="page-campus" hidden>
+    <header class="pagehead">
+      <h1>功能</h1>
+      <button class="ghost-btn" id="cpRefresh" aria-label="刷新">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <!-- 没登慧生活时的一句话。登录表在「我的 → 账号管理 → 慧生活账号」。 -->
+      <div class="card wtpad" id="wtNeedLogin" hidden>
+        <h2>还没登录慧生活</h2>
+        <p class="sub">接水、余额、积分任务都要先登录。</p>
+        <button class="btn primary block" id="wtGoLogin">去登录</button>
+      </div>
+
+
+      <!-- ---------- 已登录：余额 + 设备列表 ---------- -->
+      <div id="waterOn" hidden>
+        <!-- 登录过期：和校园页那张「门户过期」同一个思路 ——
+             数据照常显示，只标一下它可能不是最新的，别整块藏起来。 -->
+        <div class="card warncard" id="wtExpired" hidden>
+          <h2>登录过期了</h2>
+          <p class="sub">慧生活798 的登录态过一段时间就会失效。重新登录一次就行，手机号还在，只要再收一条短信。</p>
+          <button class="btn primary block" id="wtRelogin">重新登录</button>
+        </div>
+
+        <!-- ==================== 卡 1：饮水 ====================
+             0.37.0：余额 / 正在出水 / 刚才那次 / 消费记录，原来各占一张卡
+             （四张卡、四个圆角、四条投影），可它们说的是同一件事：这台饮水机
+             和你这个月的钱。用户 2026-11-01：「这个界面大部分区域都是饮水，
+             但却被划分成了好多好多部分」—— 说的就是这里。
+             合成一张之后，一条竖线都不用，靠留白分组就够读者分清。 -->
+        <div class="card">
+          <!-- 0.32.0：这张卡从「标题 / 大字 / 一条横线 / 三列 / 一行入口」压成
+               「标题 + 大字与三列并排 + 入口」—— 同样的信息，高度少了 90px。
+               并排是**余额在左、三个周期在右**：余额是这一页的主数字，三个周期
+               是它的注脚，注脚不该另起一行占掉半张卡。 -->
+          <div class="wtbal">
+            <div class="wtbal-hd">
+              <!-- 这是饮水机那个钱包（慧生活798 里的余额），不是一卡通，
+                   也不是「校园钱包」 —— 一卡通余额在下面的校园服务里。 -->
+              <span class="wtbal-k">饮水余额</span>
+              <span class="v muted" id="wtBalWhen"></span>
+            </div>
+            <div class="wtbal-top">
+              <!-- 🔴 余额是 null 时这里写「没读到」，**绝不写 ¥0.00** ——
+                   接口改字段名和真的没钱了，看起来一模一样，但该做的事相反。 -->
+              <div class="wtbal-v" id="wtBalV">—</div>
+              <!-- 今日 / 本月消费：照出水小部件原版的「本地优先统计」做的。
+                   🔴 只能按**已读到的消费记录**算 —— 没读完的时候加「≥」，
+                      不许把下限说成总额（那是「没读到说成 0」的同族错误）。 -->
+              <div class="wtstat">
+                <div class="wtstat-i">
+                  <span class="wtstat-k">今日</span>
+                  <span class="wtstat-v" id="wtToday">—</span>
+                  <span class="wtstat-w" id="wtTodayW"></span>
+                </div>
+                <div class="wtstat-i">
+                  <span class="wtstat-k">本月</span>
+                  <span class="wtstat-v" id="wtMonth">—</span>
+                  <span class="wtstat-w" id="wtMonthW"></span>
+                </div>
+                <div class="wtstat-i">
+                  <span class="wtstat-k">本年</span>
+                  <span class="wtstat-v" id="wtYear">—</span>
+                  <span class="wtstat-w" id="wtYearW"></span>
+                </div>
+              </div>
+            </div>
+            <p class="tip note" id="wtStatNote" hidden></p>
+            <!-- 水量是**按比例估的**，账单里没有真实毫升数（原版
+                 WaterConsumptionParser 的注释也这么说）。所以这行必须一直在，
+                 而且点开就能改比例 —— 不同楼的热水单价不一样，比例错了数字就错。
+                 入口放在统计右边而不是「我的」页：改的是这三格的意思，
+                 离得远就想不起来还能改。 -->
+            <button class="wtuserow" id="wtUseRow" hidden>
+              <span id="wtUseTxt">按 ¥0.16 = 500 ml 估算</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="wtUseBox" hidden>
+              <div class="wtusefields">
+                <label class="wtusef">
+                  <span>金额</span>
+                  <input id="wtUseAmt" type="text" inputmode="decimal" autocomplete="off">
+                </label>
+                <span class="wtuseop">=</span>
+                <label class="wtusef">
+                  <span>水量 ml</span>
+                  <input id="wtUseVol" type="text" inputmode="numeric" autocomplete="off">
+                </label>
+              </div>
+              <p class="tip note" id="wtUseTip">冷水和热水单价不同，只能填一个。</p>
+              <div class="wtusebtns">
+                <button class="acc-act quiet" id="wtUseOff">不显示水量</button>
+                <span class="wtuseGap"></span>
+                <button class="acc-act" id="wtUseDef">默认比例</button>
+                <button class="acc-act strong" id="wtUseSave">保存</button>
+              </div>
+            </div>
+            <p class="tip note" id="wtBalTip" hidden></p>
+          </div>
+
+          <!-- 正在出水：**本地记的，不是服务端状态**。
+               /ui/app/master 只给设备列表，没有「这台正在出水」这个字段。
+               所以这里是「刚才你启动了 X」的提醒 + 一个停止按钮，文案不装作
+               知道设备真实状态（红线：不把「猜的」说成「读到的」）。
+               0.37.0：从一张卡缩成卡里的一条，红框改成红点 ——
+               它是一条**临时状态**，不是一块内容。 -->
+          <div class="wtstrip" id="wtLive" hidden>
+            <span class="wtlive-dot" aria-hidden="true"></span>
+            <span class="wtstrip-t">
+              <b id="wtLiveName">正在出水</b>
+              <span id="wtLiveWhen">—</span>
+            </span>
+            <button class="btn danger" id="wtStop">停止</button>
+          </div>
+
+          <!-- 刚停完那一次的结算。原版接水结束会通知「本次消费 + 估算水量」，
+               水量要一个金额↔升数的兑换比例（原版是可配置的，我们不知道真值），
+               所以这里**只报金额**，不编一个「约 2.1 升」出来。
+               🔴 账单可能要几分钟才出：读不到就说「还没出」，绝不显示 ¥0.00。 -->
+          <div class="wtstrip" id="wtLast" hidden>
+            <span class="wtstrip-t">
+              <b>刚才那次</b>
+              <span id="wtLastWhen"></span>
+            </span>
+            <span class="wtlast-v" id="wtLastV">—</span>
+            <p class="tip note" id="wtLastTip" hidden></p>
+          </div>
+
+          <!-- 消费记录。**默认收起**：这一页要回答的是「还有多少钱、今天花了多少」，
+               一条条明细是偶尔才翻一次的。收起时右边那行字顶上「最近一条」，
+               不展开也知道刚扣了多少。
+               0.37.0：从独立一张卡并进这张 —— 明细本来就是「饮水余额」的注脚。
+               ⚠️ 这一行铺满卡宽（margin 0），判据里钉着 billGap == 0。 -->
+          <button class="row tap" id="wtBillOpen" aria-expanded="false">
+            <span class="k">消费记录</span>
+            <span class="rowend">
+              <span class="v muted" id="wtBillBrief">—</span>
+              <svg class="rowico cpchev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <div id="wtBillBox" hidden>
+            <div class="wtboxin">
+              <div id="wtBills"></div>
+              <p class="tip note" id="wtBillTip" hidden></p>
+              <button class="btn block" id="wtBillMore" hidden>加载更多</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== 卡 2：我的饮水机 ==================== -->
+        <div class="card wtpad">
+          <div class="todohd">
+            <span class="todotitle">我的饮水机</span>
+            <!-- 0.32.0：卡头右边原来空着，现在写台数 —— 空着的那一截是
+                 「信息密度低」最直观的来源之一。 -->
+            <span class="v muted" id="wtDevN"></span>
+          </div>
+          <div id="wtDevs"></div>
+          <p class="tip note" id="wtDevTip" hidden></p>
+          <!-- 风险告知（0.38.0）。原来这里是点「接水」时弹一次全屏免责声明，
+               用户 2026-11-01：「点接水不要出弹窗提示了，太麻烦了」。
+               ⇒ 改成常驻一行小字：话还在，但不再拦着人。
+               ⚠️ 别再改回弹层 —— 弹层挡住的恰恰是第一次用水那一下，
+                  而「知道了」点完还是要接水，它本来就不是关卡。
+               ⚠️ 原来页面底部还有一句「充值、绑定一卡通去慧生活798 里做」，
+                  0.38.0 并到这一行：两件事都是「钱」，拆在两处讲反而都讲不全，
+                  而且那一行本来要占 30px —— 这一页差的就是这 30px。 -->
+          <p class="tip note" id="wtRisk">接水会真的出水扣钱；充值、绑一卡通去慧生活798 里做。</p>
+
+          <!-- 添加设备：0.31.0 扫码，0.37.0 补手动输入。
+               🔴 两个图标并排，**扫码在右**（它是主路径，手指落在右侧更容易）；
+                  手动输入在左，一眼能看出是「另一个办法」，而不是更小的一条路。
+               🔴 相机**用完就关**（关浮层时 stop 所有轨道），不然指示灯一直亮。
+               🔴 相机打不开（没权限 / 没相机 / 网页版走 http）时不能只剩黑屏，
+                  浮层里那颗「粘贴内容」就是退路。 -->
+          <div class="row wtadd">
+            <span class="k">添加设备</span>
+            <span class="rowend">
+              <button class="wt-ico" id="wtDevType" aria-label="手动输入编号添加">
+                <!-- 小键盘：3×3 的按键点 + 一条空格键。
+                     为什么不用「输入框 + 光标」：在 20px 的显示尺寸下，
+                     一个框加一根竖线更像「两栏表格」，没人会读成「打字」。
+                     键盘是唯一不会被误认的「手动输入」符号。 -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="2.6" y="5.4" width="18.8" height="13.2" rx="3.2"/>
+                  <g fill="currentColor" stroke="none">
+                    <circle cx="7.4" cy="9.5" r="1"/>
+                    <circle cx="12" cy="9.5" r="1"/>
+                    <circle cx="16.6" cy="9.5" r="1"/>
+                    <circle cx="7.4" cy="12.7" r="1"/>
+                    <circle cx="12" cy="12.7" r="1"/>
+                    <circle cx="16.6" cy="12.7" r="1"/>
+                  </g>
+                  <path d="M8.6 15.8h6.8"/>
+                </svg>
+              </button>
+              <button class="wt-ico" id="wtDevAdd" aria-label="扫码添加饮水机">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 8.6V6.4A2.4 2.4 0 0 1 6.4 4h2.2"/>
+                  <path d="M15.4 4h2.2A2.4 2.4 0 0 1 20 6.4v2.2"/>
+                  <path d="M20 15.4v2.2a2.4 2.4 0 0 1-2.4 2.4h-2.2"/>
+                  <path d="M8.6 20H6.4A2.4 2.4 0 0 1 4 17.6v-2.2"/>
+                  <path d="M4.2 12h15.6"/>
+                </svg>
+              </button>
+            </span>
+          </div>
+
+          <!-- 被「在本机隐藏」的设备。一行搞定：不想要的那台还在慧生活798
+               名下，只是我们这边不画了 —— 恢复也是点这一行，不用进二级页面。 -->
+          <button class="row tap" id="wtDevShow" hidden>
+            <span class="k">已隐藏的饮水机</span>
+            <span class="rowend">
+              <span class="v muted" id="wtDevHideN">—</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+        </div>
+
+        <!-- 积分。**只读**，签到不在这里 —— 见下面任务卡。 -->
+        <div class="card wtpad" id="wtScoreCard">
+          <div class="todohd">
+            <span class="todotitle">积分</span>
+          </div>
+          <div class="wtpair">
+            <div class="wtpair-i">
+              <span class="wtpair-k">可用</span>
+              <span class="wtpair-v" id="wtScoreValid">—</span>
+            </div>
+            <div class="wtpair-i">
+              <span class="wtpair-k">累计</span>
+              <span class="wtpair-v" id="wtScoreTotal">—</span>
+            </div>
+          </div>
+          <p class="tip note" id="wtScoreTip" hidden></p>
+          <!-- 积分兑换余额（0.27.1，照出水小部件的 WalletActivity）：
+               1000 积分 = ¥1，档位只有 100 / 1000，份数从 1 起。
+               🔴 只传**总积分**、不传份数；拿到账单号还要查 status==3 才算完成。
+               🔴 失败**不自动重试** —— 重试等于再扣一次积分。
+               ⚠️ 默认收起：这一页已经很长，不兑换的人不该先看一堆控件。 -->
+          <button class="row tap" id="wtExOpen" hidden>
+            <span class="k">兑换成余额</span>
+            <span class="rowend">
+              <span class="v muted">1000 分 = ¥1</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <div id="wtExBox" hidden>
+            <!-- 兑换到哪个钱包。只有一个钱包时它就是一行**标签**（箭头藏掉、
+                 点不动）；多个时才能点开选择器 —— 一颗点了没反应的按钮
+                 比没有按钮更糟。 -->
+            <button class="row tap" id="wtExTo" disabled>
+              <span class="k">兑换到</span>
+              <span class="rowend">
+                <span class="v muted" id="wtExWallet">—</span>
+                <svg class="rowico" id="wtExChev" viewBox="0 0 24 24" hidden>
+                  <path d="M9 6l6 6-6 6"/>
+                </svg>
+              </span>
+            </button>
+            <div class="wtchips" id="wtExUnits">
+              <button type="button" class="wtchip" data-unit="100">100 分</button>
+              <button type="button" class="wtchip" data-unit="1000">1000 分</button>
+            </div>
+            <div class="wtqty">
+              <button type="button" class="wtqty-btn" id="wtExMinus">−</button>
+              <span class="wtqty-v" id="wtExQty">1</span>
+              <button type="button" class="wtqty-btn" id="wtExPlus">+</button>
+            </div>
+            <p class="tip note" id="wtExSum"></p>
+            <button class="btn primary block" id="wtExGo">兑换</button>
+            <p class="tip note" id="wtExMsg" hidden></p>
+          </div>
+
+          <!-- ================= 今日任务（并进同一张卡）=================
+               0.37.0：积分和任务原来各占一张卡，可它们是同一个循环的两半 ——
+               任务是**挣积分**，兑换是**花积分**。一张卡里从上往下读就是
+               「有多少 → 怎么挣 → 怎么花」，比两张平级的卡顺。
+               下面这条竖线是这一页唯一的分组线：不是装饰，是「换了件事」的记号。 -->
+          <div class="wtsec" id="wtTaskCard">
+          <!-- 今日任务：签到是**列表里的第一行**，不是单独一张卡。
+             🔴 照出水小部件（WaterWidget）做的：它整个 App 只有一张「今日任务」
+                卡 + 一颗「运行今日任务」按钮，签到和积分任务在同一条流水线上跑。
+                0.26.2 ~ 0.27.0 我们把签到单独摆了一张卡、一颗按钮，用户
+                2026-10-31 原话：「直接把签到也合并进任务界面不就行了，为什么还要
+                单独列出来」—— 一件事两个入口，本身就是多余的。
+             🔴 **你点了才跑**：不做后台自动签到、不挂定时器、不在打开 App 时
+                偷偷补签 —— 签到是账号行为，替用户在他不在场时做，出了事他连
+                什么时候发生的都不知道。
+             🔴 签到和任务的**请求体不一样**（签到 `{weekday, adId}` /
+                任务 `{adId, type:101}`），所以在 `wtRunAll` 里按 `kind` 分派，
+                但**共用同一个列表和同一个计数** —— 0.26.2 就是列表和执行各写
+                一遍，结果卡片写「共 3 个」、确认框写「2 个」（红线 59）。
+             🔴 每次提交之间**至少 30 秒**（原版 TokenTaskRateLimiter 同款）。
+             🔴 跑完要**重新读积分**来核验：服务端回「成功」不等于到账。 -->
+          <!-- 0.33.0：**列表默认收起**，跟「消费记录」同一套做法。
+               这一页要塞进一屏，三条任务行就要 120px；而点「一键完成」
+               根本不需要先看列表（确认框会把要做的事列出来）。
+               标题行整条可点，点开就是明细。
+               🔴 「一键完成」留在标题行上，不跟着收 —— 收起只是别看明细，
+                  不是让操作多一步。用户原话：「接个水还得按这么多按钮」。 -->
+          <div class="todohd">
+            <button class="taskopen" id="wtTaskOpen" aria-expanded="false">
+              <span class="todotitle">今日任务</span>
+              <span class="v muted" id="wtTaskCount"></span>
+              <svg class="rowico cpchev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="todobtn solid" id="wtRunAll" hidden>一键完成</button>
+          </div>
+          <!-- 这张提示说的是「任务列表没读到 / 只读到一半」，收起来也必须看得见 -->
+          <p class="tip note" id="wtMissionTip" hidden></p>
+          <div id="wtTaskBox" hidden>
+            <div id="wtMissions"></div>
+            <button class="btn block" id="wtRunStop" hidden>停下</button>
+            <p class="tip note" id="wtRunPace" hidden></p>
+          </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <!-- 0.33.0：「登录手机号」原来单独占一行（44px 只说一串数字）。
+               并到这一行右边 —— 手机号本来就是「这个号」的注脚，
+               而「充值/签约/绑卡去那边」那句下面 acc-note 已经说了。
+               🔴 #wtPhoneShown 必须还在：判据和「换号了没」都靠它。 -->
+          <button class="row tap" id="wtOpenApp">
+            <span class="k">打开慧生活798</span>
+            <span class="rowend">
+              <span class="v muted" id="wtPhoneShown">—</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <!-- 「退出登录」2026-11-01 挪走（0.39.1）：账号管理里「设备登录 / 积分登录」
+               各自已经有一个「退出」，这里再放一行红字就是第二个删除口，还占着一整行。 -->
+        </div>
+      </div>
+
+      <!-- 公告并进了这一页（原来占着底部中间那格 tab）。
+           0.32.0：它和「校园服务」都是**一行字就能说完**的入口，
+           各占一张卡 = 两张卡为了两个字的高度在那里摆着（用户原话：
+           「信息密度很低」）。合成一张，两行之间用一条细分隔线。 -->
+      <div class="card">
+        <button class="row tap" id="ntEnter">
+          <span class="k">校园公告</span>
+          <span class="rowend">
+            <span class="v muted" id="ntBrief">校级 · 教务 · 团委 · 后勤</span>
+            <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+          </span>
+        </button>
+        <!-- 低频的一堆收起来：一卡通、19 个办事入口、门户登录。 -->
+        <button class="row tap" id="cpMoreToggle" aria-expanded="false">
+          <span class="k">校园服务</span>
+          <span class="rowend">
+            <span class="v muted">一卡通 · 办事入口</span>
+            <svg class="rowico cpchev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <div id="cpMoreBox" hidden>
+        <div id="cpOff">
+          <div class="card cp-card">
+            <h2>连接智慧门户</h2>
+            <p class="sub">一卡通余额、消费明细，还有请假、第二课堂、打印中心等 19 个办事入口，都在智慧门户里。</p>
+            <p class="sub small">门户密码和教务系统不是同一套，要单独连一次。连上之后只要偶尔用一下，就不用反复输密码。</p>
+            <button class="btn primary block" id="cpConnect">连接门户</button>
+          </div>
+        </div>
+
+        <!-- 已连门户 -->
+        <div id="cpOn" hidden>
+          <!-- 门户过期、但本机还存着上次的数据时出现。
+               🔴 以前这种情况会把整块内容藏起来换成「连接门户」——
+                  用户看到的是「数据没了」，其实只是「门票过期了」。
+                  现在数据照常显示，只在这里标一下它有多旧。 -->
+          <div class="card warncard" id="cpExpired" hidden>
+            <h2>门户登录过期了</h2>
+            <p class="sub" id="cpExpiredTxt">下面是上次拿到的数据，余额可能不是最新的。</p>
+            <button class="btn primary block" id="cpReconnect">重新连接门户</button>
+          </div>
+
+          <div class="card ykt">
+            <div class="ykt-top">
+              <span class="ykt-k">一卡通余额</span>
+              <span class="ykt-t" id="yktTime">—</span>
+            </div>
+            <div class="ykt-bal"><b id="yktBal">—</b><span>元</span></div>
+            <!-- 余额随时会变，所以这行必须说清楚「这个数字是什么时候的」。
+                 有缓存、又没连网刷新过的时候才出现。 -->
+            <p class="sub small ykt-at" id="yktAt" hidden></p>
+            <!-- 余额低的时候常驻一条，**不弹窗**：弹窗会被点掉，而「快没钱了」
+                 这件事需要在你想起来的时候还看得见。充值后自然消失。 -->
+            <p class="lowbal" id="yktLow" hidden></p>
+            <!-- 余额提醒的入口就放在余额卡里（2026-10-22 用户要求）。
+                 以前在「我的 → 设置」，问题是：想调阈值的时候人正看着余额，
+                 却要去另一个页面找。放在这里，阈值和它管的那个数字在同一张卡上。 -->
+            <button class="row tap" id="yktAlert">
+              <span class="k">余额提醒</span>
+              <span class="rowend">
+                <span class="v muted" id="yktAlertV">低于 20 元时提醒</span>
+                <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              </span>
+            </button>
+            <button class="row tap" id="yktMore">
+              <span class="k">消费明细</span>
+              <span class="rowend">
+                <span class="v muted" id="yktCount">—</span>
+                <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              </span>
+            </button>
+            <!-- 明细就地展开，不再弹一层：这里没有别的操作，
+                 弹出去反而多一次「返回」。 -->
+            <div class="ykt-list" id="yktList" hidden></div>
+          </div>
+
+          <div class="card cp-card">
+            <!-- 19 个办事入口一年用不了几次（请假、第二课堂、打印中心…），
+                 默认折起来，只留一行「办事入口 · 19 个」。
+                 用户 2026-10-30：「校园页的绝大部分功能使用频率都极低」——
+                 高频的东西不该被这一屏的低频入口挤到下面去。
+                 ⚠️ 折起来不等于藏起来：`.appitem` 仍在 DOM 里（判据按数量算），
+                    只是 `#cpAppsBox` 带 hidden。 -->
+            <button class="row tap" id="cpAppsToggle" aria-expanded="false">
+              <span class="k">办事入口</span>
+              <span class="rowend">
+                <span class="v muted" id="cpAppsN">—</span>
+                <svg class="rowico cpchev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              </span>
+            </button>
+            <div id="cpAppsBox" hidden>
+              <!-- 这两句话**必须不一样**，因为两条路真的不一样（见 app.js 的 openApp）：
+                   APK 0.6.0 起在 App 内开 WebView，门户的 cookie 一起带过去，
+                   CAS 认得出人 ⇒ 不用再登；
+                   网页版只能新开标签页，那是另一个 cookie 罐子 ⇒ 第一次要再登。
+                   以前这里统一写「在 App 里打开、不用再输密码」，是假的，改掉。
+                   ⚠️ 以后再改这句，记得两边一起改 —— applyEnvTexts 只搬 data-app。 -->
+              <p class="sub small"
+                 data-app="点一下直接进。它们走学校统一登录，门户还连着就不用再登。">点一下用浏览器打开。它们走学校统一登录，第一次进去要再登一次。</p>
+              <div class="applist" id="cpApps"></div>
+            </div>
+          </div>
+          <!-- 0.39.1：「重新登录门户 / 断开门户」这两行删掉了。
+               用户原话：「删除东西的功能你做的实在是显眼过头了……还容易让用户误触」。
+               断开是一学期也用不上一次的动作，却占着两张整行，还挨着常用入口。
+               现在一个系统只有一个断开处 ——「我的 → 账号管理」，那一页本来就写着
+               「只回答两件事：连没连上、怎么连/怎么断」。过期重连也走那儿。 -->
+        </div>
+
+        <p class="cpnote" id="cpNote">
+          只读取，不会代替你提交任何申请。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="page-me" hidden>
+    <header class="pagehead"><h1>我的</h1></header>
+
+    <div class="scroll">
+      <!-- 已绑定 -->
+      <!-- 账号管理**不受教务绑定影响**：里面既有三个学校系统，
+           也有慧生活账号（接水/积分）。没绑教务的人也要能进去。 -->
+      <div class="card">
+        <button class="row tap" id="rowAccounts">
+          <span class="k">账号管理</span>
+          <span class="rowend">
+            <span class="v muted" id="meAccounts">—</span>
+            <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+        </div>
+
+      <div id="meBound" hidden>
+        <!-- 头像 + 个人信息原来是**两张卡**（头像卡 82 + 「个人信息」行 44 + 卡间距），
+             合起来 138px 只说了一件事：我叫什么、哪个班、学号多少。
+             0.33.0 并为一张：整张卡点了就进个人信息弹层（`openProfileSheet`）。
+             🔴 `#rowProfile` / `#meProfileHint` 这两个 id 必须留着 ——
+                判据按它们找「这一行在不在、能不能点、右边是不是学号」。 -->
+        <div class="card profilecard tap" id="rowProfile" role="button" tabindex="0">
+          <div class="avatar" id="meAvatar">王</div>
+          <div class="pinfo">
+            <!-- 学号挪到姓名这一行的右侧（原来是单独一列，正文 17px 之后
+                 它把「班级 · 专业」挤成了省略号）。副标题现在独占一行。 -->
+            <span class="prow">
+              <b id="meName">—</b>
+              <span class="pid"><span id="meProfileHint">—</span></span>
+            </span>
+            <span class="pmeta" id="meMeta">—</span>
+          </div>
+          <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+
+        <!-- 有数据但本机没存住密码时才出现。
+             以前这种情况会显示成「还没绑定账号」，可数据明明就在眼前 ——
+             用户根本不知道该去哪儿重输，只能干瞪眼。 -->
+        <div class="card warncard" id="reauthCard" hidden>
+          <h2 id="reauthHead">需要重新输入密码</h2>
+          <p class="sub" id="reauthSub">课表成绩还在本机，但密码没能存下来，每次打开都要再输一次。</p>
+          <label class="field">
+            <span>密码</span>
+            <span class="pwdbox">
+              <input id="inPass2" type="password" autocomplete="current-password" placeholder="教务系统密码">
+              <button type="button" class="pweye" data-for="inPass2"
+                      aria-label="显示密码" aria-pressed="false">
+                <svg class="eye-on"><use href="#i-eye"/></svg>
+                <svg class="eye-off"><use href="#i-eye-off"/></svg>
+              </button>
+            </span>
+          </label>
+          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
+          <button class="btn primary block" id="btnReauth">保存并同步</button>
+          <p class="tip" id="reauthTip"></p>
+        </div>
+
+        <!-- 该办的事：选课 / 评教 / 免听 / 免修开没开。
+             这几件事一年就开那么几次，错过要等半年 —— 而且评教不做完
+             查不了成绩。所以放在「我的」靠上的位置。
+             ⚠️ 只查状态、给入口，**绝不代替提交**（跟「充值和办套餐不代办」
+                是同一条规矩：写操作出错了不是重试能救的）。 -->
+        <div class="card todocard" id="todoCard" hidden>
+          <div class="todohd">
+            <span class="todotitle">该办的事</span>
+            <button class="todobtn" id="todoRefresh">检查</button>
+          </div>
+          <div id="todoList"></div>
+          <p class="todo-foot" id="todoFoot" hidden></p>
+        </div>
+
+        <!-- 个人信息原来在这里铺了 11 行（学号 / 学院 / 专业 / 方向 / 班级 /
+             校区 / 性别 / 年级 / 学历 / 学籍状态 / 在校时间），把「我的」拉得很长，
+             而真正每天要看的其实只有上面那张头像卡。
+             2026-10-22 用户原话：「我的 界面不要拉这么长，你在前面展示的一大堆
+             个人信息其实只需要一个 个人信息 栏就够了，点进个人信息栏查看自己的详细信息」。
+             ⇒ 收成一行，点开是弹层（app.js 的 openProfileSheet）。
+             0.33.0 再进一步：这一行并进上面的头像卡，整张卡点了就开弹层。
+             ⚠️ 这些 id（meSid/meDept/…）已经不在页面上，改成由弹层按需生成 ——
+                别在 renderMe 里再去找它们，找到的是 null。 -->
+
+        <div class="card">
+          <button class="row tap" id="btnSync">
+            <span class="k">同步教务处数据</span>
+            <!-- 整行都能点，但光看「刚刚同步」四个灰字看不出来能点，
+                 所以右边补一个刷新图标当暗示 -->
+            <span class="rowend">
+              <span class="v muted" id="meSyncTime">—</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
+            </span>
+          </button>
+          <button class="row tap" id="rowSemester">
+            <span class="k">学期设置</span>
+            <span class="rowend">
+              <span class="v muted" id="meSemester">—</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <!-- 校历和空教室原来**只能**从课表页顶部进：校历靠点「第 1 周」那行字，
+               空教室靠一扇门的图标 —— 两条都是「不点不知道，点了才知道」。
+               课表页那边已经补了文字和 ▾，这里再给一条纯文字的路径：
+               有人就是习惯从设置里找东西，不该逼他去猜图标。
+               🔴 0.35.0 起只留「校历」这一条：「找空教室」在课表页顶部已经有
+                  一个带字的按钮，两处都能进、两处都要维护，用户还得猜
+                  「这两个是不是同一个东西」。空教室是「第 N 周周几哪节空」，
+                  跟课表是同一件事的两面，入口就留在课表那边。
+                  校历留下，是因为它按学期算、跟「学期设置」挨着看更顺。 -->
+          <button class="row tap" id="rowCalendar">
+            <span class="k">校历</span>
+            <span class="rowend">
+              <span class="v muted">看这学期怎么排</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
+          <!-- 余额提醒原来放在这里，2026-10-22 用户要求搬进「校园」页的
+               一卡通余额卡里 —— 提醒是针对那个余额的，离得近才有用。 -->
+          <button class="row tap" id="btnTimes">
+            <span class="k">上课时间</span>
+            <span class="v muted" id="meTimes">默认作息，可修改</span>
+          </button>
+          <button class="row tap" id="btnHidden" hidden>
+            <span class="k">已隐藏的课程</span>
+            <span class="v muted" id="meHidden">0 门</span>
+          </button>
+          <div class="hint" id="startHint">「第几周」是按开学日期推出来的。</div>
+        </div>
+
+        <!-- 学习通那一行 2026-10-22 删掉了：用户原话「跟现有的其他功能重复了」。
+             它本来就是「学习」页学习通段的一个快捷方式，点过去还得再滚一次。
+             账号相关的事挪进「账号管理」，那里只管连没连上，不重复作业列表。 -->
+
+        <!-- 「解除绑定」2026-11-01 挪走（0.39.1）：用户原话「删除东西的功能你做的
+             实在是显眼过头了，用户用删除功能的频率极低，不应该让它占据这么大空间，
+             这么多地方，还容易让用户误触」。它原来是一整行红字，就压在「学期设置」
+             和「校历」这些天天用的入口下面。
+             现在只在「我的 → 账号管理 → 教务系统 → 解绑」那一处，一行小字。 -->
+        <div class="card">
+          <button class="row tap" id="btnClearCache">清除本机缓存</button>
+        </div>
+      </div>
+
+      <!-- 未绑定 -->
+      <div id="meUnbound" hidden>
+        <div class="card quickbox" hidden>
+          <h2 data-web="这台电脑已经绑过了" data-app="这台手机已经绑过了">这台电脑已经绑过了</h2>
+          <p class="sub"><span data-web="电脑上存着" data-app="本机存着">电脑上存着</span> <b class="qwho"></b> 的账号，不用再输一次密码。</p>
+          <button class="btn primary block" id="btnQuick">直接同步</button>
+        </div>
+        <div class="card bindcard">
+          <h2>绑定教务处账号</h2>
+          <p class="sub">用的是教务系统（jwglxt.zua.edu.cn）的学号和密码，和校园网认证不是同一套。</p>
+          <label class="field">
+            <span>学号</span>
+            <input id="inUser" type="text" inputmode="numeric" autocomplete="username" placeholder="例如 2023123456">
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <span class="pwdbox">
+              <input id="inPass" type="password" autocomplete="current-password" placeholder="教务系统密码">
+              <button type="button" class="pweye" data-for="inPass"
+                      aria-label="显示密码" aria-pressed="false">
+                <svg class="eye-on"><use href="#i-eye"/></svg>
+                <svg class="eye-off"><use href="#i-eye-off"/></svg>
+              </button>
+            </span>
+          </label>
+          <button type="button" class="pwdlost" data-pwdhelp="jw">忘记密码？去教务系统重置</button>
+          <p class="sub small pwdhint">那边的重置页只认「账号所用邮箱」—— 当初没在教务系统里绑过邮箱的话，这一步走不通，得找教务处重置。</p>
+          <button class="btn primary block" id="btnBind">绑定并同步</button>
+          <p class="tip" id="bindTip"></p>
+          <!-- 以前这里有个「记住账号密码」勾选框，默认勾上但可以取消。
+               取消之后就出现「明明登录成功了，刷新却说没绑定」——
+               数据在、密码没存，用户完全看不出区别。
+               现在改成登录成功一律加密保存（Windows DPAPI / Android Keystore），
+               凭据真的失效时才要求重新输入。 -->
+          <p class="sub small">登录成功后会把学号密码加密保存在本机，下次自动同步，不用重复输入。</p>
+        </div>
+      </div>
+
+      <div class="card about">
+        <!-- 郑航百科原来在这里（0.20.0 及以前）。2026-10-28 用户原话：
+             「还有 zuawiki，你把它换个位置吧，我的界面太隐蔽了」
+             ⇒ 搬到「校园」页第一张卡。搬的理由不是随便挪：
+               百科讲的是宿舍/食堂/转专业/校医院这些**校园生活**的事，
+               跟「校园」这一页是同一件事；而且「我的」这一页要滚到底才看得到它。
+             ⚠️ 搬走后这里只剩「检查更新」，别再往回塞 —— 判据 [1] 钉着位置。 -->
+        <!-- 版本号不写死在这里：app.js 的 APP_VERSION 是唯一来源，
+             build_apk.py 和 version.json 都从那儿读。 -->
+        <button class="row tap" id="btnUpdate">
+          <span class="k">检查更新</span>
+          <span class="rowend">
+            <span class="v muted" id="meVersion">—</span>
+            <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+          </span>
+        </button>
+        <!-- 0.39.1：原来这两句是「数据来自学校教务系统，只做读取，不会提交任何
+             申请、选课或修改。账号密码只存在你电脑本地的服务里，不经过任何第三方
+             服务器。」—— 第一句在说数据来源和保证，用户看不出跟自己有什么关系；
+             第二句是架构说明（「服务」对他来说是什么？）。压成一句：只读 + 密码在哪。 -->
+        <p class="sub" data-web="只读，不会替你提交任何东西。密码只存在你电脑上。"
+           data-app="只读，不会替你提交任何东西。密码只存在这台手机里。">
+          只读，不会替你提交任何东西。密码只存在你电脑上。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 账号管理（「我的」→ 账号管理）=================
+       2026-10-22 用户要求：「把 教务系统，学习通，智慧门户 这些账号统一放在
+       我的 页面，做成 账号管理 界面」。
+       三套系统各有各的账号，互相不通用 —— 这件事以前散在三个地方说
+       （我的 里绑教务、校园 里连门户、学习 里连学习通），
+       用户根本不知道该去哪儿改哪一套。现在集中到一屏。
+       ⚠️ 这里只管「连没连上 / 连 / 断开」，不重复任何业务入口
+          （作业列表在「学习」，余额在「校园」）。 -->
+  <section class="page" id="page-accounts" hidden>
+    <header class="pagehead">
+      <button class="ghost-btn back" id="accBack" aria-label="返回我的">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>账号管理</h1>
+    </header>
+
+    <div class="scroll">
+      <!-- 0.39.1：原来是「三个系统各有各的账号，密码互不通用。密码都加密存在这台
+           手机里，不会上传。」—— 第一句是给「为什么下面有三个登录」做解释，
+           可下面三行本来就分别写着「教务系统 / 学习通 / 智慧门户」，一眼就看得出
+           是三个。第二句「加密存在…不会上传」在别处已经说过一次。
+           留最短的一句，只回答「我的密码安不安全」。 -->
+      <p class="acc-note">密码只存在这台手机里。</p>
+      <div class="card acc-list" id="accList"></div>
+
+      <h2 class="acc-h2">慧生活账号</h2>
+      <div class="card wtpad" id="wtAccounts">
+        <div class="todohd">
+          <span class="todotitle">账号</span>
+          <span class="v muted">两个账号各管一半</span>
+        </div>
+
+        <div class="wtacc" id="wtAccDevice">
+          <div class="wtacc-main">
+            <b>设备登录</b>
+            <span class="wtacc-sub" id="wtAccDeviceSub">接水 · 余额 · 设备列表</span>
+          </div>
+          <button type="button" class="btn" id="wtAccDeviceBtn">登录</button>
+        </div>
+
+        <div class="wtacc" id="wtAccScore">
+          <div class="wtacc-main">
+            <b>积分登录</b>
+            <span class="wtacc-sub" id="wtAccScoreSub">积分 · 积分任务 · 签到</span>
+          </div>
+          <button type="button" class="btn" id="wtAccScoreBtn">登录</button>
+        </div>
+
+        <p class="tip note" id="wtAccTip" hidden></p>
+      </div>
+
+      <div id="waterOff" hidden>
+        <div class="card wtpad">
+          <h2 id="wtLoginTitle">登录慧生活798</h2>
+          <p class="sub">饮水机走的是慧生活798（长沙云多啦）的平台，和学校门户、一卡通<b>不是</b>一套账号，要单独登录一次。宿舍和教学楼的机器都在同一个账号下。</p>
+          <p class="sub small" id="wtLoginWhy">用的是短信验证码，所以密码不需要填、也不会存在手机上。手机号只记在这台手机里。</p>
+        </div>
+
+        <div class="card wtpad">
+          <label class="field">
+            <span>手机号</span>
+            <input id="wtPhone" type="tel" inputmode="numeric" autocomplete="tel"
+                   maxlength="11" placeholder="慧生活798 注册的手机号">
+          </label>
+
+          <label class="field">
+            <span>图形验证码</span>
+            <span class="wtcap">
+              <input id="wtGraph" type="text" inputmode="latin" autocomplete="off"
+                     maxlength="8" placeholder="看图输入">
+              <!-- 点图片换一张：图挂了也能点（见 app.js 的 wtNewCaptcha） -->
+              <img id="wtCapImg" class="wtcap-img" alt="图形验证码，点一下换一张">
+            </span>
+          </label>
+          <button type="button" class="pwdlost" id="wtCapNew">看不清？换一张</button>
+
+          <label class="field">
+            <span>短信验证码</span>
+            <span class="wtcap">
+              <input id="wtSms" type="text" inputmode="numeric"
+                     autocomplete="one-time-code" maxlength="8" placeholder="手机收到的数字">
+              <button type="button" class="wtcap-send" id="wtSend">发送</button>
+            </span>
+          </label>
+
+          <button class="btn primary block" id="wtLogin">登录</button>
+          <button type="button" class="pwdlost" id="wtLoginCancel">取消</button>
+          <!-- 🔴 说明用 .note（灰、左对齐）；出错才加 .bad。
+               光写 .tip 是红字居中 —— 那是「错误」的样式，不是「提示」。 -->
+          <p class="tip note" id="wtTip" hidden></p>
+        </div>
+      </div>
+
+      <!-- 0.39.1：「这个平台不是学校官方的，也不是我们做的。我们只照着它公开的
+           接口协议做查询和接水，出了问题请在慧生活798 里找客服。」三句压成一句：
+           用户只需要知道「不是学校的，出问题找谁」。 -->
+      <p class="acc-note">慧生活798 不是学校平台，出了问题在那边找客服。</p>
+    </div>
+  </section>
+
+  <!-- ================= 郑航百科（「我的」→ 郑航百科）=================
+       学长们做的非官方百科（wiki.zua.fan），不是我们写的、也不是学校官方。
+       **只做入口，不复制正文** —— 站上写着「任何复制、转载请注明出处！
+       严禁用于商业用途！」，而且它目前还没开源（「预计近期上线 GitHub」）。
+       ⇒ 这里只有「标题 + 外链」，点了在系统浏览器里打开原站那一页。
+
+       为什么是独立页而不是弹层：11 个条目 + 4 个分组在 .sheet 里放不下 ——
+       实测内容 839px、可用高度 641px（76%），按钮会被滚出屏幕（底边 1009/844）。
+       一页装得下，也不用内部滚动。
+       🔴 条目跳转必须走 openExternal：MainActivity 拦掉一切非 app.local
+          的跳转，`<a href>` 点了毫无反应、也不报错。 -->
+  <section class="page" id="page-wiki" hidden>
+    <header class="pagehead">
+      <!-- 0.27.0：WIKI 是底部 tab 页，不再是从「校园」点进来的子页，所以没有返回键。 -->
+      <h1>郑航攻略</h1>
+    </header>
+
+    <div class="scroll">
+      <!-- 头卡：这站是什么、谁写的，加一个「打开原站首页」。
+           以前这页只有一句灰字 + 13 行链接，看着像一堆没整理的书签 ——
+           用户 2026-10-28 说的「美化一下 zuawiki 的审美 UI」就是指这里。 -->
+      <div class="card wikihero">
+        <div class="wh-top">
+          <span class="wh-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 6.6C10.5 5.3 8.4 4.5 5.5 4.5H4v13.2h1.5c2.9 0 5 .8 6.5 2.1 1.5-1.3 3.6-2.1 6.5-2.1H20V4.5h-1.5c-2.9 0-5 .8-6.5 2.1z"/><path d="M12 6.6v13.2"/></svg>
+          </span>
+          <span class="wh-txt">
+            <b>ZUA Wiki</b>
+            <span>wiki.zua.fan</span>
+          </span>
+        </div>
+        <p class="wh-sub">在校学生自己写的，不是学校官方，也不是我们做的。</p>
+        <button class="btn primary block" id="wikiHome">打开原站首页</button>
+      </div>
+
+      <!-- 分组由 app.js 的 renderWikiPage() 画：组名在卡片**外面**
+           （iOS 分组列表的样子），每条一行、右边一个箭头。 -->
+      <div id="wikiList"></div>
+
+      <p class="acc-note">点开在浏览器里打开原站，正文和更新都在那边。</p>
+    </div>
+  </section>
+
+  <!-- ================= 直饮水（校园 → 直饮水）=================
+       慧生活798（长沙云多啦）是校外的饮水平台，和学校门户、一卡通**不是**
+       一套账号 —— 所以这页单独登录，跟「我的」里那三个学校系统互不影响。
+
+       🔴 现在做的是：查余额 / 列设备 / 接水 / 停止 / 积分 / 账单 /
+          积分任务 / 签到 / 两套账号。
+          0.26.0 这里写过「消费统计和积分任务**故意不做**，要签名盐值」——
+          那个前提是错的（盐在官方 APK 里，2026-10-30 取到了）。
+          但风险是真的：作者自己在 README 里写着「积分冻结、任务提示成功
+          但没到账，原因仍未确认」⇒ 首次进任务页要读并确认风险。
+
+       🔴 界面上的硬规矩：
+          1. `start` 是唯一会真的出水扣钱的调用 ⇒ 必须二次确认；
+             任务/签到有副作用（动账号），同样要确认
+          2. 余额 `null` ≠ `0`（「没读到」和「钱没了」是两件事）
+          3. 出错按 kind 说话（auth 引导重登 / sign 让查手机时间 /
+             limit 说等几分钟 / net 说换网），不许一律「操作失败」
+          4. 批量提交之间至少 30 秒，而且要能停
+
+       🔴 图形验证码是 <img src> 直接指向远端的：WebView 的
+          shouldInterceptRequest 只拦 app.local，图片照常加载；页面是
+          https://app.local，验证码也是 https，没有混合内容问题。
+          **绝不自动识别** —— 和门户那道一样，交给人读。 -->
+
+
+  <!-- ============ 免责声明（首次进直饮水页时弹一次）============
+       文案照 WaterWidget（nocookies111/life-798）的 README 和它的
+       TaskRiskDialog 抄的 —— 这是**作者自己写的风险提示**，不是我们编的。
+       展示给用户有两个作用：① 他确实该知道这些风险；② 说清楚我们和那个
+       项目、和慧生活798 官方都没有关系。
+
+       🔴 只在**第一次**进来时弹（localStorage 记一笔）。每次进都弹等于逼人
+          盲点「我知道了」，那这个提示就白写了。 -->
+  <div class="wtterms" id="wtTerms" hidden>
+    <div class="wtterms-box">
+      <h2 class="wtterms-h">用之前先读一下</h2>
+      <div class="wtterms-body">
+        <p><b>这不是官方功能。</b>饮水机走的是慧生活798（长沙云多啦）的平台，本页的功能是照着 <b>WaterWidget</b>（nocookies111/life-798，MIT 许可）公开的接口协议自己实现的，与该项目的开发者无关，也不代表慧生活798 官方。</p>
+
+        <p><b>请只操作你本人有权使用的账户和设备</b>，并遵守平台的服务规则。</p>
+
+        <p class="wtterms-h2">积分风险（原文照抄自那个项目）</p>
+        <p>运行积分任务可能触发官方平台的限制或风控，请在使用前充分了解以下风险：</p>
+        <p>1. 积分损失：账号积分可能被扣除、清零或冻结，已经获得的积分也可能无法继续使用。</p>
+        <p>2. 无法获取积分：任务可能失败、奖励不到账，或长期无法继续获取积分；提示成功不代表实际到账。</p>
+        <p>3. 账号风控：账号可能被限制登录、限制功能或冻结，具体处理以官方平台为准。</p>
+        <p>请谨慎使用重要账号，优先通过官方渠道完成任务；出现异常时立即停止任务，并联系官方核实。</p>
+
+        <p class="wtterms-h2">免责声明（原文照抄）</p>
+        <p>本项目按现状提供，不对可用性、准确性或使用结果作任何保证，使用风险由使用者自行承担；不免除或限制法律规定不得免除或限制的责任。</p>
+
+        <p class="wtterms-h2">我们这边额外的几条</p>
+        <p>· <b>不做后台自动签到</b>：没有任何定时任务，也不会在你没打开 App 的时候动你的账号。积分任务只有一颗按钮，你点了才跑。</p>
+        <p>· <b>跑完会核对积分</b>：服务端回「成功」不等于到账，所以跑完会重新读一次积分，把「提示成功但分没变」如实告诉你。</p>
+        <p>· <b>充值和下单不做</b>：涉及钱的写操作我们不代办，请去慧生活798 里做。</p>
+        <p>· <b>接水不弹确认</b>：点「接水」就真的出水、按用量扣钱，没有第二道确认，停止也一样。这条风险写在「我的饮水机」卡里，一直在。</p>
+      </div>
+      <button class="btn primary block" id="wtTermsOk">我已阅读，知道了</button>
+    </div>
+  </div>
+
+  <!-- ================= 底部导航 ================= -->
+  <nav class="tabbar">
+    <button class="tab active" data-tab="schedule">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+      <span>课表</span>
+    </button>
+    <!-- 这个 tab 原来叫「考试」。2026-10-22 用户说
+         「学习通功能可以跟考试合并，就叫学习」——
+         考试一学期就期末看几次，学习通是天天要看的，名字跟着高频的那个走。 -->
+    <button class="tab" data-tab="exams">
+      <svg viewBox="0 0 24 24"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H11v18H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M20 4.5A1.5 1.5 0 0 0 18.5 3H13v18h5.5A1.5 1.5 0 0 0 20 19.5z"/></svg>
+      <span>学习</span>
+    </button>
+    <!-- 中间那格 2026-10-30 由「公告」改成 WIKI（郑航攻略）。
+         理由（用户原话）：「把中心的公告栏改为 WIKI，专门用来放郑航攻略」。
+         公告本身没消失，并进了「功能」页 —— 它是低频内容，不该占一个
+         常驻位置；而攻略对新生是天天要翻的。 -->
+    <button class="tab" data-tab="wiki">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg>
+      <span>WIKI</span>
+    </button>
+    <!-- 「校历」和「空教室」原来各占一个 tab，底部挤到 6 个。
+         2026-10-21 用户提出来「主流 App 底部最多 5 个」，于是把这两项收进课表页：
+         校历点顶部周次、空教室点右上角的门图标。它们本来就是「同一时间维度的另一面」，
+         收进去比留在底部更贴心智。底部固定 5 个，以后不要再加第 6 个。 -->
+    <button class="tab" data-tab="campus">
+      <!-- 0.38.0：这一格叫「功能」（用户：「把功能名字改成功能吧」）。
+           图标跟着从「教学楼」换成四宫格 —— 楼是「校园」的意思，
+           而这一页现在装的是饮水、一卡通、19 个办事入口、公告，
+           「四宫格」才是「这一格里什么都有」的那个通用符号。 -->
+      <svg viewBox="0 0 24 24">
+        <rect x="3.6" y="3.6" width="7.2" height="7.2" rx="2.1"/>
+        <rect x="13.2" y="3.6" width="7.2" height="7.2" rx="2.1"/>
+        <rect x="3.6" y="13.2" width="7.2" height="7.2" rx="2.1"/>
+        <rect x="13.2" y="13.2" width="7.2" height="7.2" rx="2.1"/>
+      </svg>
+      <span class="tab-ico">
+        <span>功能</span>
+        <!-- 有新公告才亮。公告并进这一页之后，这个点跟着搬过来。 -->
+        <i class="tab-dot" id="ntDot" hidden></i>
+      </span>
+    </button>
+    <button class="tab" data-tab="me">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+      <span>我的</span>
+    </button>
+  </nav>
+
+  <!-- 扫码加饮水机。**全屏浮层**而不是底部弹层：视频要占满宽度，
+       塞进 76% 高的弹层里只剩一条缝，还挡着手。
+       🔴 关闭时必须 stop 掉相机轨道（见 wtScanStop），不然指示灯常亮、
+          下次再开相机还会报「被占用」。
+       🔴 相机打不开时这颗「粘贴内容」就是唯一退路，不能藏。 -->
+  <div class="scan" id="wtScan" hidden>
+    <div class="scan-bar">
+      <span>扫码添加饮水机</span>
+      <button class="scan-x" id="wtScanClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="scan-stage">
+      <video id="wtScanV" playsinline autoplay muted></video>
+      <div class="scan-frm"></div>
+      <!-- 0.35.0：没有画面时 WebView 会在纯黑底上画它自己那枚巨大的播放三角，
+           底下一句「正在打开相机…」，看起来像视频坏了而不是相机在启动。
+           盖一层自己的说明，把这件事说成人话。拿到画面就撤掉。 -->
+      <div class="scan-wait" id="wtScanWait">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8.6A2.6 2.6 0 0 1 6.6 6h1.5l1.2-1.8h5.4L15.9 6h1.5A2.6 2.6 0 0 1 20 8.6v7.8A2.6 2.6 0 0 1 17.4 19H6.6A2.6 2.6 0 0 1 4 16.4z"/>
+          <circle cx="12" cy="12.2" r="3.1"/>
+        </svg>
+        <span id="wtScanWaitT">正在打开相机…</span>
+      </div>
+    </div>
+    <p class="scan-hint" id="wtScanTip">把二维码放进框里</p>
+    <button class="scan-paste" id="wtScanPaste">粘贴二维码内容</button>
+  </div>
+
+  <!-- 课程详情 / 各种弹层 -->
+  <div class="sheet-mask" id="sheetMask" hidden>
+    <div class="sheet" id="sheet">
+      <div class="sheet-grab"></div>
+      <!-- 0.38.0：固定一颗 ✕。用户 2026-11-01：「很多界面进入后没有返回按钮」。
+           放在**外壳**上而不是每个弹层各自加 —— 十几个调用方，漏一个就是一条死路，
+           而且漏了不报错（点遮罩能关，只有不知道这条规矩的人才卡住）。 -->
+      <button class="sheet-x" id="sheetX" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div id="sheetBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<!-- 二维码解码（jsQR 1.4.0，Apache-2.0，见 jsqr.js 文件头）。
+     只在点「扫码」时才会用到，但得先加载好 —— 打开相机后第一次解码
+     再等脚本下载，会白屏半秒。 -->
+<script src="jsqr.js"></script>
+<!-- native.js 只在 APK 里生效（没有 Android 桥时自己 return），网页版不受影响 -->
+<script src="native.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

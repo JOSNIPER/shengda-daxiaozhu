@@ -1,0 +1,16 @@
+{
+  "name": "航院通",
+  "version": "0.39.2",
+  "code": 60,
+  "date": "2026-11-01",
+  "size": 575444,
+  "sha256": "e736a6c70ac08aa456bfcbc266dc9ee25faa5d6fd26bab93bdf68586c43249e9",
+  "apk": "https://hobson2233.dpdns.org/hangyuantong/dl/hangyuantong-0.39.2.apk",
+  "apk_cn": "https://maven.cnb.cool/Hobson2233/campus-login/-/packages/cnb/hangyuantong/0.39.2/%E8%88%AA%E9%99%A2%E9%80%9A.apk",
+  "page": "https://hobson2233.dpdns.org/hangyuantong/",
+  "notes": [
+    "修好「检查更新」：之前每次都提示失败，现在能正常查到新版本",
+    "删掉一句解释后台怎么实现的说明文字（「只发一个几百字节的请求」这类），这种话对你没用",
+    "出错时不再甩出「HTTP 404」「接口返回的不是 JSON」这种看不懂的词，只说发生了什么、你该做什么"
+  ]
+}
