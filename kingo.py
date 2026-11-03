@@ -402,7 +402,7 @@ class KingoClient:
         """学期上下文。🔴 本校的真实来源是
         ``POST /jw/common/showYearTerm.action``（无 body），返回
 
-            {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"202401010138",...}
+            {"xn":"2026","xqM":"0","xqName":"第一学期","userCode":"202102030405",...}
 
         **这个调用同时是「会话到底成没成」的判据** —— 能拿到 xn 才算登录成功。
         失败时自动换一条路重试（最多三轮），并把每一轮的结果记下来：
@@ -482,7 +482,7 @@ class KingoClient:
 
     def _kbt_params(self) -> str:
         """课表页的 ``params`` = base64(配置里的模板)。实测原文：
-        ``eG49MjAyNiZ4cT0wJnhoPTIwMjQwMTAxMDEzOA==`` → ``xn=2026&xq=0&xh=202401010138``
+        ``eG49MjAyNiZ4cT0wJnhoPTIwMjQwMTAxMDEzOA==`` → ``xn=2026&xq=0&xh=202102030405``
         模板放 config（pages.timetable.params_b64），参数名变了不用改代码。
         """
         import base64
