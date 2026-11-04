@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
      *    再跟 app.js / version.json 对账。所以改版本号时这里必须跟着改，
      *    而且**不能删掉这段字符串**（正则找不到会直接判构建失败）。
      */
-    public static final String UA_TAG = " DaXiaoZhu/0.1.8";
+    public static final String UA_TAG = " DaXiaoZhu/0.1.9";
 
     private WebView web;
 
@@ -120,14 +120,22 @@ s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         web.loadUrl("https://app.local/index.html");
     }
 
-    /** 状态栏跟着明暗模式走。硬写一个色的话，深色模式下顶上会挂一条亮白。 */
+    /** 状态栏跟着明暗模式走。硬写一个色的话，深色模式下顶上会挂一条亮白。
+     *
+     *  🔴 2026-11-04（0.1.9）：色值跟上 0.1.8 的 FlClash 暖白体系。
+     *  原来是 #f4f5f7 / #ffffff / #0f1013 / #191b20 —— 那是 0.1.4 的冷灰，
+     *  网页换成暖白之后原生层没跟上，启动会闪一下异色、系统栏和页面对不上。
+     *  现在直接用官网 assets/style.css 的原值：
+     *    浅色 --bg #f3efea / --surface #fbf9f6
+     *    深色 --bg #181617 / --surface #211e1f
+     */
     private void applySystemBars() {
         Window w = getWindow();
         boolean dark = (getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         if (Build.VERSION.SDK_INT >= 21) {
-            w.setStatusBarColor(dark ? Color.parseColor("#0f1013") : Color.parseColor("#f4f5f7"));
-            w.setNavigationBarColor(dark ? Color.parseColor("#191b20") : Color.parseColor("#ffffff"));
+            w.setStatusBarColor(dark ? Color.parseColor("#181617") : Color.parseColor("#f3efea"));
+            w.setNavigationBarColor(dark ? Color.parseColor("#211e1f") : Color.parseColor("#fbf9f6"));
         }
         if (Build.VERSION.SDK_INT >= 23) {
             // 「浅色状态栏」= 深色图标。系统 API 里名字是反的，容易搞混。
@@ -135,6 +143,14 @@ s.setCacheMode(WebSettings.LOAD_NO_CACHE);
             int flags = dv.getSystemUiVisibility();
             if (dark) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             else flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            // 🔴 导航栏图标也要单独处理（API 26+ 有这个标志，23~25 没有）。
+            //    之前只设了状态栏那个：浅色模式下导航栏底色是白的、图标也是白的
+            //    → 三键导航的三个键在白底上直接看不见。
+            //    26 以下系统导航栏是实体键，没有这个概念，所以要分版本。
+            if (Build.VERSION.SDK_INT >= 26) {
+                if (dark) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                else flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
             dv.setSystemUiVisibility(flags);
         }
     }
@@ -142,7 +158,7 @@ s.setCacheMode(WebSettings.LOAD_NO_CACHE);
     private int bgColor() {
         boolean dark = (getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        return Color.parseColor(dark ? "#0f1013" : "#f4f5f7");
+        return Color.parseColor(dark ? "#181617" : "#f3efea");
     }
 
     private static String mimeOf(String path) {

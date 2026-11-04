@@ -1,18 +1,18 @@
 {
   "name": "达小助",
-  "version": "0.1.8",
-  "code": 68,
+  "version": "0.1.9",
+  "code": 69,
   "date": "2026-11-04",
-  "size": 522204,
-  "sha256": "c3bb1655c1074cacec7459be5e4185991d2488299a1c5a4997592ff1ea4ff5c2",
-  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.8.apk",
-  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.8/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
+  "size": 534928,
+  "sha256": "4f6dc42e7bb7efe5371f12d6ec274d8c7101f5a7c4fd83c40a70f42a15facd99",
+  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.9.apk",
+  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.9/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
   "page": "https://johan.ccwu.cc/daxiaozhu/",
   "notes": [
-    "全局换成 FlClash 那套暖白体系：暖米白地面、暖白卡面、暖褐主色，整屏不再有冷蓝",
-    "课程块用官网那四个「显眼但不违和」的色块：紫 / 橄榄 / 陶土 / 灰蓝，每色深浅两档",
-    "「跳到第几周」里可切两档：默认「官网色」、另一档「淡彩」（同色相再淡一点）",
-    "顺手修掉深色模式下卡片发蓝的毛病（原来写死了半透明冷蓝）",
+    "系统状态栏、导航栏、启动背景跟上暖白配色，启动瞬间不再闪异色",
+    "浅色模式下导航栏图标改成深色，之前白底白图标看不见",
+    "卡片圆角改成连续圆角（squircle），支持的机型上更顺滑",
+    "桌面图标支持 Android 13+ 主题图标，会跟着壁纸配色",
     "登录、取数、翻周手势、顶栏图标、底部四个 tab 一律没动"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date；发布前把 TBD-github-user 换成真实 GitHub 用户名，并确认 johan.ccwu.cc 已 CNAME 到托管页。自更新在 app.js UPD_SRC 处恢复。"

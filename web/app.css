@@ -158,10 +158,40 @@
   --r-ctl: 14px;    /* 按钮 / 输入框 */
   --r-chip: 999px;  /* 小标签：一律胶囊 */
 
+  /* ---- 圆角「形状」（不是大小）----
+     🔴 0.1.9：借鉴 FlClash 的连续圆角（squircle）。
+     `corner-shape` 改的是 border-radius 画出来的那条**曲线形状**：
+       round    = 普通圆弧（一直以来的样子）
+       squircle = 超椭圆，Apple 图标那种连续曲率
+     浏览器支持：Chromium 139+（Chrome/Edge/Android WebView 139+）；
+     Firefox / Safari 不支持。
+
+     🔴 为什么用变量 + @supports 两段，而不是直接写 `corner-shape: squircle`：
+       不支持的浏览器会**忽略这条声明**，圆角照旧 —— 降级是安全的。
+       但本文件里用大圆角的地方有 20+ 处（卡片、弹层、面板、列表组），
+       逐个加属性以后维护成本高、也容易漏。
+       所以这里定义一个变量：默认 `round`（= 现状，零变化），
+       在 @supports 里整体换成 `squircle`。
+       要加形状只改这一处；要退回圆角把 @supports 块删掉即可。
+
+     ⚠️ Android WebView 版本由系统决定，老机型（WebView < 139）不会有变化。
+        这是「有则更好」，不是卖点。 */
+  --corner-shape: round;
   /* 卡片与卡片之间的距离。0.33.0 从 12 收到 8 —— 一页七八张卡，省下来
      就是一条能放下一行字的高度。2026-11-01 又放回 10：卡变大圆角之后，
      8px 的缝会让两张卡看起来粘在一起，圆角反而变成「锯齿」。 */
   --gap-card: 9px;
+}
+
+/* 🔴 0.1.9：连续圆角（squircle）—— 借鉴 FlClash 官网的 corner-shape。
+   放在 :root 之后、dark media 之前：它只改「形状」不改「大小」，
+   深浅两套共用同一个值，所以不需要在 dark media 里再写一遍。
+
+   @supports 是**特性检测**：浏览器不认识这个条件就整块跳过，
+   于是 --corner-shape 保持默认的 round —— 圆角照旧，什么都不会坏。
+   Chromium 139+ 生效（Chrome / Edge / Android WebView 139+）。 */
+@supports (corner-shape: squircle) {
+  :root { --corner-shape: squircle; }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -677,6 +707,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background-image:
     linear-gradient(160deg, #ffffff 0%, #fbfdff 100%);
   border-radius: var(--r);
+  corner-shape: var(--corner-shape);
   box-shadow: 0 0 0 .5px rgba(56, 42, 40, .055), var(--shadow-card);
   margin-bottom: var(--gap-card); overflow: hidden;
 }
@@ -720,7 +751,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 /* ---------------- 成绩 ---------------- */
 .sumcard {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 8px 16px; margin-bottom: var(--gap-card);
   display: flex; align-items: center; gap: 16px;
 }
@@ -742,7 +773,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   /* 7px + scroll 的 7px = 14px，跟下面 `.dayview` 的卡片对齐。
      以前是 14px（合计 21px），比卡片多出一截，看着像两套排版。 */
   margin: 0 8px 8px; padding: 10px 12px;
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   font-size: 13px;
 }
 .daynext.live { background: var(--accent-soft); box-shadow: none; }
@@ -848,7 +879,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    颜色只用三种：accent（进行中）、--ok（已满）、--danger（有没过）。 */
 
 .crhero {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 16px 16px 16px; margin-bottom: 12px;
 }
 .crhero-top { display: flex; align-items: baseline; gap: 6px; }
@@ -869,7 +900,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .crhero-sub { font-size: 11px; color: var(--sub); line-height: 1.5; }
 
 .crcats {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 2px 16px; margin-bottom: 12px;
 }
 .crcat { padding: 12px 0; border-bottom: .5px solid var(--line); }
@@ -891,7 +922,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .crcat-bad { color: var(--danger); }
 
 .crcard {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 14px 16px; margin-bottom: 12px;
 }
 .crcard-h { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
@@ -950,7 +981,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-weight: 600; box-shadow: var(--accent-glow);
 }
 
-.gradelist { background: var(--card); border-radius: var(--r); overflow: hidden; }
+.gradelist { background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape); overflow: hidden; }
 .gradeitem {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px; border-bottom: .5px solid var(--line);
@@ -978,7 +1009,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 /* ---------------- 成绩页：绩点趋势 ---------------- */
 .gptrend {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 8px 16px; margin-bottom: var(--gap-card);
 }
 .gpt-hd { display: flex; align-items: baseline; justify-content: space-between; }
@@ -1086,7 +1117,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .expf[hidden] { display: none; }
 
 .exsum {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 14px 16px; margin-bottom: 12px;
   display: flex; align-items: center; justify-content: space-between;
 }
@@ -1100,7 +1131,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .exlist { display: flex; flex-direction: column; gap: 10px; }
 .exitem {
   display: flex; gap: 12px;
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 12px 14px;
 }
 /* 考完的压暗一点，一眼能分出「还没考的」和「已经过去的」 */
@@ -1241,7 +1272,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 
 .rmlist {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   overflow: hidden;
 }
 .rmitem {
@@ -1268,7 +1299,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    不画成教室，也不能悄悄吞掉 —— 单独说一句「学校返回了这个」。 */
 .rmnotice {
   background: var(--warn-bg); border: 1px solid var(--warn-line);
-  color: var(--warn-text); border-radius: var(--r);
+  color: var(--warn-text); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 10px 12px; margin-bottom: 10px;
   font-size: 13px; line-height: 1.5;
 }
@@ -1278,7 +1309,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 头像卡 = 个人信息入口（0.33.0 合并）。整张卡可点，右边用箭头暗示。
    🔴 它同时是 `.card`，`margin-bottom` 走全局那档，别在这里再写一遍。 */
 .profilecard {
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 10px 16px; margin-bottom: var(--gap-card);
   display: flex; align-items: center; gap: 12px;
 }
@@ -1790,7 +1821,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 .dv-card {
   flex: 1 1 auto; min-width: 0;
-  border-radius: var(--r); padding: 10px 12px;
+  border-radius: var(--r); corner-shape: var(--corner-shape); padding: 10px 12px;
   border: 1px solid transparent;
   border-left-width: 4px;
   /* 颜色由 .c* 给（浅底 + 同色相深字） */
@@ -1931,7 +1962,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    所以最大的是周次（32px），进度条是同一个数的图形版，不再重复数字。 */
 .calhero {
   background: var(--card);
-  border-radius: var(--r-card); padding: 16px 16px 16px;
+  border-radius: var(--r-card); corner-shape: var(--corner-shape); padding: 16px 16px 16px;
   margin-bottom: 4px;
 }
 .calhero-lab { font-size: 13px; color: var(--sub); }
@@ -1988,7 +2019,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .caltl {
   list-style: none; margin: 0; padding: 0;
   background: var(--card);
-  border-radius: var(--r); overflow: hidden;
+  border-radius: var(--r); corner-shape: var(--corner-shape); overflow: hidden;
 }
 .caltl li {
   display: flex; gap: 12px; padding: 12px 14px;
@@ -2094,7 +2125,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .cphero-i {
   display: flex; flex-direction: column; align-items: flex-start;
   gap: 4px; padding: 14px 14px 13px;
-  background: var(--card); border-radius: var(--r);
+  background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   border: 0; text-align: left; cursor: pointer;
   /* 88px = 图标 28 + 间距 + 两行字，正好比「一行入口」高一倍 */
   min-height: 88px;
@@ -2171,6 +2202,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .cx-item {
   background: var(--card);
   border-radius: var(--r);
+  corner-shape: var(--corner-shape);
   padding: 10px 14px;
   margin-bottom: 6px;
   border-bottom: 0;
@@ -2249,6 +2281,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .cx-strip {
   margin: 0 0 12px; padding: 10px 12px;
   border-radius: var(--r);
+  corner-shape: var(--corner-shape);
   background: var(--card);
 }
 .cx-strip-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
@@ -2277,6 +2310,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; gap: 8px;
   margin: 0 0 10px; padding: 8px 12px;
   border-radius: var(--r);
+  corner-shape: var(--corner-shape);
   background: var(--card); font-size: 13px; color: var(--text);
 }
 .cx-newbar b { font-weight: 700; }
@@ -2616,6 +2650,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: #ffffff;
   background-image: linear-gradient(160deg, #ffffff 0%, #fbfdff 100%);
   border-radius: var(--r);
+  corner-shape: var(--corner-shape);
   box-shadow: 0 0 0 .5px rgba(56, 42, 40, .055), var(--shadow-card);
 }
 @media (prefers-color-scheme: dark) {
@@ -2816,7 +2851,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .cosum { padding: 4px 16px 0; }
 .cosum-row {
   display: flex; align-items: flex-end; gap: 22px;
-  padding: 14px 16px; border-radius: var(--r-card);
+  padding: 14px 16px; border-radius: var(--r-card); corner-shape: var(--corner-shape);
   background: var(--row-bg); border: .5px solid var(--line);
 }
 .cosum-row b {
@@ -2829,7 +2864,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 .colist {
   margin: 12px 16px 0;
-  border-radius: var(--r-card); overflow: hidden;
+  border-radius: var(--r-card); corner-shape: var(--corner-shape); overflow: hidden;
   background: var(--row-bg); border: .5px solid var(--line);
 }
 /* 0.1.5：分组标题（考试课 / 考查课）。放在同一张白卡里、比课程名轻一档，

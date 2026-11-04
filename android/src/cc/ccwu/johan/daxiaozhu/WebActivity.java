@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
@@ -480,8 +481,13 @@ public class WebActivity extends Activity {
         }
 
         boolean dark = isDark();
-        int cBg = Color.parseColor(dark ? "#0f1013" : "#f4f5f7");
-        int cCard = Color.parseColor(dark ? "#191b20" : "#ffffff");
+        // 🔴 2026-11-04（0.1.9）：外壳底色跟上 0.1.8 的暖白体系。
+        // 这个页面是原生控件拼的（不是 WebView），但它是同一个 App 的一部分 ——
+        // 外壳和顶栏底色跟主界面不一致的话，从主界面点进来会「跳一下色」。
+        // 页面内部的文字/线条/强调色仍用本文件自己那套（DESIGN.md 第 2 条），
+        // 那是有意为之：它是个功能页，不该跟课表页长一个样。
+        int cBg = Color.parseColor(dark ? "#181617" : "#f3efea");
+        int cCard = Color.parseColor(dark ? "#211e1f" : "#fbf9f6");
         int cText = Color.parseColor(dark ? "#f2f4f7" : "#14161a");
         int cSub = Color.parseColor(dark ? "#a8aeb8" : "#5f646d");
         int cLine = Color.parseColor(dark ? "#262a31" : "#e8eaee");
@@ -1596,15 +1602,24 @@ public class WebActivity extends Activity {
     }
 
     /** 状态栏/导航栏跟着明暗走。和 MainActivity 里那段一样，故意没抽公共类：
-     *  那边是能跑的老代码，为了省 8 行去动它不划算。 */
+     *  那边是能跑的老代码，为了省 8 行去动它不划算。
+     *
+     *  🔴 2026-11-04（0.1.9）：色值跟上 0.1.8 的 FlClash 暖白体系，
+     *  并补上导航栏图标亮暗（API 26+）。跟 MainActivity 是同一个 App，
+     *  从主界面点进来时状态栏变色会很明显。 */
     private void applySystemBars(boolean dark) {
         Window w = getWindow();
-        w.setStatusBarColor(Color.parseColor(dark ? "#0f1013" : "#f4f5f7"));
-        w.setNavigationBarColor(Color.parseColor(dark ? "#191b20" : "#ffffff"));
+        w.setStatusBarColor(Color.parseColor(dark ? "#181617" : "#f3efea"));
+        w.setNavigationBarColor(Color.parseColor(dark ? "#211e1f" : "#fbf9f6"));
         View dv = w.getDecorView();
         int flags = dv.getSystemUiVisibility();
         if (dark) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         else flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        // 导航栏图标：26 以下是实体键，没有这个概念，所以要分版本。
+        if (Build.VERSION.SDK_INT >= 26) {
+            if (dark) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            else flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
         dv.setSystemUiVisibility(flags);
     }
 

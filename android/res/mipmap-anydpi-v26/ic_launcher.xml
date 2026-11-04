@@ -2,4 +2,11 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_bg" />
     <foreground android:drawable="@mipmap/ic_launcher_fg" />
+    <!-- 🔴 0.1.9：monochrome（Android 13+ 主题图标）。
+         系统会把这张图按用户的壁纸主题色重新着色，
+         所以这里给的是「纯白剪影 + 透明底」，不能带原色。
+         字形从彩色前景图提取（红蓝两色一起抠），缩到画布 44% 居中 ——
+         染色后整块同色，视觉比彩色字更重，缩一点才不会挤。
+         老系统（<13）不认识这个标签，直接忽略，不影响原图标。 -->
+    <monochrome android:drawable="@mipmap/ic_launcher_mono" />
 </adaptive-icon>

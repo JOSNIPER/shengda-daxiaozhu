@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 和 web/app.css 里的 bg / card 两个变量同色，避免启动瞬间闪一下别的颜色。
-         注意：XML 注释里不能出现连续两个减号，所以这里别写变量名的完整形式。 -->
-    <color name="bg">#f4f5f7</color>
-    <color name="card">#ffffff</color>
+         注意：XML 注释里不能出现连续两个减号，所以这里别写变量名的完整形式。
+
+         🔴 2026-11-04（0.1.9）：之前这里是 #f4f5f7 / #ffffff（冷灰 + 纯白），
+         是 0.1.4 那套「淡蓝灰 + 纯白面」留下的。0.1.8 换了 FlClash 的暖白体系
+         之后，网页侧已经是暖米白 / 暖白，原生层却还停在冷灰 ——
+         启动瞬间会闪一下异色，状态栏和页面也接不上。
+         现在改成 FlClash 官网 assets/style.css 的原值：
+           浅色：bg #f3efea / surface #fbf9f6
+           深色：bg #181617 / surface #211e1f
+         （深色那两套没有 values-night 资源可用，见 MainActivity.applySystemBars。）-->
+    <color name="bg">#f3efea</color>
+    <color name="card">#fbf9f6</color>
     <color name="ic_launcher_bg">#344861</color>
 </resources>

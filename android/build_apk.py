@@ -79,8 +79,8 @@ CNB_APK_BASE = ("https://maven.cnb.cool/" + GITHUB_USER + "/campus-login"
                 "/-/packages/cnb/daxiaozhu")
 CNB_APK_NAME = "达小助.apk"
 
-VERSION_NAME = "0.1.8"
-VERSION_CODE = 68
+VERSION_NAME = "0.1.9"
+VERSION_CODE = 69
 PKG = "cc.ccwu.johan.daxiaozhu"
 MIN_SDK = 23
 TARGET_SDK = 33
