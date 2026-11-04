@@ -65,59 +65,65 @@
      khkdfsj/campus-frontend-template 的 --bg / --surface 同一组值。
      白卡在纯灰底上只差 3 点亮度，浮不起来；带一点蓝之后靠色差就立住，
      一个阴影都不用。 */
-  --bg: #edf6ff;      /* 地面：淡蓝灰（给不支持渐变的旧 WebView 兜底） */
-  /* 地面不是一块平色，是**三种极淡的色光**叠出来的：
-     左上偏天蓝、右上偏紫、底部一点薄荷。白卡压在上面才有「透」的感觉 ——
-     平色底上的白卡永远是「贴」上去的，怎么加阴影都像纸片。
-     🔴 三团光的透明度都 ≤ .30：再浓就会把卡片染上颜色，白卡看起来发脏。 */
+  /* 🔴 0.1.8：整套「地面 / 面 / 线 / 影」换成 FlClash 官网的暖白体系。
+     色值不是从截图肉眼估的，是从官网 assets/style.css 的 :root 原样抄的：
+       --bg #f3efea · --surface #fbf9f6 · --raise #e9e3dc
+       --ink #262122 · --ink-2 #5c5354 · --ink-3 #72686a
+       --accent #6b5059 · --accent-soft #e5d9da
+     （截图采样得到 #f5f0ed 是浏览器渲染/压缩后的近似，以官方 CSS 为准。）
+     ⚠️ 只换「地 / 面 / 线 / 影 / 文字」，**主色 --accent 仍是原来的蓝** ——
+        它是「正在上」高亮、选中态、链接等功能信号，用户这次只点名背景色，
+        没让换主色；暖白底上一颗蓝点反而成了唯一的冷色锚点。 */
+  --bg: #f3efea;      /* 地面：暖米白（给不支持渐变的旧 WebView 兜底） */
+  /* 三团极淡的暖色光：左上陶土、右上丁香、底部鼠尾草。
+     透明度比旧版蓝紫光更低（≤ .20），暖底稍微一浓就会发脏。 */
   --bg-grad:
-    radial-gradient(820px 520px at 2% -12%,  rgba(96, 170, 255, .34), transparent 64%),
-    radial-gradient(620px 460px at 104% -4%, rgba(170, 150, 255, .22), transparent 62%),
-    radial-gradient(900px 580px at 46% 112%, rgba(110, 214, 200, .16), transparent 66%),
-    linear-gradient(180deg, #fafdff 0%, #edf6ff 54%, #f5fbff 100%);
-  --card: #ffffff;    /* 面：纯白 */
-  /* 卡片自身的极淡竖向渐变：上沿更白、下沿带一点冷调，
-     比纯 #fff 更像一片玻璃。 */
-  --card-grad: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-  /* 卡片投影：一层贴边的 1px（压住边界）+ 一层大范围淡蓝（托起卡面）。
-     两层都偏蓝，偏黑会让整页发灰 —— 这是「干净」和「脏」的分界。 */
-  --shadow-card: 0 2px 6px rgba(31, 72, 142, .05),
-                 0 14px 34px -10px rgba(31, 72, 142, .18);
-  --shadow-raise: 0 2px 6px rgba(23, 54, 102, .07),
-                  0 22px 40px -20px rgba(26, 68, 140, .46);
-  /* 卡片的边：不是「描边」，是一道能把白卡和淡蓝底分开的极淡冷线。
-     0.5px 在高分屏上是半像素，看起来像卡片的厚度。 */
-  --card-line: rgba(23, 54, 102, .05);
-  /* 卡内行块的底。比卡片再冷一档、再深一点点 —— 白卡里才看得出「一块」。
-     .92 的不透明度：全实心会在卡片的半透明面上显出一道硬边。 */
-  --row-bg: #f0f5fd;
+    radial-gradient(820px 520px at 2% -12%,  rgba(205, 171, 149, .20), transparent 64%),
+    radial-gradient(620px 460px at 104% -4%, rgba(172, 164, 193, .16), transparent 62%),
+    radial-gradient(900px 580px at 46% 112%, rgba(162, 176, 155, .14), transparent 66%),
+    linear-gradient(180deg, #fbf9f6 0%, #f3efea 54%, #f7f3ee 100%);
+  --card: #fbf9f6;    /* 面：官网 --surface */
+  --card-grad: linear-gradient(180deg, #fbf9f6 0%, #f7f4f0 100%);
+  /* 投影跟着改暖褐：偏蓝的影压在暖米白上会显出一层灰。 */
+  --shadow-card: 0 2px 6px rgba(56, 42, 40, .05),
+                 0 14px 34px -10px rgba(56, 42, 40, .14);
+  --shadow-raise: 0 2px 6px rgba(56, 42, 40, .07),
+                  0 22px 40px -20px rgba(56, 42, 40, .32);
+  --card-line: rgba(38, 33, 34, .07);
+  --row-bg: #efe9e2;  /* 卡内行块：官网 --raise 稍浅一档 */
 
-  /* ---- 文字三档：墨蓝 / 次 / 极弱 ---- */
-  --text: #0e1522;
-  --sub: #5a6b85;
-  --faint: rgba(14, 21, 34, .32);
+  /* ---- 文字三档：官网 --ink / --ink-2 / --ink-3（暖墨，不是墨蓝） ---- */
+  --text: #262122;
+  --sub: #5c5354;
+  --faint: rgba(38, 33, 34, .32);
 
   /* ---- 线与填充 ----
      --line 是列表行之间的 0.5px 分隔线，不是卡片描边（卡片现在不描边）。
      --rule 更淡，给「同一张卡内部」的次级分隔。 */
-  --line: rgba(14, 21, 34, .10);
-  --rule: rgba(14, 21, 34, .06);
-  --line-strong: rgba(14, 21, 34, .18);
+  --line: rgba(38, 33, 34, .10);
+  --rule: rgba(38, 33, 34, .06);
+  --line-strong: rgba(38, 33, 34, .18);
   /* 选中态：中性填充，不用彩色胶囊 */
-  --active: rgba(47, 107, 238, .10);
-  --fill: rgba(14, 21, 34, .055);
+  --active: rgba(107, 80, 89, .10);
+  --fill: rgba(38, 33, 34, .055);
 
-  /* ---- 强调色：只给数据和一个控件 ---- */
-  --accent: #2f6bee;
+  /* ---- 强调色：官网 --accent #6b5059（暖褐）----
+     🔴 0.1.8 改：0.1.7 还是主色蓝 #2f6bee。地面换成暖米白之后，
+     那颗蓝成了整屏唯一的冷色孤岛，「正在上」的高亮环、周次选中格、
+        进度条全靠它 —— 蓝在暖底上会跳，而且和暖底不同源。
+     官网自己也是暖褐主色 + 暖白底 + 莫兰迪四色系，一整套。
+     对比度：#6b5059 上白字 6.76:1（AA+），官网深色用 --accent #dcc3c8
+        配深墨 #33262a（8.74:1），所以浅深两套都直接抄官网原值。 */
+  --accent: #6b5059;
   /* 主色的渐变态。只用在小面积上（选中的胶囊、主按钮、头像）——
      大面积铺渐变就是「模板脸」，面积越小越像一颗糖。 */
-  --accent-grad: linear-gradient(135deg, #5f9bff 0%, #2f6bee 100%);
-  --accent-glow: 0 8px 18px -8px rgba(47, 107, 238, .72);
-  --accent-soft: #e9f1ff;
-  /* 主按钮是蓝底白字。旧规范要求「近黑」是怕满屏蓝，
-     但 Apple 的解法是「一屏只有一个主按钮」，蓝不会铺满。 */
-  --primary: #2f6bee;
-  --primary-ink: #ffffff;
+  --accent-grad: linear-gradient(135deg, #8a6a74 0%, #6b5059 100%);
+  --accent-glow: 0 8px 18px -8px rgba(107, 80, 89, .72);
+  --accent-soft: #e5d9da;
+  /* 主按钮是主色底白字。旧规范要求「近黑」是怕满屏蓝，
+     但 Apple 的解法是「一屏只有一个主按钮」，不会铺满。 */
+  --primary: #6b5059;
+  --primary-ink: #fbf7f4;
 
   /* 🔴 红色分两支：
      --danger 给**文字和图标**（#d70015 在白底 4.5:1，读得清）；
@@ -133,9 +139,9 @@
   --warn-line: rgba(255, 149, 0, .32);
   --warn-text: #a35c00;
   --tag-impact: #a35c00;   --tag-impact-bg: rgba(255, 149, 0, .14);
-  --tag-action: #0062cc;   --tag-action-bg: rgba(0, 122, 255, .12);
+  --tag-action: #8a5a3c;   --tag-action-bg: rgba(176, 133, 104, .14);
   --tag-act:    #248a3d;   --tag-act-bg:    rgba(52, 199, 89, .14);
-  --tag-other:  #5a6b85;   --tag-other-bg: rgba(14, 21, 34, .07);
+  --tag-other:  #72686a;   --tag-other-bg: rgba(38, 33, 34, .07);
 
   /* 静止卡片不用投影（保留变量名，让旧调用不报错） */
   --shadow: none;
@@ -160,17 +166,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* ===== 深色：深墨蓝地、亮一档的面（同发布页） ===== */
-    --bg: #0b1322;
-    /* 深色下三团光要更淡、更冷：暗底上一点点色偏就明显，
-       超过 .2 整页会发紫。 */
+    /* ===== 0.1.8 深色：FlClash 官网深色值（暖黑，不是墨蓝）=====
+       --bg #181617 · --surface #211e1f · --ink #ebe5e2
+       --ink-2 #bdb3b2 · --ink-3 #978d8d（同为官网 assets/style.css 原值） */
+    --bg: #181617;
+    /* 暖底上的两团光也换暖色，透明度压到 .12 以内 —— 暗底一点色偏就很明显。 */
     --bg-grad:
-      radial-gradient(720px 440px at 4% -8%,  rgba(58, 110, 220, .30), transparent 62%),
-      radial-gradient(560px 400px at 104% 0%, rgba(112, 82, 220, .18), transparent 60%),
-      radial-gradient(760px 500px at 48% 110%, rgba(30, 110, 130, .16), transparent 64%),
-      linear-gradient(180deg, #0c1626 0%, #0a1220 52%, #0c1526 100%);
-    --card: #16223a;
-    --card-grad: linear-gradient(180deg, #18253f 0%, #141f34 100%);
+      radial-gradient(720px 440px at 4% -8%,  rgba(123, 95, 102, .14), transparent 62%),
+      radial-gradient(560px 400px at 104% 0%, rgba(101, 94, 123, .10), transparent 60%),
+      radial-gradient(760px 500px at 48% 110%, rgba(91, 105, 88, .10), transparent 64%),
+      linear-gradient(180deg, #1c1919 0%, #161414 52%, #1a1717 100%);
+    --card: #211e1f;
+    --card-grad: linear-gradient(180deg, #241f20 0%, #1e1b1c 100%);
     /* 深色下投影不用彩色、也不用太大：暗底上大投影只会糊成一团黑。
        改靠「面上沿一道 1px 高光」把卡面提起来。 */
     --shadow-card: inset 0 1px 0 rgba(255, 255, 255, .055),
@@ -180,23 +187,25 @@
     --card-line: rgba(255, 255, 255, .07);
     --row-bg: rgba(255, 255, 255, .055);
 
-    --text: #f2f6ff;
-    --sub: #97a9c2;
-    --faint: rgba(226, 236, 250, .30);
+    --text: #ebe5e2;
+    --sub: #bdb3b2;
+    --faint: rgba(235, 229, 226, .30);
 
     --line: rgba(255, 255, 255, .10);
     --rule: rgba(255, 255, 255, .06);
     --line-strong: rgba(255, 255, 255, .18);
-    --active: rgba(90, 140, 255, .16);
+    --active: rgba(220, 195, 200, .16);
     --fill: rgba(255, 255, 255, .06);
 
-    /* 深色下强调色提亮一档，语义色不换值 */
-    --accent: #5a8cff;
-    --accent-grad: linear-gradient(135deg, #7db0ff 0%, #3f77f0 100%);
-    --accent-glow: 0 8px 20px -8px rgba(60, 120, 255, .8);
-    --accent-soft: rgba(90, 140, 255, .16);
-    --primary: #5a8cff;
-    --primary-ink: #ffffff;
+    /* 深色下强调色提亮一档，语义色不换值
+       🔴 0.1.8：主色改抄官网深色值 --accent #dcc3c8 / --on-accent #33262a，
+       而不是把浅色那颗暖褐直接提亮 —— 提亮的暖褐在暖黑底上会发灰。 */
+    --accent: #dcc3c8;
+    --accent-grad: linear-gradient(135deg, #e8d5d9 0%, #dcc3c8 100%);
+    --accent-glow: 0 8px 20px -8px rgba(220, 195, 200, .55);
+    --accent-soft: #3a3033;
+    --primary: #dcc3c8;
+    --primary-ink: #33262a;
 
     --danger: #ff453a;
     --danger-fill: #ff453a;
@@ -208,9 +217,9 @@
     --warn-line: rgba(255, 149, 0, .34);
     --warn-text: #ffb340;
     --tag-impact: #ffb340;   --tag-impact-bg: rgba(255, 149, 0, .18);
-    --tag-action: #64a8ff;   --tag-action-bg: rgba(10, 132, 255, .20);
+    --tag-action: #d9b39a;   --tag-action-bg: rgba(176, 133, 104, .22);
     --tag-act:    #30d158;   --tag-act-bg:    rgba(48, 209, 88, .18);
-    --tag-other:  #97a9c2;   --tag-other-bg: rgba(255, 255, 255, .09);
+    --tag-other:  #978d8d;   --tag-other-bg: rgba(255, 255, 255, .09);
 
     --shadow: none;
     --shadow-float: 0 8px 32px rgba(0, 0, 0, .5);
@@ -279,13 +288,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   /* 顶栏是一层**材质**：半透明白 + 模糊，滚下去的课程块从它底下经过时
      能透出一点颜色。这是全 App「透」的来源之一 —— 一块纯色顶栏会把
      上面那层天色切成两半。 */
-  background: rgba(250, 253, 255, .72);
+  background: rgba(251, 249, 246, .78);   /* 0.1.8 官网 --surface 半透明 */
   -webkit-backdrop-filter: saturate(180%) blur(18px);
   backdrop-filter: saturate(180%) blur(18px);
-  border-bottom: .5px solid rgba(23, 54, 102, .07);
+  border-bottom: .5px solid rgba(38, 33, 34, .07);
 }
 @media (prefers-color-scheme: dark) {
-  .weekbar { background: rgba(11, 19, 34, .68);
+  .weekbar { background: rgba(33, 30, 31, .72);
              border-bottom-color: rgba(255, 255, 255, .07); }
 }
 /* 🔴 0.1.6 样品化（方案 2，用户 2026-11-04 选定）：
@@ -320,9 +329,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   width: auto; padding: 0 8px 0 6px;
   display: inline-flex; align-items: center; gap: 4px;
   color: var(--text); background: var(--card);
-  border: .5px solid rgba(23, 54, 102, .08);
+  border: .5px solid rgba(56, 42, 40, .08);
   border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .05);
+  box-shadow: 0 1px 2px rgba(56, 42, 40, .05);
 }
 .wk-btn.wk-lab:active { background: var(--line); }
 .wk-btn.wk-lab svg { width: 15px; height: 15px; stroke-width: 2; color: var(--sub); }
@@ -508,16 +517,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
      ⚠️ 这是**对 DESIGN.md「静止卡片不用投影」的有意例外**（用户 2026-10-28
         要求课表保持原样）。课表和别处不一样：它是**密集的彩色小块**，
         没有投影时相邻两块同色会连成一片，分不清是两门课还是一门连堂。
-     2026-11-01：影子从「一圈灰」换成「贴着底边的同色淡影」，
-     再加一道从顶部往下淡出的白光 —— 色块变成了小糖块，
-     而不是一块涂了颜色的纸。 */
-  box-shadow: 0 1px 1px rgba(23, 54, 102, .07),
-              0 5px 12px -6px rgba(23, 54, 102, .30);
-  background-image: linear-gradient(180deg,
-    rgba(255, 255, 255, .48) 0%,
-    rgba(255, 255, 255, .10) 44%,
-    rgba(23, 54, 102, .03) 100%);
-  /* color 由 .c* 给（浅底配同色相深字），这里不设默认值 */
+     🔴 0.1.8：撤掉 2026-11-01 那层「顶部 48% 白光」。
+        它叠在 background-color 之上会把中等明度的底色洗回接近白 ——
+        0.1.7 就吃过这个亏（只在切到第二档配色时关掉它）。
+        现在默认配色本身就比旧「清爽」深一档，白光不去掉等于白换色。
+        投影保留，阴影跟着改暖褐（偏蓝的影压在暖米白上会显脏）。 */
+  box-shadow: 0 1px 1px rgba(56, 42, 40, .07),
+              0 5px 12px -6px rgba(56, 42, 40, .30);
+  background-image: none;
+  /* color 由 .c* 给（暖调中间档底 + 暖墨字），这里不设默认值 */
 }
 .g-block:active { filter: brightness(.94); }
 
@@ -528,8 +536,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    两种视图样式不同是**故意的**，判据是同一个 `liveAt()`。 */
 .g-block.live {
   box-shadow: inset 0 0 0 2px var(--accent),
-              0 1px 1px rgba(23, 54, 102, .07),
-              0 5px 12px -6px rgba(23, 54, 102, .30);
+              0 1px 1px rgba(56, 42, 40, .07),
+              0 5px 12px -6px rgba(56, 42, 40, .30);
 }
 .g-block .bn {
   font-size: 13px; font-weight: 600; line-height: 1.18;
@@ -669,12 +677,16 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background-image:
     linear-gradient(160deg, #ffffff 0%, #fbfdff 100%);
   border-radius: var(--r);
-  box-shadow: 0 0 0 .5px rgba(23, 54, 102, .055), var(--shadow-card);
+  box-shadow: 0 0 0 .5px rgba(56, 42, 40, .055), var(--shadow-card);
   margin-bottom: var(--gap-card); overflow: hidden;
 }
 @media (prefers-color-scheme: dark) {
   .card {
-    background: rgba(23, 36, 60, .72);
+    /* 🔴 0.1.8：原来写死 rgba(23,36,60,.72)（冷蓝），底色换成暖黑之后
+       这层蓝就变成整屏的冷色孤岛 —— 「我的」「功能」两页的卡片全是蓝的。
+       改成官网暖黑体系里 --surface #211e1f 的半透明版：
+       rgba(33,30,31,.72)，和白卡那套「半透明 + 背景模糊 = 真玻璃」同源。 */
+    background: rgba(33, 30, 31, .72);
     border-color: rgba(255, 255, 255, .09);
     background-image:
       linear-gradient(135deg, rgba(255, 255, 255, .06) 0%, rgba(255, 255, 255, 0) 46%);
@@ -739,7 +751,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   color: var(--accent); background: var(--accent-soft);
   padding: 2px 8px; border-radius: var(--r-chip); white-space: nowrap;
 }
-.daynext.live .dn-tag { background: var(--accent); color: #fff; }
+.daynext.live .dn-tag { background: var(--accent); color: var(--primary-ink); }
 .dn-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .dn-main b {
   font-size: 13px; font-weight: 600;
@@ -924,9 +936,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: 0 0 auto; height: 32px; padding: 0 12px;
-  border-radius: 999px; border: .5px solid rgba(23, 54, 102, .06);
+  border-radius: 999px; border: .5px solid rgba(56, 42, 40, .06);
   background: var(--card); color: var(--sub);
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .05);
+  box-shadow: 0 1px 2px rgba(56, 42, 40, .05);
   font-size: 13px; font-family: inherit;
 }
 /* 🔴 选中态在 2026-11-01 改回「蓝糖果」：
@@ -934,7 +946,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
      结果一排胶囊里看不出哪个是当前筛选 —— 参考项目里这一颗永远是主色。
      面积只有 60×32，铺蓝不会造成满屏蓝。 */
 .chip.on {
-  background: var(--accent-grad); border-color: transparent; color: #fff;
+  background: var(--accent-grad); border-color: transparent; color: var(--primary-ink);
   font-weight: 600; box-shadow: var(--accent-glow);
 }
 
@@ -1030,7 +1042,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   -webkit-backdrop-filter: blur(12px) saturate(160%);
   backdrop-filter: blur(12px) saturate(160%);
   border-radius: var(--r-ctl);
-  box-shadow: inset 0 1px 2px rgba(23, 54, 102, .07),
+  box-shadow: inset 0 1px 2px rgba(56, 42, 40, .07),
               inset 0 0 0 .5px rgba(255, 255, 255, .7);
 }
 @media (prefers-color-scheme: dark) {
@@ -1048,7 +1060,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    参考项目里「当前这一格」永远是主色，不是黑字。 */
 .seg-btn.on {
   background: var(--card); color: var(--accent); font-weight: 600;
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .10),
+  box-shadow: 0 1px 2px rgba(56, 42, 40, .10),
               0 6px 14px -8px rgba(30, 74, 150, .45);
 }
 
@@ -1273,7 +1285,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .profilecard:active { background: var(--fill); }
 .avatar {
   width: 44px; height: 44px; border-radius: var(--r-ctl); flex: 0 0 auto;
-  background: var(--accent-grad); color: #fff;
+  background: var(--accent-grad); color: var(--primary-ink);
   box-shadow: var(--accent-glow);
   display: grid; place-items: center; font-size: 17px; font-weight: 600;
 }
@@ -1426,20 +1438,20 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   /* 不再是一片「材质」，而是页面底色本身。顶部 38% 淡入，是为了内容滚到底时
      不会从文字后面透出来干扰阅读；肉眼看不到一条硬边，和样品「没有独立面板」一致。 */
   background: linear-gradient(180deg,
-    rgba(237, 246, 255, 0) 0%,
-    rgba(237, 246, 255, .94) 38%,
-    #edf6ff 100%);
+    rgba(243, 239, 234, 0) 0%,
+    rgba(243, 239, 234, .94) 38%,
+    #f3efea 100%);
   border-top: 0; box-shadow: none;
   -webkit-backdrop-filter: none; backdrop-filter: none;
-  --tabbar-bg: #edf6ff;
+  --tabbar-bg: #f3efea;
 }
 @media (prefers-color-scheme: dark) {
   .tabbar {
     background: linear-gradient(180deg,
-      rgba(11, 19, 34, 0) 0%,
-      rgba(11, 19, 34, .94) 38%,
-      #0b1322 100%);
-    --tabbar-bg: #0b1322;
+      rgba(24, 22, 23, 0) 0%,
+      rgba(24, 22, 23, .94) 38%,
+      #181617 100%);
+    --tabbar-bg: #181617;
   }
 }
 .tab {
@@ -1583,7 +1595,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .toast {
   position: absolute; left: 50%; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 18px);
   transform: translateX(-50%);
-  background: rgba(22, 24, 29, .92); color: #fff;
+  /* 0.1.8：冷墨 #16181d → 暖墨 #262122，跟 --text 同源。
+     Toast 压在暖底上，蓝黑会显脏。 */
+  background: rgba(38, 33, 34, .92); color: #fbf9f6;
   /* 2026-11-04 UI 第一阶段：小一号、胶囊形、最多两行 ——
      「绑定成功，已同步 19 条课程安排」这种话原来折成两大行黑块，
      比课表还抢眼。Toast 的本职是一句话反馈。 */
@@ -1630,23 +1644,32 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
         2. 色相是三对近亲（粉-橙-黄 / 绿-青 / 紫-靛），混白后互相分不开
         3. 课表几乎排满，彩色面积占 80% ⇒ 任何「每课一色」都会花
       真要再动，先解决撞色，别只调深浅。 */
-/* 🔴 2026-11-04 UI 第一阶段：整块降饱和 + 文字统一深灰。
-   旧版是「糖果底 + 按色相配的深字」—— 课名蓝字压蓝底、橙字压橙底，
-   一屏八个色相互相打架，这是「丑」的主因。
-   新版学 WakeUp：底色只负责把课区分开（低饱和浅彩），文字一律深灰 ——
-   读课程名永远不费眼，色相只在扫一眼时提供位置线索。
-   文字 #334155 在全部 8 个浅底上的对比度 ≥ 7.5（WCAG AAA）。 */
-.c0 { background: #fbeef1; color: #334155; }   /* 玫红底 */
-.c1 { background: #fbf3e7; color: #334155; }   /* 橙底   */
-.c2 { background: #fbf8e8; color: #334155; }   /* 琥珀底 */
-.c3 { background: #edf7ef; color: #334155; }   /* 翠绿底 */
-.c4 { background: #e9f6f4; color: #334155; }   /* 青绿底 */
-.c5 { background: #ebf3fc; color: #334155; }   /* 天蓝底 */
-.c6 { background: #f2effc; color: #334155; }   /* 紫底   */
-.c7 { background: #edf0fc; color: #334155; }   /* 靛底   */
+/* 🔴 0.1.8 默认课程块配色：FlClash 官网「特性小色块」那四个色相。
+   官网 assets/style.css 里 .facts li 的 --hue 实际取值：
+     --g1 #7d79b0（紫）· --feat #74876c（橄榄）
+     --perf #b08568（陶土）· --fix #677d91（灰蓝）
+   —— 与用户第 2 张截图的四个小色块逐色吻合。
 
-/* 🔴 0.1.7 预设配色 B「柔雾」：替换掉 0.1.6 那套「鲜亮糖果」。
-   用户反馈：鲜亮太艳、清爽又太淡，要一个中间档。
+   ⚠️ 原色相对亮度只有 0.20~0.27，整块铺上时无论深字还是白字都不到
+   4.5:1（官网里它们只是**没字的小色块**，不受这个约束）。所以按原色相
+   各派生两档明度（相对亮度 0.52 / 0.64），凑成 8 色给 colorSlot() 用：
+     · 4 个色相分布在色环四个象限，比旧版 8 色全色环收敛得多
+     · 比 0.1.7「柔雾」(亮度 0.72) 深一档 → 在暖白底上「显眼」
+     · 饱和度只有 0.11~0.33 → 不刺眼、不违和
+     · 同色系两档一深一浅，8 门课仍各有各的颜色
+   文字用官网 --ink #262122，8 色对比度 8.6~10.5（AAA）。 */
+.c0 { background: #bebcd9; color: #262122; }   /* 紫 · 深档 */
+.c1 { background: #d1cfe4; color: #262122; }   /* 紫 · 浅档 */
+.c2 { background: #b7c2b2; color: #262122; }   /* 橄榄 · 深档 */
+.c3 { background: #ccd4c8; color: #262122; }   /* 橄榄 · 浅档 */
+.c4 { background: #d4baa9; color: #262122; }   /* 陶土 · 深档 */
+.c5 { background: #e0cec2; color: #262122; }   /* 陶土 · 浅档 */
+.c6 { background: #b5c0cb; color: #262122; }   /* 灰蓝 · 深档 */
+.c7 { background: #cad3da; color: #262122; }   /* 灰蓝 · 浅档 */
+
+/* 🔴 0.1.8 起这套变成**第二档「淡彩」**：默认已换成上面的官网四色系，
+   它退成「想更淡一点」的备选。0.1.7 时它是默认方案「柔雾」，
+   用来替换 0.1.6 那套「鲜亮糖果」（用户反馈：鲜亮太艳、清爽又太淡）。
 
    做法不是「把鲜亮调淡一点」，而是换一套色彩逻辑：
    · 饱和度 S≈34%（清爽 ≈10%，鲜亮 ≈65%），亮度按 WCAG 相对亮度
@@ -1665,14 +1688,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    ⚠️ class / CFG 值仍叫 `palette-vivid`、`vivid`，是 0.1.6 的历史内部名。
       故意不改：老用户本机已经存了这个值，改名会让他们的选择悄悄回退。
       界面上显示的文案已改成「柔和」。 */
-#app.palette-vivid .c0 { background: #ecd8db; color: #2f3a45; }
-#app.palette-vivid .c1 { background: #e8dad0; color: #2f3a45; }
-#app.palette-vivid .c2 { background: #e3ddc6; color: #2f3a45; }
-#app.palette-vivid .c3 { background: #c7e3d5; color: #2f3a45; }
-#app.palette-vivid .c4 { background: #c7e2e3; color: #2f3a45; }
-#app.palette-vivid .c5 { background: #d4deea; color: #2f3a45; }
-#app.palette-vivid .c6 { background: #e2d9ec; color: #2f3a45; }
-#app.palette-vivid .c7 { background: #ebd7e7; color: #2f3a45; }
+#app.palette-vivid .c0 { background: #e2e1eb; color: #262122; }
+#app.palette-vivid .c1 { background: #ececf2; color: #262122; }
+#app.palette-vivid .c2 { background: #dfe3de; color: #262122; }
+#app.palette-vivid .c3 { background: #ebedea; color: #262122; }
+#app.palette-vivid .c4 { background: #e9e1db; color: #262122; }
+#app.palette-vivid .c5 { background: #f1ebe8; color: #262122; }
+#app.palette-vivid .c6 { background: #dfe2e6; color: #262122; }
+#app.palette-vivid .c7 { background: #eaedef; color: #262122; }
 #app.palette-vivid .g-block { background-image: none; }
 #app.palette-vivid .g-block .bn,
 #app.palette-vivid .g-block .br,
@@ -1680,27 +1703,29 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 
 @media (prefers-color-scheme: dark) {
-  /* 深色反过来：暗底 + 同色相浅字（对比度 5.2~6.0） */
-  .c0 { background: #43333c; color: #dbe2ec; }
-  .c1 { background: #433a33; color: #dbe2ec; }
-  .c2 { background: #3d4333; color: #dbe2ec; }
-  .c3 { background: #33433a; color: #dbe2ec; }
-  .c4 { background: #334043; color: #dbe2ec; }
-  .c5 { background: #333c43; color: #dbe2ec; }
-  .c6 { background: #3c3343; color: #dbe2ec; }
-  .c7 { background: #333843; color: #dbe2ec; }
-  /* 0.1.7「柔雾」深色版：同色相压到相对亮度 0.105，浅字 #e6ebf3，
-     8 色对比度 5.6~5.7（AA+）。深色下也要**成对**给，否则切过去会
-     看到浅色那套在暗背景上过曝。 */
-  #app.palette-vivid .c0 { background: #814c55; color: #e6ebf3; }
-  #app.palette-vivid .c1 { background: #715642; color: #e6ebf3; }
-  #app.palette-vivid .c2 { background: #635b3a; color: #e6ebf3; }
-  #app.palette-vivid .c3 { background: #3a644f; color: #e6ebf3; }
-  #app.palette-vivid .c4 { background: #3b6264; color: #e6ebf3; }
-  #app.palette-vivid .c5 { background: #465d77; color: #e6ebf3; }
-  #app.palette-vivid .c6 { background: #6a5088; color: #e6ebf3; }
-  #app.palette-vivid .c7 { background: #7e4a73; color: #e6ebf3; }
-  /* 深色那层 7% 白光会把柔雾块染灰，去掉，只留一道上沿高光 */
+  /* 0.1.8 深色：同 4 色相压到相对亮度 0.13 / 0.17，浅字用官网
+     --on-accent #fbf9f6（比 --ink 更亮，8 色对比度 4.54~5.55，全部 ≥ AA）。
+     用 #ebe5e2 的话深档能过、浅档只有 3.9，所以这里特意提亮一档。 */
+  .c0 { background: #636091; color: #fbf9f6; }
+  .c1 { background: #716d9f; color: #fbf9f6; }
+  .c2 { background: #5d6957; color: #fbf9f6; }
+  .c3 { background: #697763; color: #fbf9f6; }
+  .c4 { background: #7d5f4b; color: #fbf9f6; }
+  .c5 { background: #8d6c55; color: #fbf9f6; }
+  .c6 { background: #586774; color: #fbf9f6; }
+  .c7 { background: #647584; color: #fbf9f6; }
+  /* 0.1.8 第二档「淡彩」深色版：同 4 色相再压暗一档（0.085 / 0.115），
+     比默认档（0.13 / 0.17）更沉，浅字 #ebe5e2 对比度 5.1~6.3（AA+）。
+     两档拉开一档层次，用户切「淡彩」时能明显看出「整屏更淡」。 */
+  #app.palette-vivid .c0 { background: #514e76; color: #ebe5e2; }
+  #app.palette-vivid .c1 { background: #5e5a89; color: #ebe5e2; }
+  #app.palette-vivid .c2 { background: #4b5547; color: #ebe5e2; }
+  #app.palette-vivid .c3 { background: #576352; color: #ebe5e2; }
+  #app.palette-vivid .c4 { background: #664d3d; color: #ebe5e2; }
+  #app.palette-vivid .c5 { background: #765947; color: #ebe5e2; }
+  #app.palette-vivid .c6 { background: #48545f; color: #ebe5e2; }
+  #app.palette-vivid .c7 { background: #53616d; color: #ebe5e2; }
+  /* 深色那层 7% 白光会把淡彩块染灰，去掉，只留一道上沿高光 */
   #app.palette-vivid .g-block {
     background-image: none;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
@@ -1786,7 +1811,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border: 1px solid var(--line-strong); background: var(--card); color: var(--text);
   font-size: 15px; font-family: inherit; font-weight: 500;
 }
-.wkcell.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.wkcell.on { background: var(--accent); border-color: var(--accent); color: var(--primary-ink); font-weight: 600; }
 .wkcell:active { opacity: .8; }
 
 /* ---------------- 学期设置 ---------------- */
@@ -1836,7 +1861,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .popt.on {
   background: var(--card); color: var(--accent); font-weight: 600;
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .08);
+  box-shadow: 0 1px 2px rgba(56, 42, 40, .08);
 }
 /* 0.1.6 方案 2 把顶栏的翻周箭头收起来了，弹层里补一对等宽按钮兜底。
    复用 .btn 的材质，只管两等分、间距和比主按钮矮一档的高度。 */
@@ -2591,12 +2616,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: #ffffff;
   background-image: linear-gradient(160deg, #ffffff 0%, #fbfdff 100%);
   border-radius: var(--r);
-  box-shadow: 0 0 0 .5px rgba(23, 54, 102, .055), var(--shadow-card);
+  box-shadow: 0 0 0 .5px rgba(56, 42, 40, .055), var(--shadow-card);
 }
 @media (prefers-color-scheme: dark) {
   .sumcard, .daynext, .crhero, .crcats, .crcard, .gradelist, .gptrend,
   .exsum, .exitem, .rmlist, .profilecard, .ntitem, .calhero, .cx-item {
-    background: rgba(23, 36, 60, .72);
+    /* 同 .card：冷蓝 → 暖黑半透明，见上面那条注释 */
+    background: rgba(33, 30, 31, .72);
     border-color: rgba(255, 255, 255, .09);
     background-image:
       linear-gradient(135deg, rgba(255, 255, 255, .06) 0%, rgba(255, 255, 255, 0) 46%);
@@ -2622,12 +2648,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    在白卡里像挖了个洞；现在改成「一张更小的白片」。 */
 .field input, .savedpw, .grfind-in, .grfind-sort {
   background: #fff;
-  border: .5px solid rgba(23, 54, 102, .10);
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .04);
+  border: .5px solid rgba(56, 42, 40, .10);
+  box-shadow: 0 1px 2px rgba(56, 42, 40, .04);
 }
 .field input:focus, .grfind-in:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(47, 107, 238, .14);
+  box-shadow: 0 0 0 3px rgba(107, 80, 89, .14);
 }
 @media (prefers-color-scheme: dark) {
   .field input, .savedpw, .grfind-in, .grfind-sort {
@@ -2637,7 +2663,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   }
   .field input:focus, .grfind-in:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(90, 140, 255, .20);
+    box-shadow: 0 0 0 3px rgba(220, 195, 200, .20);
   }
 }
 
@@ -2649,13 +2675,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    左上亮、右下透明 —— 跟参考项目里头像卡、账户卡同一手法。 */
 .sumcard, .profilecard {
   background-image:
-    linear-gradient(135deg, rgba(47, 107, 238, .12) 0%, rgba(47, 107, 238, 0) 60%),
+    linear-gradient(135deg, rgba(107, 80, 89, .12) 0%, rgba(107, 80, 89, 0) 60%),
     linear-gradient(135deg, rgba(255, 255, 255, .62) 0%, rgba(255, 255, 255, 0) 46%);
 }
 @media (prefers-color-scheme: dark) {
   .sumcard, .profilecard {
     background-image:
-      linear-gradient(135deg, rgba(90, 140, 255, .16) 0%, rgba(90, 140, 255, 0) 60%),
+      linear-gradient(135deg, rgba(220, 195, 200, .16) 0%, rgba(220, 195, 200, 0) 60%),
       linear-gradient(135deg, rgba(255, 255, 255, .06) 0%, rgba(255, 255, 255, 0) 46%);
   }
 }
@@ -2725,12 +2751,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
       「丑」的根源是色系打架，不是缺氛围。只留一团极淡的主题色，
       让页面上亮下暗的方向感还在。 */
   background:
-    radial-gradient(70% 150% at 24% -22%, rgba(47, 107, 238, .16), transparent 74%);
+    radial-gradient(70% 150% at 24% -22%, rgba(107, 80, 89, .16), transparent 74%);
 }
 @media (prefers-color-scheme: dark) {
   .pagehead::before {
     background:
-      radial-gradient(70% 150% at 24% -22%, rgba(90, 140, 255, .14), transparent 74%);
+      radial-gradient(70% 150% at 24% -22%, rgba(220, 195, 200, .14), transparent 74%);
   }
 }
 
@@ -2743,7 +2769,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    两者叠在一起才像「一列」，散着两个高亮反而乱。 */
 .g-day.is-today .dnum {
   padding: 2px 7px; border-radius: 8px;
-  background: var(--accent-grad); color: #fff;
+  background: var(--accent-grad); color: var(--primary-ink);
   /* 2026-11-04：去掉 8px 蓝色发光。页面收敛之后它成了全页最亮的一块，
      发光让它比课程块还抢眼 —— 「今天」靠位置就够，不用再打光。 */
 }

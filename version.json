@@ -1,18 +1,18 @@
 {
   "name": "达小助",
-  "version": "0.1.7",
-  "code": 67,
+  "version": "0.1.8",
+  "code": 68,
   "date": "2026-11-04",
   "size": 522204,
-  "sha256": "706d648867cc31ad4c9a1e31f195c1be28164a6c693a0cfce33bc3afd1b53dd7",
-  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.7.apk",
-  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.7/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
+  "sha256": "c3bb1655c1074cacec7459be5e4185991d2488299a1c5a4997592ff1ea4ff5c2",
+  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.8.apk",
+  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.8/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
   "page": "https://johan.ccwu.cc/daxiaozhu/",
   "notes": [
-    "换掉上一版那套太艳的课程块配色：新的「柔和」是中间档，颜色看得见但不刺眼，课名仍是深字",
-    "默认「清爽」不变，在「跳到第几周」里两档随便切，选择会记住",
-    "深浅两套主题都配好了新颜色，课名对比度达到最高一档",
-    "去掉课程块右下角的单/双周小角标，教师名能多显示一两个字；隔周课照常只在对应周出现",
+    "全局换成 FlClash 那套暖白体系：暖米白地面、暖白卡面、暖褐主色，整屏不再有冷蓝",
+    "课程块用官网那四个「显眼但不违和」的色块：紫 / 橄榄 / 陶土 / 灰蓝，每色深浅两档",
+    "「跳到第几周」里可切两档：默认「官网色」、另一档「淡彩」（同色相再淡一点）",
+    "顺手修掉深色模式下卡片发蓝的毛病（原来写死了半透明冷蓝）",
     "登录、取数、翻周手势、顶栏图标、底部四个 tab 一律没动"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date；发布前把 TBD-github-user 换成真实 GitHub 用户名，并确认 johan.ccwu.cc 已 CNAME 到托管页。自更新在 app.js UPD_SRC 处恢复。"

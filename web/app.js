@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.7';
-const APP_CODE = 67;
+const APP_VERSION = '0.1.8';
+const APP_CODE = 68;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -164,10 +164,10 @@ let prefetchDone = 0;
 let prefetchTok = 0;
 let CFG = Object.assign(
   { startDate: '', week: 0, view: 'week', cursor: '', times: null, hidden: [],
-    // 课程块配色：'clean' 清爽浅彩（默认）/ 'vivid' 柔雾。
-    // ⚠️ 'vivid' 是 0.1.6 遗留的内部值名，0.1.7 已把那套高饱和白字换成
-    //    柔雾中间档，但**故意不改值**：老用户本机存着 'vivid'，改名会
-    //    让他们的选择悄悄回退到默认。界面文案已是「柔和」。
+    // 课程块配色：'clean' 官网四色系暖调（默认）/ 'vivid' 淡彩（0.1.7 柔雾）。
+    // ⚠️ 'vivid' 是 0.1.6 遗留的内部值名，色值已经换过两轮，但**故意不改**：
+    //    老用户本机存着 'vivid'，改名会让他们的选择悄悄回退到默认。
+    //    界面文案随当前实际配色走（0.1.8 起为「暖调 / 淡彩」）。
     palette: 'clean',
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
@@ -2046,12 +2046,17 @@ function openWeekSheet() {
     '<button class="btn" data-step="1">' + stepLab[1] + ' ›</button>' +
     '</div>';
   // 课程块配色：对所有学期都有效（不像校历只对当前学期），
-  // 所以放在 ttIsNow() 判断外面。0.1.7：第二档从「鲜亮」换成「柔和」。
+  // 所以放在 ttIsNow() 判断外面。
+  // 🔴 0.1.8：文案跟着配色一起改。
+  //   「清爽」→「官网色」（FlClash 官网那组紫/橄榄/陶土/灰蓝莫兰迪四色系）
+  //   「柔和」→「淡彩」（同色相再淡一档）
+  // ⚠️ 内部值仍是 clean / vivid —— vivid 是 0.1.6 的历史内部名，
+  //   老用户本机存着它，改名会让他们的选择悄悄回退。
   const vivid = CFG.palette === 'vivid';
   html += '<div class="palrow"><span class="pallab">课程块配色</span>' +
     '<div class="palopts">' +
-      '<button class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">清爽</button>' +
-      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">柔和</button>' +
+      '<button class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">官网色</button>' +
+      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">淡彩</button>' +
     '</div></div>';
   // 「只看工作日」也收进这个弹层（2026-11-04）：顶栏原来 6 个控件，
   // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
@@ -2087,7 +2092,7 @@ function openWeekSheet() {
       store.set(KEY.settings, CFG);
       applyPalette();
       $('sheetMask').hidden = true;
-      toast(CFG.palette === 'vivid' ? '已切换为柔和配色' : '已切换为清爽配色');
+      toast(CFG.palette === 'vivid' ? '已切换为淡彩配色' : '已切换为官网配色');
     });
   });
   $('sheetBody').querySelectorAll('.sh-terms .chip').forEach((b) => {
