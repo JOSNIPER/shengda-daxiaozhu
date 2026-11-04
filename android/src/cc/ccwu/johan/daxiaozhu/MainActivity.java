@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
      *    再跟 app.js / version.json 对账。所以改版本号时这里必须跟着改，
      *    而且**不能删掉这段字符串**（正则找不到会直接判构建失败）。
      */
-    public static final String UA_TAG = " DaXiaoZhu/0.1.1";
+    public static final String UA_TAG = " DaXiaoZhu/0.1.2";
 
     private WebView web;
 
@@ -64,7 +64,12 @@ public class MainActivity extends Activity {
         s.setLoadWithOverviewMode(false);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // 🔴 assets 页面必须禁缓存：覆盖安装后 app.local 的 URL 不变，
+// LOAD_DEFAULT 会让 WebView 继续用上一版的 index.html/app.js ——
+// 新旧 JS+HTML 混搭，轻则按钮错乱，重则新版 app.js 在旧 HTML 上
+// 找不到新元素，顶层抛 null，整份脚本罢工（0.1.1 真机翻车原因）。
+// assets 读的是本地文件，禁缓存没有任何性能代价。
+s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setUserAgentString(s.getUserAgentString() + UA_TAG);
 
         // 页面全在 assets 里，用不着访问手机上的文件。

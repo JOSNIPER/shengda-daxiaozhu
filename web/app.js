@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.1';
-const APP_CODE = 61;
+const APP_VERSION = '0.1.2';
+const APP_CODE = 62;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -2238,7 +2238,7 @@ document.addEventListener('visibilitychange', () => {
    进出都走 switchTab —— 不要自己改 hidden，否则 CUR_PAGE、底部高亮、
    系统返回键三处会互相打架。 */
 $('calBack').addEventListener('click', () => switchTab('schedule'));
-$('wkDays').addEventListener('click', () => {
+boundEl('wkDays', 'click', () => {
   CFG.fiveDay = !CFG.fiveDay;
   store.set(KEY.settings, CFG);
   renderSchedule();
@@ -7625,7 +7625,7 @@ function renderCalendar() {
 }
 
 // 官网校历原文：App 内打开（带返回），打不开退系统浏览器并给出地址
-$('calOfficial').addEventListener('click', () => {
+boundEl('calOfficial', 'click', () => {
   if (!openApp(CAL_OFFICIAL_URL, '学校校历')) {
     toast('打不开，可以复制这个地址手动打开：' + CAL_OFFICIAL_URL, 6000);
   }
