@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.5';
-const APP_CODE = 65;
+const APP_VERSION = '0.1.6';
+const APP_CODE = 66;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -164,6 +164,8 @@ let prefetchDone = 0;
 let prefetchTok = 0;
 let CFG = Object.assign(
   { startDate: '', week: 0, view: 'week', cursor: '', times: null, hidden: [],
+    // 0.1.6 课程块配色：'clean' 清爽浅彩（默认）/ 'vivid' 鲜亮糖果
+    palette: 'clean',
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
     seenDay: '',
@@ -176,6 +178,16 @@ let CFG = Object.assign(
     updOn: true, updFreq: 'daily', updLast: 0, updSkip: '' },
   store.get(KEY.settings, {})
 );
+
+/* 0.1.6：把本机存的配色挂到 #app 上。颜色全是 CSS class 切换，
+   不用重画课表（renderSchedule 一行不动）。
+   🔴 这里必须用原生 getElementById：$ 是下面第 198 行才定义的 const，
+      在这个位置调用会踩 TDZ —— 整份 app.js 直接罢工，和 0.1.1 那次白屏同类。 */
+function applyPalette() {
+  const el = document.getElementById('app');
+  if (el) el.classList.toggle('palette-vivid', CFG.palette === 'vivid');
+}
+applyPalette();
 
 // 认旧的默认作息：等于 LEGACY_TIMES 就说明用户没真改过，直接换成新的。
 // （只要有一条不一样就尊重用户的选择，不覆盖）
@@ -1238,6 +1250,23 @@ function renderRawCourses(rows) {
   }).join('');
 }
 
+/** 0.1.6 方案 2：顶栏「回到今天」改成纯图标后，文字语义只能落在
+ *  aria-label / title 上（长按提示、读屏、桌面 hover 都靠它）。
+ *  🔴 千万别写 textContent —— 那会把按钮里的 inline <svg> 整块冲掉，
+ *     图标变回「今天」两个字，方案 2 直接破相。这也是本版唯一一处
+ *     「JS 必须配合 DOM 改动」的地方，其余都是 CSS。 */
+function labelWkToday() {
+  const el = $('wkToday');
+  if (!el) return;
+  const here = ttIsNow();
+  el.classList.toggle('is-back', !here);
+  const lab = here
+    ? (CFG.view === 'day' ? '回到今天' : '回到本周')
+    : '回到当前学期';
+  el.setAttribute('aria-label', lab);
+  el.title = lab;
+}
+
 /* ---------------- 周视图 ----------------
  *
  * 🔴 **一屏画三页**（上一周 / 本周 / 下一周）并排塞进一条 `.track`。
@@ -1267,28 +1296,25 @@ function renderWeek() {
   // 🔴 看历史学期时，副标题换成「大一上 · 9.01–9.07」：
   //    这一屏最要紧的信息不再是「几门课」，而是「我看的是哪一学期」——
   //    否则往上翻两页，用户根本分不清这张表是今年还是去年的。
-  //    同时「现在」按钮比「今天」宽，顶栏只剩 100 来像素，
-  //    再挤下去副标题会变成「大一上 · 9.01 – …」，日期被省略号吃掉。
-  //    所以：按钮只写「现在」两字（CSS `.is-back` 再收窄内边距），
-  //    副标题的日期连接符也从 ` – ` 收成 `–`（省两个字符宽度）。
+  //    0.1.6 顶栏右侧是 4 颗等宽图标，标题区不再宽裕，日期很容易被省略号
+  //    吃掉，所以副标题的日期连接符从 ` – ` 收成 `–`（省两个字符宽度）。
   $('wkRange').innerHTML = TT
     ? '<b class="wk-term">' + esc(termShort(TT.semester)) + '</b> · ' +
       mdDot(ws) + '–' + mdDot(we)
     : mdDot(ws) + ' – ' + mdDot(we) +
       '<i class="wk-cnt"> · ' + weekCourseCount(occupancy(week)) + ' 门课</i>';
-  // 已经在「本周」时把「今天」按钮标成浅蓝：按下去没变化，
-  // 不标的话用户会以为按钮坏了。
-  // 历史学期下这个按钮变成「回到现在」—— 否则它点了会跳到「历史学期的今天」，
-  // 而那个日期根本不存在（week 被夹到 1，看着像没反应）。
+  // 已经在「本周」时把「回到今天」图标调淡：按下去没变化，
+  // 不标的话用户会以为按钮坏了。历史学期则标主色 —— 它此刻是
+  // 「回到当前学期」（历史学期里根本没有今天），aria-label 同步改掉。
   // 只看工作日时，若本周周末有课必须说一声 —— 否则课就「消失」了。
   // 拼在副标题后面（复用 .wk-cnt 的样式），不额外占一行。
   if (CFG.fiveDay && weekendBusy(week)) {
     $('wkRange').innerHTML += '<i class="wk-cnt"> · 周末也有课</i>';
   }
   // 5/7 天开关已挪进「跳到第几周」弹层（2026-11-04），顶栏不再有这个按钮
+  // 0.1.6：纯图标按钮只切 class + 改 aria-label/title，绝不写 textContent。
   $('wkToday').classList.toggle('is-here', ttIsNow() && week === currentWeek());
-  $('wkToday').classList.toggle('is-back', !ttIsNow());
-  $('wkToday').textContent = ttIsNow() ? '今天' : '现在';
+  labelWkToday();
 
   renderGutter();
   const track = $('wkTrack');
@@ -1540,6 +1566,7 @@ function renderDay() {
     ? (week < 1 ? '还没开学' : '学期已结束')
     : '第 ' + week + ' 周';
   $('wkToday').classList.toggle('is-here', ymd(date) === ymd(today0()));
+  labelWkToday();   // 0.1.6：日视图下按钮叫「回到今天」，且不写 textContent
 
   const track = $('dayView');
   track.innerHTML = '';
@@ -1972,8 +1999,10 @@ async function switchTerm(sid) {
   toast('已切到' + (termShort(TT.semester) || '该学期'));
 }
 
-/* ---------------- 周次选择器 ---------------- */
-$('wkTitle').addEventListener('click', () => {
+/* ---------------- 周次选择器 ----------------
+ * 0.1.6：抽成函数，让「点标题」和「点日历图标」打开同一个弹层。
+ * 之前是匿名箭头直接绑在 wkTitle 上，复制一份会埋两处逻辑。 */
+function openWeekSheet() {
   if (!DATA) return;
   const total = totalWeeks();
   const cur = CFG.view === 'day'
@@ -2015,6 +2044,22 @@ $('wkTitle').addEventListener('click', () => {
   //    也是它）。翻历史学期时藏起来 —— 否则点进去看到的是另一个学期的校历，
   //    改完还会把当前学期弄乱。
   html += '</div>';
+  // 0.1.6 方案 2 把顶栏的翻周箭头收起来了：左右滑仍是主要翻法，
+  // 但桌面浏览器 / 不方便滑动的场景没有手势，弹层里补一对等宽按钮。
+  // 复用 step()，和手势、原箭头是同一套逻辑（日视图自然变成按天翻）。
+  const stepLab = CFG.view === 'day' ? ['上一天', '下一天'] : ['上一周', '下一周'];
+  html += '<div class="wkstep">' +
+    '<button class="btn" data-step="-1">‹ ' + stepLab[0] + '</button>' +
+    '<button class="btn" data-step="1">' + stepLab[1] + ' ›</button>' +
+    '</div>';
+  // 0.1.6 课程块配色：对所有学期都有效（不像校历只对当前学期），
+  // 所以放在 ttIsNow() 判断外面。
+  const vivid = CFG.palette === 'vivid';
+  html += '<div class="palrow"><span class="pallab">课程块配色</span>' +
+    '<div class="palopts">' +
+      '<button class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">清爽</button>' +
+      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">鲜亮</button>' +
+    '</div></div>';
   // 「只看工作日」也收进这个弹层（2026-11-04）：顶栏原来 6 个控件，
   // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
   if (ttIsNow()) {
@@ -2041,6 +2086,17 @@ $('wkTitle').addEventListener('click', () => {
       toast(CFG.fiveDay ? '已切换为只看工作日' : '已显示整周 7 天');
     });
   }
+  // 0.1.6 配色是纯 CSS class 切换，不用 renderSchedule() 重画格子。
+  // 关掉弹层再切，用户能立刻看到整屏效果；选中态下次打开弹层会重新渲染。
+  $('sheetBody').querySelectorAll('.popt').forEach((b) => {
+    b.addEventListener('click', () => {
+      CFG.palette = b.dataset.pal;
+      store.set(KEY.settings, CFG);
+      applyPalette();
+      $('sheetMask').hidden = true;
+      toast(CFG.palette === 'vivid' ? '已切换为鲜亮配色' : '已切换为清爽配色');
+    });
+  });
   $('sheetBody').querySelectorAll('.sh-terms .chip').forEach((b) => {
     b.addEventListener('click', () => switchTerm(b.dataset.sid));
   });
@@ -2057,11 +2113,27 @@ $('wkTitle').addEventListener('click', () => {
       renderSchedule();
     });
   });
-});
+  // 0.1.6：弹层里的「上一周 / 下一周」。先关弹层再翻，否则翻完还盖着
+  // 一张按旧 week 渲染的格子面板；step() 内部会重画课表。
+  $('sheetBody').querySelectorAll('.wkstep [data-step]').forEach((b) => {
+    b.addEventListener('click', () => {
+      $('sheetMask').hidden = true;
+      step(Number(b.dataset.step));
+    });
+  });
+}
+
+/* 0.1.6：日历图标和标题共用同一个弹层。
+   🔴 用 boundEl 而不是 $().addEventListener —— wkJump 是本版新增 id，
+      覆盖安装时若 WebView 缓存了旧 index.html，直接绑定会抛 null
+      让整份 app.js 罢工（0.1.1 白屏同款）。wkPrev/wkNext 是老 id，
+      同样换成 boundEl 更稳，代价为零。 */
+boundEl('wkTitle', 'click', openWeekSheet);
+boundEl('wkJump', 'click', openWeekSheet);
 
 /* ---------------- 导航按钮 ---------------- */
-$('wkPrev').addEventListener('click', () => step(-1));
-$('wkNext').addEventListener('click', () => step(1));
+boundEl('wkPrev', 'click', () => step(-1));
+boundEl('wkNext', 'click', () => step(1));
 
 /* ---------------- 左右滑动翻周 / 翻天 ----------------
  *

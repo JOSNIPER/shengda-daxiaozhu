@@ -273,7 +273,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* ---------------- 顶部周次条 ---------------- */
 .weekbar {
   flex: 0 0 auto;
-  display: flex; align-items: center; gap: 1px;
+  display: flex; align-items: center; gap: 3px;
   padding: 6px 8px 8px;
   padding-top: calc(env(safe-area-inset-top) + 6px);
   /* 顶栏是一层**材质**：半透明白 + 模糊，滚下去的课程块从它底下经过时
@@ -288,32 +288,38 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   .weekbar { background: rgba(11, 19, 34, .68);
              border-bottom-color: rgba(255, 255, 255, .07); }
 }
-/* 34 → 30：给「空教室」那两个字腾地方。翻周/刷新都是通用符号，
-   30px 仍然在 44px 触控热区之内（.wk-btn 的实际热区靠外面那层 padding 撑）。 */
+/* 🔴 0.1.6 样品化（方案 2，用户 2026-11-04 选定）：
+   顶栏改成「大标题靠左 + 右侧 4 个等宽纯线性图标」，和样品同一套克制。
+   · 撤掉翻周箭头 —— 逐周翻交给左右滑 + 跳周弹层里的「上一周/下一周」
+   · 「今天」「周/日」从文字按钮改成图标，语义靠 aria-label 与图标形状表达
+   · 所有按钮统一 36×36，无底色、无边框、无胶囊、无阴影
+   ⚠️ 为了不重演 0.1.1 白屏：index.html 里**所有旧 id 一个不删**
+      （wkPrev/wkNext/wkTitle/wkNum/wkRange/wkToday/wkViewLab/viewToggle/
+       schRefresh），箭头只是 CSS 隐藏，JS 顶层绑定照常跑得通。 */
 .wk-btn {
-  width: 30px; height: 40px; flex: 0 0 auto;
-  border: 0; border-radius: var(--r-ctl); background: transparent;
+  width: 36px; height: 36px; flex: 0 0 auto; padding: 0;
+  border: 0; border-radius: 10px; background: transparent;
   display: grid; place-items: center; color: var(--sub);
 }
 .wk-btn:active { background: var(--line); }
-.wk-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-/* 同步中：图标转起来。比换成文字「同步中…」好 —— 按钮只有 30px 宽，
-   塞不下字，而且换字会让整条顶栏左右跳一下。 */
+.wk-btn svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+/* 同步中：图标转起来。纯图标按钮塞不下「同步中…」，换字还会让顶栏跳一下。 */
 .wk-btn.busy { color: var(--accent); }
 .wk-btn.busy svg { animation: rot .8s linear infinite; }
 .wk-btn:disabled { opacity: .55; }
 
-/* ---- 「空教室」：图标 + 文字 ----
-   🔴 这个按钮以前只有一扇门。用户原话：「就一个图标，用户很难知道那是干嘛的」。
-      图标负责「教室」的联想，文字负责说清楚 —— 两个都要。
-   🔴 低于 340px 的窄屏（老机型）放不下，退回纯图标；
-      这时靠「我的 → 找空教室」那条文字入口兜底。 */
+/* 翻周箭头：step() 与顶层绑定全保留，只在视觉上收起来。
+   桌面/浏览器没有左右滑时，用跳周弹层里的「上一周 / 下一周」。 */
+#wkPrev, #wkNext { display: none; }
+
+/* 「空教室」按钮已随 0.1.5 删除；规则留着只兼容旧缓存页面，不参与本版顶栏。 */
 .wk-btn.wk-lab {
   width: auto; padding: 0 8px 0 6px;
   display: inline-flex; align-items: center; gap: 4px;
   color: var(--text); background: var(--card);
-  /* 顶栏里的两个小控件做成「玻璃糖」：白底、胶囊、一道极淡的边和影子，
-     压在模糊顶栏上，看起来像浮着的一层薄片。 */
   border: .5px solid rgba(23, 54, 102, .08);
   border-radius: 999px;
   box-shadow: 0 1px 2px rgba(23, 54, 102, .05);
@@ -322,37 +328,19 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .wk-btn.wk-lab svg { width: 15px; height: 15px; stroke-width: 2; color: var(--sub); }
 .wk-lab-t { font-size: 12px; font-weight: 500; white-space: nowrap; }
 
-/* ---- 视图切换：写当前视图的一个字 ----
-   网格图标能表示「周视图」，但表示不了「点一下会换成另一种」。
-   写「周 / 日」跟分段控件的习惯一致：显示当前值，点了就换。 */
-.wk-btn.wk-view {
-  width: 30px; color: var(--text); background: var(--card);
-  border: .5px solid rgba(23, 54, 102, .08);
-  border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .05);
-  font-size: 12px; font-weight: 600;
-}
-.wk-btn.wk-view:active { background: var(--line); }
-/* 日视图 = 一个小方块里写「日」，选中时整颗变蓝 —— 和顶栏别的控件区分开，
-   一眼知道「现在显示的不是整周」。 */
-.wk-btn.wk-view.is-day {
-  color: #fff; border-color: transparent; background: var(--accent-grad);
-  box-shadow: var(--accent-glow);
-}
-
+/* ---- 标题：靠左、放大 ---- */
 .wk-title {
   flex: 1 1 auto; min-width: 0;
-  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
+  display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15;
   border: 0; background: transparent; font-family: inherit; color: inherit;
-  padding: 3px 4px; border-radius: var(--r-ctl);
+  padding: 2px 2px 2px 4px; border-radius: var(--r-ctl); text-align: left;
 }
 .wk-title:active { background: var(--line); }
-.wk-title .wk-t1 { display: inline-flex; align-items: center; gap: 1px; max-width: 100%; }
-.wk-title b { font-size: 17px; font-weight: 650; letter-spacing: .1px; white-space: nowrap; }
-/* ▾ 是「点开有东西」的通用暗示。以前标题点了会打开校历，但**没有任何提示** ——
-   全 App 只有这一个入口，等于把校历藏起来了。 */
+.wk-title .wk-t1 { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.wk-title b { font-size: 20px; font-weight: 700; letter-spacing: -.4px; white-space: nowrap; }
+/* ▾ 是「点开有东西」的通用暗示：标题点开跳周弹层，校历/学期设置都在里面。 */
 .wk-caret {
-  width: 13px; height: 13px; flex: 0 0 auto; margin-top: 3px;
+  width: 13px; height: 13px; flex: 0 0 auto; margin-top: 4px;
   fill: none; stroke: var(--sub); stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round;
 }
@@ -362,11 +350,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .wk-title .wk-cnt { font-style: normal; }
-/* 窄屏按重要性依次让位：
-   ① 门数（有用但不必需）—— 阈值从 345 提到 370：加了「空教室」那两个字之后，
-      360dp 的机器上日期行差 10px 就被省略号截断了（实测 94px 可用 / 104px 需要）。
-      370 以上（390、412 这些主流机型）门数照常显示。
-   ② 再窄（<340dp，老机型）连「空教室」三个字也收起来，只留图标。 */
+/* 窄屏先让「门数」让位，标题和日期行优先。 */
 @media (max-width: 369px) {
   .wk-title .wk-cnt { display: none; }
 }
@@ -375,26 +359,23 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   .wk-btn.wk-lab { padding: 0; width: 30px; justify-content: center; }
 }
 
-.wk-today {
-  flex: 0 0 auto; height: 32px; padding: 0 8px;
-  border: .5px solid rgba(23, 54, 102, .08); border-radius: 999px;
-  background: var(--card); color: var(--text);
-  font-size: 12px; font-weight: 500; font-family: inherit;
-  box-shadow: 0 1px 2px rgba(23, 54, 102, .05);
-}
-.wk-today:active { background: var(--line); }
-/* 「今天」已经是当前周时按下去没变化，淡一点提示它是「已在此」而不是坏按钮。
-   但这里不做成灰掉 —— 它同时是「回到本周」的唯一入口，做成一颗蓝糖果，
-   和参考项目里那颗被选中的日期块同一个意思：**当前所在的这一格**。
-   代价是顶栏多了一个色块；收益是整页终于有一个「亮的东西」压住阵脚。 */
-.wk-today.is-here {
-  color: #fff; border-color: transparent; background: var(--accent-grad);
-  box-shadow: var(--accent-glow); font-weight: 600;
-}
-/* 看历史学期时这个按钮是「现在」（切回当前学期）。
-   少一个字还不够 —— 顶栏的副标题要放下「大一上 · 9.01–9.07」，
-   所以内边距从 8 收到 6，正好补回那几个像素。 */
-.wk-today.is-back { padding: 0 6px; }
+/* ---- 4 颗等宽纯图标按钮 ---- */
+.wk-icon { color: var(--text); }
+/* 「已经在本周」淡一档（它仍是回到本周的入口，不能灰掉像坏按钮） */
+#wkToday.is-here { color: var(--sub); }
+/* 看历史学期时这颗是「回到当前学期」，用主色提示它不是「今天」 */
+#wkToday.is-back { color: var(--accent); }
+/* 视图切换：周视图四宫格 / 日视图单列，靠 renderSchedule 设的 .is-day 切，
+   仍是纯图标，但形状变了就能看出「现在不是整周」。 */
+#viewToggle .ico-day { display: none; }
+#viewToggle.is-day .ico-week { display: none; }
+#viewToggle.is-day .ico-day { display: block; }
+#viewToggle.is-day { color: var(--accent); }
+/* JS 仍会往 wkViewLab 写「周/日」；纯图标版把它收起来，但 id 必须留着，
+   否则 renderSchedule 里那行 $('wkViewLab').textContent 会抛错。 */
+#wkViewLab { display: none; }
+/* 跳周日历图标与其余三颗同宽，四颗连成一排 */
+#wkJump { color: var(--text); }
 
 /* ---------------- 课表网格 ---------------- */
 /* 左栏固定、右边滑：`overflow: hidden` 把轨道溢出的相邻页裁掉。 */
@@ -1676,6 +1657,26 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .c6 { background: #f2effc; color: #334155; }   /* 紫底   */
 .c7 { background: #edf0fc; color: #334155; }   /* 靛底   */
 
+/* 🔴 0.1.6 预设配色 B「鲜亮糖果」：样品那种整块高饱和 + 白字。
+   默认仍是上面那套 A（清爽浅彩），只在 #app 上挂 class 覆盖。
+   · 用 `#app.palette-vivid .cN`（ID + 2 class）而不是裸 .cN：
+     特异性高于深色 media 里的 .cN，两套主题下都能稳定覆盖。
+   · colorSlot(name) 按课程名 hash 到 0..7，一行没改 ——
+     换配色不会让同一门课换颜色；课表、日视图、课程页色带同步生效。
+   · 亮度比样品压了一档：样品原色在橙/黄上白字对比度只有 2~3，
+     这里全部 ≥ 4.5，课名仍然读得清。 */
+#app.palette-vivid .c0 { background: #c94560; color: #fff; }
+#app.palette-vivid .c1 { background: #b06a17; color: #fff; }
+#app.palette-vivid .c2 { background: #9c7a10; color: #fff; }
+#app.palette-vivid .c3 { background: #1f7a48; color: #fff; }
+#app.palette-vivid .c4 { background: #137a70; color: #fff; }
+#app.palette-vivid .c5 { background: #2665b0; color: #fff; }
+#app.palette-vivid .c6 { background: #5f47ab; color: #fff; }
+#app.palette-vivid .c7 { background: #3850a6; color: #fff; }
+#app.palette-vivid .g-block .bn,
+#app.palette-vivid .g-block .br,
+#app.palette-vivid .g-block .bt { text-shadow: none; }
+
 
 @media (prefers-color-scheme: dark) {
   /* 深色反过来：暗底 + 同色相浅字（对比度 5.2~6.0） */
@@ -1687,6 +1688,21 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   .c5 { background: #333c43; color: #dbe2ec; }
   .c6 { background: #3c3343; color: #dbe2ec; }
   .c7 { background: #333843; color: #dbe2ec; }
+  /* 0.1.6：鲜亮配色在深色下压暗一档，避免一屏亮块刺眼；仍是白字。
+     🔴 深浅两套必须同时给，否则深色用户切到「鲜亮」会看到浅色那套过曝的色。 */
+  #app.palette-vivid .c0 { background: #a83650; color: #fff; }
+  #app.palette-vivid .c1 { background: #8f5512; color: #fff; }
+  #app.palette-vivid .c2 { background: #7d620d; color: #fff; }
+  #app.palette-vivid .c3 { background: #186139; color: #fff; }
+  #app.palette-vivid .c4 { background: #0f625a; color: #fff; }
+  #app.palette-vivid .c5 { background: #1e5090; color: #fff; }
+  #app.palette-vivid .c6 { background: #4c3889; color: #fff; }
+  #app.palette-vivid .c7 { background: #2d4085; color: #fff; }
+  /* 深色给 .g-block 叠的那层白光会把鲜亮块染灰，这里去掉，只留一道上沿高光 */
+  #app.palette-vivid .g-block {
+    background-image: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+  }
   /* 深色下白字阴影反而糊，去掉 */
   .g-block .bn { text-shadow: none; }
   /* 深色不能用投影（糊成一团），也不能用浅色那层 .48 的白光（会发灰）。
@@ -1807,6 +1823,26 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   padding: 0 4px;
 }
 .timerow .tdash { color: var(--sub); font-size: 13px; }
+/* 0.1.6 跳周弹层里的「课程块配色」二选一。和「只看工作日」同属
+   「课表怎么看」的偏好，放同一个弹层；选中态用白面 + 主色字，
+   不再往设置里引入一颗彩色糖。 */
+.palrow { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; }
+.pallab { flex: 0 0 auto; font-size: 12px; color: var(--sub); }
+.palopts { flex: 1 1 auto; display: flex; gap: 6px; }
+.popt {
+  flex: 1 1 0; height: 34px; border: 0; border-radius: var(--r-ctl);
+  background: var(--fill); color: var(--sub);
+  font-family: inherit; font-size: 13px; font-weight: 500;
+}
+.popt.on {
+  background: var(--card); color: var(--accent); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(23, 54, 102, .08);
+}
+/* 0.1.6 方案 2 把顶栏的翻周箭头收起来了，弹层里补一对等宽按钮兜底。
+   复用 .btn 的材质，只管两等分、间距和比主按钮矮一档的高度。 */
+.wkstep { display: flex; gap: 10px; margin-top: 12px; }
+.wkstep .btn { flex: 1 1 0; height: 38px; padding: 0 8px; font-size: 13px; }
+
 .sheetbtns { display: flex; gap: 10px; margin-top: 16px; }
 .sheetbtns .btn { flex: 1 1 0; }
 /* 🔴 2026-10-27：内容一长，按钮就被滚出可视区。

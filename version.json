@@ -1,17 +1,18 @@
 {
   "name": "达小助",
-  "version": "0.1.5",
-  "code": 65,
+  "version": "0.1.6",
+  "code": 66,
   "date": "2026-11-04",
-  "size": 518108,
-  "sha256": "a07b4ef070b44f7b767daaff83a12bf83f7c2309a6d491c8f70e956c026abd24",
-  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.5.apk",
-  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.5/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
+  "size": 522204,
+  "sha256": "4a148a479c0c4b38f8d019e96f3327d208003210c02171f96cb0a09b5207a17a",
+  "apk": "https://johan.ccwu.cc/daxiaozhu/dl/daxiaozhu-0.1.6.apk",
+  "apk_cn": "https://maven.cnb.cool/TBD-github-user/campus-login/-/packages/cnb/daxiaozhu/0.1.6/%E8%BE%BE%E5%B0%8F%E5%8A%A9.apk",
   "page": "https://johan.ccwu.cc/daxiaozhu/",
   "notes": [
-    "底部导航换成样品那种纯文字样式，顺序仍是课表 / 学习 / 功能 / 我的",
-    "课程页顶部只留三个数：总门数、考试课、考查课",
-    "课程先考试课后考查课，各按每周课节数从多到少排；右侧改显示学分"
+    "课表顶栏换成样品那种：左边大标题，右边四个一样宽的线性图标，没有底色和圆胶囊",
+    "新增一套「鲜亮」课程块配色，在「跳到第几周」里切换；不换的话还是原来的清爽配色",
+    "顶栏翻周箭头收起来了，左右滑照旧；弹层里补了「上一周 / 下一周」，不方便滑的时候也能翻",
+    "只改了课表页的顶栏和配色，登录、取数、翻周手势、底部四个 tab 一律没动"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date；发布前把 TBD-github-user 换成真实 GitHub 用户名，并确认 johan.ccwu.cc 已 CNAME 到托管页。自更新在 app.js UPD_SRC 处恢复。"
 }

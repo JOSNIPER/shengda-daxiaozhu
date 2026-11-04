@@ -36,13 +36,15 @@
   <!-- ================= 课程表 ================= -->
   <section class="page" id="page-schedule">
     <header class="weekbar">
-      <button class="wk-btn" id="wkPrev" aria-label="上一个">
+      <!-- 0.1.6 样品化：顶栏 = 大标题靠左 + 右侧 4 颗等宽纯线性图标。
+           🔴 翻周箭头**保留 id 和 JS 绑定**，只用 CSS 收起来 ——
+              0.1.1 那次白屏就是「新 JS 绑了不存在的元素」，这里一个 id 都不删。
+              逐周翻改由左右滑 + 跳周弹层里的「上一周 / 下一周」承担。 -->
+      <button class="wk-btn" id="wkPrev" aria-label="上一周">
         <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
-      <!-- 这一整块点了会打开「跳到第几周」弹层（里面还有「看校历」「学期设置」）。
-           以前没有任何视觉暗示，等于藏起来了 —— 补一个 ▾，
-           用「能展开」这个通用符号把它露出来。
-           ⚠️ 它**不是**直接打开校历，aria-label 别写错。 -->
+      <!-- 这一整块点了会打开「跳到第几周」弹层（里面还有校历、学期设置、
+           只看工作日、课程块配色）。▾ 是「能展开」的通用暗示。 -->
       <button class="wk-title" id="wkTitle" aria-label="跳到第几周">
         <span class="wk-t1">
           <b id="wkNum">第 1 周</b>
@@ -50,20 +52,30 @@
         </span>
         <span class="wk-range" id="wkRange"></span>
       </button>
-      <button class="wk-btn" id="wkNext" aria-label="下一个">
+      <button class="wk-btn" id="wkNext" aria-label="下一周">
         <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
       </button>
-      <button class="wk-today" id="wkToday">今天</button>
-      <!-- 视图切换以前是个网格图标 —— 网格能表示「周视图」，但表示不了
-           「点一下会换一种」。改成直接写当前视图的一个字，点了就换，
-           跟分段控件的习惯一致。 -->
-      <button class="wk-btn wk-view" id="viewToggle" aria-label="切换周视图和日视图">
+
+      <!-- ① 跳周（日历）：和点标题同一个弹层 -->
+      <button class="wk-btn wk-icon" id="wkJump" aria-label="跳到第几周">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+      </button>
+      <!-- ② 回到今天 / 回到当前学期（准星）。
+           🔴 JS 原来会写 textContent = 「今天」/「现在」，纯图标版改成写
+              aria-label / title（见 renderWeek），否则会把 svg 冲掉。 -->
+      <button class="wk-btn wk-icon" id="wkToday" aria-label="回到本周" title="回到本周">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21"/></svg>
+      </button>
+      <!-- ③ 周/日视图：靠 .is-day 换图标形状，仍不写文字。
+           🔴 #wkViewLab 必须留着（CSS 隐藏）：renderSchedule 会写它的 textContent，
+              删了就是 null.textContent → 整份 app.js 罢工。 -->
+      <button class="wk-btn wk-icon" id="viewToggle" aria-label="切换周视图和日视图">
+        <svg class="ico-week" viewBox="0 0 24 24"><rect x="3.6" y="3.6" width="7.2" height="7.2" rx="2"/><rect x="13.2" y="3.6" width="7.2" height="7.2" rx="2"/><rect x="3.6" y="13.2" width="7.2" height="7.2" rx="2"/><rect x="13.2" y="13.2" width="7.2" height="7.2" rx="2"/></svg>
+        <svg class="ico-day" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="5" rx="2"/><rect x="4" y="9.5" width="16" height="5" rx="2"/><rect x="4" y="16" width="16" height="5" rx="2"/></svg>
         <span id="wkViewLab">周</span>
       </button>
-      <!-- 课表页也要能刷新：以前只有「我的」里那一行和成绩/考试页右上角能刷，
-           课表是每天看得最多的一页，想拉一次新课表得点进「我的」——
-           多绕一层，而且没人会想到刷新藏在设置里。 -->
-      <button class="wk-btn" id="schRefresh" aria-label="刷新课表">
+      <!-- ④ 刷新课表 -->
+      <button class="wk-btn wk-icon" id="schRefresh" aria-label="刷新课表">
         <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
       </button>
     </header>
