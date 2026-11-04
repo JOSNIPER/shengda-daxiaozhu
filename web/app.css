@@ -1440,72 +1440,65 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .about .sub { font-size: 11px; color: var(--sub); margin: 0; line-height: 1.6; }
 
 /* ---------------- 底部导航 ---------------- */
-/* 标签栏用**材质**，不用实心白 —— 内容从下面滚过去时能看见一点点，
-   这是 iOS 的标准做法，也是全 App 唯一允许用毛玻璃的地方（见 DESIGN.md 第五节）。
-   不支持 backdrop-filter 的老 WebView 会退化成 .82 的实色，仍然可读。 */
+/* 2026-11-04 · 0.1.5：按用户给的样品改成「纯文字 tab」。
+   🔴 样品里这一条**没有图标、没有毛玻璃、没有顶线、没有胶囊、没有分隔线**：
+      4 个词直接落在页面底色上，选中那个用近黑加粗说话，其余是浅灰。
+      旧版「通栏毛玻璃 + 顶部蓝线 + 蓝色图标底 + 蓝色粗体字」同时点亮三处状态，
+      0.1.4 收掉彩色光斑之后，这根蓝线反而成了全屏最饱和的东西。
+   🔴 顺序仍是「课表 / 学习 / 功能 / 我的」，data-tab 一个都不动 ——
+      app.js switchTab 靠 querySelectorAll('.tab') 绑事件、靠 .active 判高亮。
+   🔴 --tab-h / position / flex 一律不动：.page 的 padding-bottom、
+      toast 的 bottom、fitGridHeight 都引用它，动了就是历史那几次回归。 */
 .tabbar {
   position: absolute; left: 0; right: 0; bottom: 0;
   height: calc(var(--tab-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   display: flex; align-items: stretch;
-  /* 一层更透的白：这个 App 的所有页面底色都在变（天色、卡片），
-     标签栏只有「薄薄一片」才不会把页面切成两截。 */
-  background: rgba(252, 254, 255, .74);
-  -webkit-backdrop-filter: saturate(180%) blur(22px);
-  backdrop-filter: saturate(180%) blur(22px);
-  border-top: .5px solid rgba(23, 54, 102, .07);
-  box-shadow: 0 -12px 28px -22px rgba(23, 54, 102, .55);
+  /* 不再是一片「材质」，而是页面底色本身。顶部 38% 淡入，是为了内容滚到底时
+     不会从文字后面透出来干扰阅读；肉眼看不到一条硬边，和样品「没有独立面板」一致。 */
+  background: linear-gradient(180deg,
+    rgba(237, 246, 255, 0) 0%,
+    rgba(237, 246, 255, .94) 38%,
+    #edf6ff 100%);
+  border-top: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  --tabbar-bg: #edf6ff;
 }
 @media (prefers-color-scheme: dark) {
-  .tabbar { background: rgba(12, 21, 38, .76);
-            border-top-color: rgba(255, 255, 255, .07);
-            box-shadow: 0 -12px 28px -22px rgba(0, 0, 0, .9); }
+  .tabbar {
+    background: linear-gradient(180deg,
+      rgba(11, 19, 34, 0) 0%,
+      rgba(11, 19, 34, .94) 38%,
+      #0b1322 100%);
+    --tabbar-bg: #0b1322;
+  }
 }
-/* 2026-10-21 加了第 6 个 tab（校历）。360dp 的屏上每个只剩 60px，
-   320dp 的老机型只剩 53px —— 「空教室」三个字在 10px 下是 30px，放得下。
-   再窄就靠下面那条媒体查询把字号降到 9px、图标降到 23px。 */
 .tab {
   flex: 1 1 0; min-width: 0; border: 0; background: transparent;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  color: var(--sub); font-family: inherit; font-size: 11px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  color: var(--faint); font-family: inherit; font-size: 15px; font-weight: 400;
+  letter-spacing: .5px;
   padding: 0; height: 100%;
   position: relative;
 }
-/* 图标固定占 25×25 的盒子（内边距 3px，实际图形 19px），
-   选中的那个垫一层**中性灰**胶囊。**不能只在 active 时改尺寸** ——
-   19↔25 会让底部整排跟着跳一下。
-   为什么不用强调色：彩色胶囊 + 彩色图标是模板脸最明显的零件，
-   这里改成「选中 = 墨色 + 灰胶囊」，强调色留给数据。 */
-.tab svg {
-  width: 25px; height: 25px; padding: 3px; box-sizing: border-box;
-  fill: none; stroke: currentColor; stroke-width: 1.75;
-  stroke-linecap: round; stroke-linejoin: round;
-  border-radius: var(--r-ctl);
-}
-.tab.active { color: var(--accent); font-weight: 600; }
-.tab.active svg { background: var(--accent-soft); stroke-width: 2; }
-/* 选中那一格顶上的一道小蓝线 —— 参考项目里就是这根线把「我现在在哪一页」
-   说清楚的。不占高度（绝对定位贴在栏顶），也不加新的颜色。 */
-.tab.active::before {
-  content: ""; position: absolute; top: 0; left: 50%;
-  transform: translateX(-50%);
-  width: 20px; height: 3px; border-radius: 0 0 999px 999px;
-  background: var(--accent);
-}
+/* 样品没有图标。SVG 留在 DOM 里（index.html 不动），只在视觉上收起来 ——
+   switchTab 的 .tab 绑定、ntDot 的锚点都不受影响。 */
+.tab svg { display: none; }
+/* 选中只留一个信号：墨色 + 字重。强调色留给数据。 */
+.tab.active { color: var(--text); font-weight: 700; }
+.tab.active::before { display: none; }   /* 删掉顶部那道 20×3 蓝线 */
 
-/* 公告「有新东西」的红点（0.24.1）。
-   定位基准是包着图标的那个 span —— 直接在 .tab 上定位会跑到文字底下。 */
+/* 公告「有新东西」的红点。图标收起来后 .tab-ico 里只剩「功能」两个字，
+   红点落在词尾右上角，不用改锚点、JS 的 hidden 开关照旧。 */
 .tab-ico { position: relative; display: inline-flex; }
 .tab-dot {
-  position: absolute; top: 1px; right: 1px;
+  position: absolute; top: 1px; right: -9px;
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--danger-fill);
-  /* 和底部栏底色之间留一道缝，压在图标上才看得出是「新」，不是图标的一部分 */
   box-shadow: 0 0 0 1.5px var(--tabbar-bg, var(--card));
 }
 @media (max-width: 340px) {
-  .tab { font-size: 11px; gap: 1px; }
-  .tab svg { width: 23px; height: 23px; }
+  .tab { font-size: 14px; }
 }
 
 /* ---------------- 详情弹层 ---------------- */
@@ -2777,6 +2770,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: var(--r-card); overflow: hidden;
   background: var(--row-bg); border: .5px solid var(--line);
 }
+/* 0.1.5：分组标题（考试课 / 考查课）。放在同一张白卡里、比课程名轻一档，
+   让「先考试后考查」一眼看得出来，又不抢课程名的视觉重量。 */
+.cogrp-h {
+  padding: 10px 14px 6px;
+  font-size: 11px; font-weight: 600; color: var(--sub);
+  letter-spacing: .4px;
+  border-top: .5px solid var(--line);
+}
+.cogrp-h:first-child { border-top: 0; }
 .courseitem {
   display: flex; align-items: stretch; gap: 12px;
   padding: 12px 14px 12px 0;

@@ -1763,7 +1763,9 @@
     // 🔴 界面契约（app.js renderGrades 读这些键）：
     //   summary [{year, term, count, credits, gpa}]
     //   overall {gpa, credits, count}
-    //   courses [{term:"2024-2025 1", code, name, credit, score, gpa, category, nature}]
+    //   courses [{term:"2024-2025 1", code, name, credit, score, gpa,
+    //             category, nature, examType}]
+    // 0.1.5：examType = ksfs（考核方式，值「考试」/「考查」），课程页分组要用。
     var courses = [], seen = [];
     rows.forEach(function (r) {
       var st = splitTerm(r.term || '');
@@ -1772,7 +1774,7 @@
         term: st.year ? (st.year + ' ' + st.no) : (r.term || ''),
         code: r.kch || '', name: r.kcm || '',
         credit: r.xf || '', score: r.cj || '', gpa: r.jd || '',
-        category: r.lb || '', nature: r.ksxz || ''
+        category: r.lb || '', nature: r.ksxz || '', examType: r.ksfs || ''
       });
     });
     var summary = seen.map(function (t) {

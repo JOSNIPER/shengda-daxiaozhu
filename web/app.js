@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.4';
-const APP_CODE = 64;
+const APP_VERSION = '0.1.5';
+const APP_CODE = 65;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -2385,6 +2385,29 @@ function scoreNum(c) {
  *    这需要超星那边接通并知道每门课对应哪门课，现在做不到（fid 都还没配）。
  *    所以这里**不放假标签**：宁可没有，也不能标错。等学习通接通再加。
  */
+/** 0.1.5：本学期课程的「考核方式 / 学分」按课程名去成绩表对照。
+ *  🔴 成绩表里是**往期**成绩，本学期课程通常还没出分、不在这张表里。
+ *     对照不上就留空，界面显示「—」，绝不猜「考试 / 考查」——
+ *     猜出来的分类会让人按错重点去复习，比没有更糟。
+ *     真机上若本学期课程已出现在成绩表（重修 / 提前出分），这里自动生效。 */
+function courseMeta() {
+  const map = new Map();
+  const rows = (DATA && DATA.grades && DATA.grades.courses) || [];
+  rows.forEach((c) => {
+    const key = String(c.name || '').trim();
+    if (!key) return;
+    const old = map.get(key);
+    // 同一门课出现多次（重修）时，优先取有考核方式的那条
+    if (!old || (!old.examType && c.examType)) {
+      map.set(key, {
+        examType: String(c.examType || '').trim(),
+        credit: String(c.credit || '').trim(),
+      });
+    }
+  });
+  return map;
+}
+
 function courseGroups() {
   const rows = ((DATA && DATA.courses) || []).filter(isSlotCourse);
   const map = new Map();
@@ -2408,12 +2431,18 @@ function courseGroups() {
       if (!g.slots.some((x) => x.day === sl.day && x.period === sl.period)) g.slots.push(sl);
     });
   });
+  const meta = courseMeta();
   return Array.from(map.values()).map((g) => {
     const ws = Array.from(g.weeks).sort((a, b) => a - b);
     g.weeks = ws;
     g.slots.sort((a, b) => (a.day - b.day) || (a.period - b.period));
+    const m = meta.get(g.name) || {};
+    const et = String(m.examType || '').trim();
+    g.examType = (et === '考试' || et === '考查') ? et : '';
+    g.credit = String(m.credit || '').trim();
     return g;
-  }).sort((a, b) => (a.slots[0] ? a.slots[0].day - (b.slots[0] ? b.slots[0].day : 0) : 0));
+  });
+  // 排序不在这里做：renderCourses 要按「考试 → 考查 → 未分类」分组之后再排。
 }
 
 /** 时段 → 「周二 1-2 节」。连续节次收成区间，别把 1,2,3,4 平铺。 */
@@ -2483,29 +2512,57 @@ function renderCourses() {
     $('goBind4').hidden = bound;
     return;
   }
-  const credits = (DATA.profile && DATA.profile.credits) || '';
-  const term = (curTT() && curTT().semester) || '';
+
+  /* 0.1.5（用户 2026-11-04）：
+     · 顶部只留三个数 —— 总门数 / 考试课 / 考查课（原来的「学分」「个时段」去掉）
+     · 列表先考试课、再考查课；两组内都按**每周课节数从多到少**排
+     · 右侧不再写「N 节/周」，改写这门课的学分
+     🔴 「未分类」不是第三类课程，是教务没给考核方式时的诚实兜底 ——
+        不把没数据的课硬塞进「考查课」凑数，也不显示两个假的 0。 */
+  const exam = list.filter((g) => g.examType === '考试');
+  const check = list.filter((g) => g.examType === '考查');
+  const rest = list.filter((g) => !g.examType);
+  // 不带 locale 参数：老 WebView 的 Intl 实现不一定吃第二个实参。
+  const bySlots = (a, b) =>
+    (b.slots.length - a.slots.length) || a.name.localeCompare(b.name);
+  [exam, check, rest].forEach((a) => a.sort(bySlots));
+  const known = exam.length + check.length;
+  const groups = known
+    ? [{ title: '考试课', list: exam },
+       { title: '考查课', list: check },
+       { title: '未分类', list: rest }].filter((g) => g.list.length)
+    : [{ title: '', list: list.sort(bySlots) }];
+
   $('coSummary').innerHTML =
     '<div class="cosum-row">' +
       '<div><b>' + list.length + '</b><span>门课</span></div>' +
-      (credits ? '<div><b>' + esc(credits) + '</b><span>学分</span></div>' : '') +
-      '<div><b>' + list.reduce((n, g) => n + g.slots.length, 0) + '</b><span>个时段</span></div>' +
+      '<div><b>' + (known ? exam.length : '—') + '</b><span>考试课</span></div>' +
+      '<div><b>' + (known ? check.length : '—') + '</b><span>考查课</span></div>' +
     '</div>' +
-    (term ? '<p class="cosum-term">' + esc(term) + '</p>' : '') +
-    '<p class="cosum-note">按「周几」排序。同一门课在不同教室/不同周次上，会合并成一条。</p>';
+    '<p class="cosum-note">' +
+      (known
+        ? '考试课在前、考查课在后，两组都按每周课节数从多到少排列。'
+        : '全部课程按每周课节数从多到少排列。本学期考核方式与单科学分教务暂未提供，用「—」占位。') +
+    '</p>';
 
-  $('coList').innerHTML = list.map((g) => {
-    const meta1 = [g.teachers.join(' / '), g.rooms.join(' / ')].filter(Boolean).join(' · ');
-    const meta2 = [slotText(g), weeksText(g.weeks)].filter(Boolean).join(' · ');
-    return '<div class="courseitem">' +
-      '<i class="ci-bar c' + colorSlot(g.name) + '"></i>' +
-      '<div class="ci-main">' +
-        '<div class="ci-name">' + esc(g.name) + '</div>' +
-        (meta1 ? '<div class="ci-meta">' + esc(meta1) + '</div>' : '') +
-        (meta2 ? '<div class="ci-meta dim">' + esc(meta2) + '</div>' : '') +
-      '</div>' +
-      '<div class="ci-n">' + g.slots.length + '<span>节/周</span></div>' +
-    '</div>';
+  $('coList').innerHTML = groups.map((grp) => {
+    const head = grp.title
+      ? '<div class="cogrp-h">' + grp.title + ' · ' + grp.list.length + ' 门</div>'
+      : '';
+    return head + grp.list.map((g) => {
+      const meta1 = [g.teachers.join(' / '), g.rooms.join(' / ')].filter(Boolean).join(' · ');
+      const meta2 = [slotText(g), weeksText(g.weeks)].filter(Boolean).join(' · ');
+      const cr = parseFloat(g.credit);
+      return '<div class="courseitem">' +
+        '<i class="ci-bar c' + colorSlot(g.name) + '"></i>' +
+        '<div class="ci-main">' +
+          '<div class="ci-name">' + esc(g.name) + '</div>' +
+          (meta1 ? '<div class="ci-meta">' + esc(meta1) + '</div>' : '') +
+          (meta2 ? '<div class="ci-meta dim">' + esc(meta2) + '</div>' : '') +
+        '</div>' +
+        '<div class="ci-n">' + (isFinite(cr) ? cr.toFixed(1) : '—') + '<span>学分</span></div>' +
+      '</div>';
+    }).join('');
   }).join('');
 }
 

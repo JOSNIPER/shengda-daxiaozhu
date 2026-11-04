@@ -588,9 +588,11 @@ class KingoClient:
         #   summary  [{year:"2024-2025", term:1, count, credits, gpa}]
         #   overall  {gpa, credits, count}
         #   courses  [{term:"2024-2025 1", code, name, credit, score, gpa,
-        #              category, nature}]
-        # 学校原文是「2024-2025学年第一学期」+ kch/kcm/xf/cj/jd/类别/修读性质，
+        #              category, nature, examType}]
+        # 学校原文是「2024-2025学年第一学期」+ kch/kcm/xf/cj/jd/类别/修读性质/考核方式，
         # 这里做一次翻译 —— 界面不改，只改这层。
+        # 0.1.5：examType 来自 ksfs（考核方式，值就是「考试」/「考查」），
+        # 课程页拿它给本学期课程分组。旧版解析了但没往 UI 传，白丢了一列。
         courses, summary = [], []
         seen = []
         for r in rows:
@@ -602,7 +604,7 @@ class KingoClient:
                 "code": r.get("kch", ""), "name": r.get("kcm", ""),
                 "credit": r.get("xf", ""), "score": r.get("cj", ""),
                 "gpa": r.get("jd", ""), "category": r.get("lb", ""),
-                "nature": r.get("ksxz", ""),
+                "nature": r.get("ksxz", ""), "examType": r.get("ksfs", ""),
             })
         for t in seen:
             year, tno = _split_term(t)
