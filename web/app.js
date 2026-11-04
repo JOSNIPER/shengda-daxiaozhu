@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.2';
-const APP_CODE = 62;
+const APP_VERSION = '0.1.3';
+const APP_CODE = 63;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -1285,8 +1285,7 @@ function renderWeek() {
   if (CFG.fiveDay && weekendBusy(week)) {
     $('wkRange').innerHTML += '<i class="wk-cnt"> · 周末也有课</i>';
   }
-  const daysLab = $('wkDaysLab');
-  if (daysLab) daysLab.textContent = CFG.fiveDay ? '5天' : '7天';
+  // 5/7 天开关已挪进「跳到第几周」弹层（2026-11-04），顶栏不再有这个按钮
   $('wkToday').classList.toggle('is-here', ttIsNow() && week === currentWeek());
   $('wkToday').classList.toggle('is-back', !ttIsNow());
   $('wkToday').textContent = ttIsNow() ? '今天' : '现在';
@@ -1565,6 +1564,20 @@ function renderDay() {
  *    · 今天课上完了就说「上完了」，别显示成「下一节」后面跟个负数
  */
 function renderDayNext(date) {
+  // 🔴 fail-safe：这是纯装饰性 UI，却被同步流程、周/日视图、每分钟的
+  //    定时器多处调用 —— 它抛错会把「登录成功」伪装成「登录失败」
+  //    （0.1.2 真机：函数体里引用了已改名的变量，绑定按钮下面红字
+  //    显示 week is not defined，而数据其实同步成功了）。
+  //    所以整段 try/catch：任何异常都只让提示条消失，绝不上抛。
+  try {
+    return renderDayNextInner(date);
+  } catch (e) {
+    const el = $('dayNext');
+    if (el) { el.hidden = true; }
+  }
+}
+
+function renderDayNextInner(date) {
   const el = $('dayNext');
   const isToday = ymd(date) === ymd(today0());
   // 2026-11-03 用户要求：这块**常驻占位** —— 没上完之前空白占位，
@@ -1577,7 +1590,7 @@ function renderDayNext(date) {
     return;
   }
 
-  const occ = occupancy(week);
+  const occ = occupancy(wk);
   const dayIdx = (date.getDay() + 6) % 7;
   const tt = times();
   const units = curTT().unitCount || 10;
@@ -2002,8 +2015,13 @@ $('wkTitle').addEventListener('click', () => {
   //    也是它）。翻历史学期时藏起来 —— 否则点进去看到的是另一个学期的校历，
   //    改完还会把当前学期弄乱。
   html += '</div>';
+  // 「只看工作日」也收进这个弹层（2026-11-04）：顶栏原来 6 个控件，
+  // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
   if (ttIsNow()) {
+    const fd = !!CFG.fiveDay;
     html += '<div class="sheetbtns">' +
+      '<button class="btn" id="wkFiveDay">' + (fd ? '显示 7 天（当前 5 天）' : '只看工作日（5 天）') +
+      '</button>' +
       '<button class="btn" id="wkToCalendar">看校历</button>' +
       '<button class="btn" id="wkToSemester">学期设置</button></div>';
   }
@@ -2015,6 +2033,13 @@ $('wkTitle').addEventListener('click', () => {
       switchTab('calendar');
     });
     $('wkToSemester').addEventListener('click', openSemesterSheet);
+    $('wkFiveDay').addEventListener('click', () => {
+      CFG.fiveDay = !CFG.fiveDay;
+      store.set(KEY.settings, CFG);
+      $('sheetMask').hidden = true;
+      renderSchedule();
+      toast(CFG.fiveDay ? '已切换为只看工作日' : '已显示整周 7 天');
+    });
   }
   $('sheetBody').querySelectorAll('.sh-terms .chip').forEach((b) => {
     b.addEventListener('click', () => switchTerm(b.dataset.sid));
