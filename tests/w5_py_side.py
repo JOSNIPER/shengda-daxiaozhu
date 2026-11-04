@@ -87,6 +87,10 @@ def main():
         "semester": tt["semester"],
         "unitCount": tt["unitCount"],
         "totalWeeks": tt["totalWeeks"],
+        # 🔴 0.1.10：课表页头部的总学分 / 门数也进对拍 ——
+        #    新加的契约字段不参与对拍的话，改坏了没人知道。
+        "credits": tt.get("credits", ""),
+        "courseCount": tt.get("courseCount", 0),
         "courses": tt["courses"],
         "grades": gr,
         "exams": ex,

@@ -548,6 +548,16 @@ class KingoClient:
                "totalWeeks": tw, "weekStart": 1,
                "semester": self._semester_name(ctx) or semester_name,
                "shape": "slots"}
+        # 🔴 0.1.10：课表页头部本来就带「课程门数：11 / 课程学分：23.5」，
+        #   解析层早就拿到了（head.credits），但契约输出把它扔了 ——
+        #   导致课程页每门课的学分只能显示「—」，
+        #   其实**本学期总学分是有真实数据的**。
+        #   这里补上总学分和门数；单科学分仍然没有（教务没给），继续留空。
+        head = res.get("head") or {}
+        if head.get("credits"):
+            out["credits"] = head["credits"]
+        if head.get("courseCount"):
+            out["courseCount"] = head["courseCount"]
         if res["empty"]:
             out["empty"] = True
         # 学籍缓存：课表页头部已有 学号/姓名/班级，profile() 省一次请求

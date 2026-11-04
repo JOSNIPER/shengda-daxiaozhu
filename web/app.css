@@ -96,6 +96,16 @@
   --text: #262122;
   --sub: #5c5354;
   --faint: rgba(38, 33, 34, .32);
+  /* 🔴 0.1.10 补定义：--ter 一直被 5 处 CSS 用着（.cosum-note /
+     .ci-meta.dim / .ci-n span 等），但**从来没定义过** ——
+     git 历史里也搜不到 "--ter:"。CSS 里 `color: var(--ter)` 遇到未定义变量
+     会退化成 inherit，于是这些「弱化文字」实际渲染成正文深墨，
+     跟旁边的课程名一样重，三级层次就没了（实测计算色 = rgb(38,33,34) = --text）。
+
+     这里按三档规范补上：介于 --sub 和 --faint 之间的一档，
+     用 --ink-3（官网第三档文字色，#72686a）。
+     ⚠️ 这不是新设计，是把「本来的意图」补回来 —— 别顺手调成 --sub 或 --faint。 */
+  --ter: #72686a;
 
   /* ---- 线与填充 ----
      --line 是列表行之间的 0.5px 分隔线，不是卡片描边（卡片现在不描边）。
@@ -220,6 +230,10 @@
     --text: #ebe5e2;
     --sub: #bdb3b2;
     --faint: rgba(235, 229, 226, .30);
+    /* 🔴 0.1.10：--ter 的深色版（官网 --ink-3 #978d8d）。
+       🔴 深浅两套必须同时给 —— 只补浅色那套，深色下 --ter 会用浅色模式的
+          #72686a 落在暖黑底上，明显偏亮、跟 --sub 抢。 */
+    --ter: #978d8d;
 
     --line: rgba(255, 255, 255, .10);
     --rule: rgba(255, 255, 255, .06);
@@ -1527,6 +1541,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .sheet {
   width: 100%; background: var(--card);
   border-radius: var(--r) var(--r) 0 0;
+  /* 🔴 0.1.10：这条复合圆角（两个值 + 两个 0）0.1.9 的批量脚本没匹配上，
+     底部弹层 —— 全 App 最显眼的那个弹层 —— 漏了 squircle。
+     弹层是「浮起来的一片」，连续圆角的效果在它身上最明显，漏了最可惜。 */
+  corner-shape: var(--corner-shape);
   padding: 8px 16px calc(22px + env(safe-area-inset-bottom));
   animation: rise .2s cubic-bezier(.2, .8, .3, 1);
   max-height: 76%; overflow-y: auto;
@@ -2841,8 +2859,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .rawrow { padding: 7px 0; border-bottom: .5px solid var(--line);
           font-size: 12px; line-height: 1.55; }
 .rawrow:last-child { border-bottom: 0; }
-.rawk { display: inline-block; min-width: 74px; color: var(--muted); }
-.rawv { color: var(--ink); word-break: break-all; }
+/* 🔴 0.1.10：这两个变量也从来没定义过（同样是 git 历史里搜不到）。
+   .rawk 是键名、.rawv 是值 —— 未定义时 color 会退化成 inherit，
+   两边一样重，看不出哪是键哪是值。
+   这里按「键名次级、值正文」的意图补上：
+   键名用 --sub，值用 --text。
+   这条路径是「格子格式没适配时」的兜底，正常不会走到，但留着就得对。 */
+.rawk { display: inline-block; min-width: 74px; color: var(--sub); }
+.rawv { color: var(--text); word-break: break-all; }
 
 /* ---------------- 课程页（2026-11-03 新增，取代原「考试」视图） ----------------
    结构参考成绩页：顶部一张汇总卡 + 下面一条条列表。

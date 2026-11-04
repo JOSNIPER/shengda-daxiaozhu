@@ -1727,6 +1727,12 @@
       semester: kingoSemesterName(ctx) || semesterName || '',
       shape: 'slots',
     };
+    // 🔴 0.1.10：课表页头部带「课程门数 / 课程学分」，解析层已经拿到
+    //   （head.credits），但契约输出把它扔了 —— 课程页每门课只能显示「—」，
+    //   其实本学期总学分有真实数据。这里补上；单科学分仍然没有，继续留空。
+    //   🔴 两轨必须同步改，否则 W5 对拍会报不一致。
+    if (res.head && res.head.credits) out.credits = res.head.credits;
+    if (res.head && res.head.courseCount) out.courseCount = res.head.courseCount;
     if (res.empty) out.empty = true;
     kingoKbtHead = res.head;    // 学籍复用，省一次请求
     return out;
@@ -2085,6 +2091,11 @@
       semester: tt.semester,
       unitCount: tt.unitCount,
       totalWeeks: tt.totalWeeks,
+      // 🔴 0.1.10：课表页头部的「课程门数 / 课程学分」要往上传 ——
+      //    app.js 的 applyPayload 读 res.credits，APK 这条路不传的话，
+      //    APK 的课程页看不到总学分（网页版走 bridge.py，是另一条路）。
+      credits: tt.credits || '',
+      courseCount: tt.courseCount || 0,
       courses: tt.courses,
       grades: gr,
       exams: ex,

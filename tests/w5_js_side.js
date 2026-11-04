@@ -283,6 +283,9 @@ async function main() {
     semester: sync.semester,
     unitCount: sync.unitCount,
     totalWeeks: sync.totalWeeks,
+    // 🔴 0.1.10：总学分 / 门数也要进对拍（见 w5_py_side.py 的同名注释）
+    credits: sync.credits || '',
+    courseCount: sync.courseCount || 0,
     courses: sync.courses,
     grades: sync.grades,
     exams: sync.exams,

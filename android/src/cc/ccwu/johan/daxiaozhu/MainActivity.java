@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
      *    再跟 app.js / version.json 对账。所以改版本号时这里必须跟着改，
      *    而且**不能删掉这段字符串**（正则找不到会直接判构建失败）。
      */
-    public static final String UA_TAG = " DaXiaoZhu/0.1.9";
+    public static final String UA_TAG = " DaXiaoZhu/0.1.10";
 
     private WebView web;
 

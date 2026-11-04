@@ -50,7 +50,7 @@ def check(name, cond):
 
 
 # ---- 顶层字段 ----
-for key in ('ok', 'profile', 'semester', 'unitCount', 'totalWeeks', 'courses'):
+for key in ('ok', 'profile', 'semester', 'unitCount', 'totalWeeks', 'credits', 'courseCount', 'courses'):
     check('sync.%s' % key, deep_eq(js.get(key), py.get(key), 'js.' + key)
           and js.get(key) == py.get(key))
 

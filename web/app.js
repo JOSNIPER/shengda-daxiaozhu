@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.9';
-const APP_CODE = 69;
+const APP_VERSION = '0.1.10';
+const APP_CODE = 70;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -2597,6 +2597,13 @@ function renderCourses() {
     (b.slots.length - a.slots.length) || a.name.localeCompare(b.name);
   [exam, check, rest].forEach((a) => a.sort(bySlots));
   const known = exam.length + check.length;
+  // 🔴 0.1.10：本学期总学分。教务课表页头部第一行就有（「课程学分：23.5」），
+  //   取数层已经放进契约了（DATA.credits）。
+  //   用 curTT() 而不是 DATA：翻到历史学期时 TT 是那张学期的表，
+  //   没有总学分就不显示这一格（显示别的学期的数才是错的）。
+  //   🔴 这只是**总**学分，不是单科学分 —— 列表右边那一列仍然是「—」，
+  //      不能拿总学分按门数或课节数去分摊，那是编数据。
+  const totalCredits = parseFloat((curTT() && curTT().credits) || '');
   const groups = known
     ? [{ title: '考试课', list: exam },
        { title: '考查课', list: check },
@@ -2608,11 +2615,19 @@ function renderCourses() {
       '<div><b>' + list.length + '</b><span>门课</span></div>' +
       '<div><b>' + (known ? exam.length : '—') + '</b><span>考试课</span></div>' +
       '<div><b>' + (known ? check.length : '—') + '</b><span>考查课</span></div>' +
+      // 🔴 0.1.10：加一格「本学期学分」。这个数教务课表页第一行就有
+      //    （「课程学分：23.5」），之前解析出来了却没往契约里放，
+      //    课程页于是每门课右边全是「—」。现在总学分是真的了。
+      //    单科学分仍然没有 —— 那一列继续留「—」，不拿总学分去分摊（那是编数据）。
+      (totalCredits
+        ? '<div><b>' + totalCredits.toFixed(1) + '</b><span>总学分</span></div>'
+        : '') +
     '</div>' +
     '<p class="cosum-note">' +
       (known
         ? '考试课在前、考查课在后，两组都按每周课节数从多到少排列。'
         : '全部课程按每周课节数从多到少排列。本学期考核方式与单科学分教务暂未提供，用「—」占位。') +
+      (totalCredits ? '' : ' 本学期总学分教务也没给。') +
     '</p>';
 
   $('coList').innerHTML = groups.map((grp) => {
@@ -6509,6 +6524,13 @@ function applyPayload(res) {
     unitCount: res.unitCount,
     totalWeeks: res.totalWeeks,
     courses: res.courses,
+    // 🔴 0.1.10：课表页头部的「课程门数 / 课程学分」。
+    //    这两个值教务一直有（课表页第一行就写着「课程门数：11 课程学分：23.5」），
+    //    但之前取数层解析出来了却没往契约里放，课程页因此只能显示「—」。
+    //    现在接上了：课程页顶部能显示本学期总学分。
+    //    单科学分仍然没有（教务课表页不逐门给），继续留空不猜。
+    credits: res.credits || '',
+    courseCount: res.courseCount || 0,
     grades: res.grades,
     // 考试可能整块缺失（老版本服务、或后端兜底失败）—— 存 null 而不是 {}，
     // 让 renderExams 能区分「没这块数据」和「查了但学校没排考」
@@ -7623,10 +7645,6 @@ const CAL_TERMS = [
     ],
   },
 ];
-
-const calYmd = (d) => d.getFullYear() + '-' +
-  String(d.getMonth() + 1).padStart(2, '0') + '-' +
-  String(d.getDate()).padStart(2, '0');
 
 /** 校历里哪个学期的日期条目是**收起**的（0.33.0）。
  *

@@ -463,6 +463,12 @@ class Service:
                 "unitCount": tt["unitCount"],
                 "totalWeeks": tt["totalWeeks"],
                 "courses": tt["courses"],
+                # 🔴 0.1.10：课表页头部的「课程门数 / 课程学分」。
+                #    教务一直有（课表页第一行就写着「课程学分：23.5」），
+                #    网页版和 APK 共用同一套 app.js，所以这里也要传 ——
+                #    不传的话网页版的课程页会跟 APK 显示得不一样。
+                "credits": tt.get("credits", ""),
+                "courseCount": tt.get("courseCount", 0),
                 "grades": gr,
                 "exams": ex,
                 "plan": pl,
