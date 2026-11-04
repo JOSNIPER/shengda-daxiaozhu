@@ -500,11 +500,17 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 
 .g-cell {
-  /* 没课的地方就留空 —— 不画方块也不画边框，色块直接浮在背景上。
-     以前这里是 background: var(--card) + border，结果整张表被切成 70 个
-     灰白小方块，一眼看过去全是「格子」，反而看不清哪些时段有课。 */
-  background: transparent;
+  /* 2026-11-04 UI 第一阶段：给空格子一层「纸」的底。
+     之前彻底留空，课少的周六周日和底部整片纯白，表像浮在空气里。
+     这次用**比页面底色深半档、比课程块浅很多**的一层圆角底 ——
+     原注释担心的「切成 70 个小方块」不会发生：新底色和页面底色
+     只差 3% 明度，静眼看是一整张纸，有课的地方靠色块浮起来。
+     🔴 透明度经过挑：单节格 48px 宽时这层底刚好可感知，又不抢课。 */
+  background: rgba(15, 23, 42, .035);
   border-radius: var(--r-ctl);
+}
+@media (prefers-color-scheme: dark) {
+  .g-cell { background: rgba(255, 255, 255, .045); }
 }
 
 .g-block {
@@ -1616,8 +1622,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   position: absolute; left: 50%; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 18px);
   transform: translateX(-50%);
   background: rgba(22, 24, 29, .92); color: #fff;
-  font-size: 13px; padding: 8px 16px; border-radius: var(--r-ctl);
-  max-width: 82%; text-align: center; z-index: 60;
+  /* 2026-11-04 UI 第一阶段：小一号、胶囊形、最多两行 ——
+     「绑定成功，已同步 19 条课程安排」这种话原来折成两大行黑块，
+     比课表还抢眼。Toast 的本职是一句话反馈。 */
+  font-size: 12px; line-height: 1.45; padding: 7px 14px; border-radius: 999px;
+  max-width: 72%; text-align: center; z-index: 60;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   animation: fade .16s ease;
 }
 .toast[hidden] { display: none; }
@@ -1658,26 +1668,32 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
         2. 色相是三对近亲（粉-橙-黄 / 绿-青 / 紫-靛），混白后互相分不开
         3. 课表几乎排满，彩色面积占 80% ⇒ 任何「每课一色」都会花
       真要再动，先解决撞色，别只调深浅。 */
-.c0 { background: #fecdd3; color: #9f1239; }   /* 玫红 rose-200/800     5.68 */
-.c1 { background: #fed7aa; color: #9a3412; }   /* 橙   orange-200/800   5.40 */
-.c2 { background: #fde68a; color: #92400e; }   /* 琥珀 amber-200/800    5.69 */
-.c3 { background: #a7f3d0; color: #065f46; }   /* 翠绿 emerald-200/800  5.99 */
-.c4 { background: #99f6e4; color: #115e59; }   /* 青绿 teal-200/800     6.02 */
-.c5 { background: #bae6fd; color: #075985; }   /* 天蓝 sky-200/800      5.70 */
-.c6 { background: #ddd6fe; color: #5b21b6; }   /* 紫   violet-200/800   6.47 */
-.c7 { background: #c7d2fe; color: #3730a3; }   /* 靛   indigo-200/800   6.66 */
+/* 🔴 2026-11-04 UI 第一阶段：整块降饱和 + 文字统一深灰。
+   旧版是「糖果底 + 按色相配的深字」—— 课名蓝字压蓝底、橙字压橙底，
+   一屏八个色相互相打架，这是「丑」的主因。
+   新版学 WakeUp：底色只负责把课区分开（低饱和浅彩），文字一律深灰 ——
+   读课程名永远不费眼，色相只在扫一眼时提供位置线索。
+   文字 #334155 在全部 8 个浅底上的对比度 ≥ 7.5（WCAG AAA）。 */
+.c0 { background: #fbeef1; color: #334155; }   /* 玫红底 */
+.c1 { background: #fbf3e7; color: #334155; }   /* 橙底   */
+.c2 { background: #fbf8e8; color: #334155; }   /* 琥珀底 */
+.c3 { background: #edf7ef; color: #334155; }   /* 翠绿底 */
+.c4 { background: #e9f6f4; color: #334155; }   /* 青绿底 */
+.c5 { background: #ebf3fc; color: #334155; }   /* 天蓝底 */
+.c6 { background: #f2effc; color: #334155; }   /* 紫底   */
+.c7 { background: #edf0fc; color: #334155; }   /* 靛底   */
 
 
 @media (prefers-color-scheme: dark) {
   /* 深色反过来：暗底 + 同色相浅字（对比度 5.2~6.0） */
-  .c0 { background: #50322b; color: #e1a798; }
-  .c1 { background: #503e2b; color: #e1bf98; }
-  .c2 { background: #2b503a; color: #98e1b7; }
-  .c3 { background: #2b504d; color: #98e1dc; }
-  .c4 { background: #2b3c50; color: #98bae1; }
-  .c5 { background: #362b50; color: #ae98e1; }
-  .c6 { background: #502b36; color: #e198ae; }
-  .c7 { background: #2b3050; color: #98a2e1; }
+  .c0 { background: #43333c; color: #dbe2ec; }
+  .c1 { background: #433a33; color: #dbe2ec; }
+  .c2 { background: #3d4333; color: #dbe2ec; }
+  .c3 { background: #33433a; color: #dbe2ec; }
+  .c4 { background: #334043; color: #dbe2ec; }
+  .c5 { background: #333c43; color: #dbe2ec; }
+  .c6 { background: #3c3343; color: #dbe2ec; }
+  .c7 { background: #333843; color: #dbe2ec; }
   /* 深色下白字阴影反而糊，去掉 */
   .g-block .bn { text-shadow: none; }
   /* 深色不能用投影（糊成一团），也不能用浅色那层 .48 的白光（会发灰）。
@@ -2675,17 +2691,17 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   content: ""; position: absolute; z-index: -1;
   left: -24px; right: -24px; top: -80px; bottom: -30px;
   pointer-events: none;
+  /* 🔴 2026-11-04 UI 第一阶段：三团彩光（蓝紫粉）全部撤掉。
+      页面里本来就有 8 色课程块，顶上再打彩光等于七个色系同屏 ——
+      「丑」的根源是色系打架，不是缺氛围。只留一团极淡的主题色，
+      让页面上亮下暗的方向感还在。 */
   background:
-    radial-gradient(64% 160% at 0% -16%,  rgba(86, 158, 255, .80), transparent 72%),
-    radial-gradient(58% 140% at 94% -26%, rgba(160, 134, 255, .64), transparent 72%),
-    radial-gradient(48% 120% at 54% -34%, rgba(255, 150, 172, .40), transparent 74%);
+    radial-gradient(70% 150% at 24% -22%, rgba(47, 107, 238, .16), transparent 74%);
 }
 @media (prefers-color-scheme: dark) {
   .pagehead::before {
     background:
-      radial-gradient(58% 130% at 8% -10%,  rgba(58, 110, 220, .55), transparent 68%),
-      radial-gradient(52% 120% at 88% -20%, rgba(112, 82, 220, .42), transparent 68%),
-      radial-gradient(44% 110% at 55% -30%, rgba(180, 80, 140, .18), transparent 70%);
+      radial-gradient(70% 150% at 24% -22%, rgba(90, 140, 255, .14), transparent 74%);
   }
 }
 
@@ -2699,7 +2715,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .g-day.is-today .dnum {
   padding: 2px 7px; border-radius: 8px;
   background: var(--accent-grad); color: #fff;
-  box-shadow: var(--accent-glow);
+  /* 2026-11-04：去掉 8px 蓝色发光。页面收敛之后它成了全页最亮的一块，
+     发光让它比课程块还抢眼 —— 「今天」靠位置就够，不用再打光。 */
 }
 
 /* 列表行的标题给到 500。400 的 17px 中文字在浅底上会「发飘」，
