@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.10';
-const APP_CODE = 70;
+const APP_VERSION = '0.1.11';
+const APP_CODE = 71;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -1140,22 +1140,46 @@ $('ntList').addEventListener('click', (e) => {
 
 // ------------------------------------------------------------------ 课表
 
+/** 「本次会话正在看第几周」—— **不落盘**。
+ *
+ *  🔴 2026-11-04 用户反馈：「关闭时停在第 11 周，但当时是第 9 周，
+ *     第二次打开还是第 11 周，导致我看错了课表。」
+ *
+ *  根因不是算错，是**周次被持久化了**：
+ *  ① `CFG.week` 存在本机（`zt.settings`），关掉 App 也在；
+ *  ② `syncToday()` 只在**跨天**时归位（判据是 `CFG.seenDay`）；
+ *     同一天内关掉再打开，`seenDay` 还是今天 → **不归位** → 停在旧周次。
+ *
+ *  🔴 为什么「周次」不属于「设置」：
+ *     周次是「相对于今天」的概念。「第 9 周」这个说法只在第 9 周那天成立。
+ *     存到本机跨会话保留，等于让「昨天的第 9 周」今天继续叫「第 9 周」——
+ *     而今天可能已经是第 10 周。**看错周次 = 看错课 = 跑错教室**，
+ *     这是这个 App 最不能出的错。
+ *     真正该跨会话保留的是**偏好**（只看工作日、配色、5/7 天、课表总周数），
+ *     它们是 CFG 里的其他字段，一律不受影响。
+ *
+ *  所以周次改成**会话级**：
+ *  · 每次打开 App → 从 `currentWeek()`（今天所在周）开始；
+ *  · 同一次会话内左右滑翻周 → 照常保留（用户刚翻到的，别抢他的选择）；
+ *  · 切历史学期 → 照常（第 1 周）；「回到今天」按钮 → 照常。
+ */
+let sessionWeek = 0;
+
 /** 换了日历日，就把「看到第几周 / 哪一天」拉回今天。
  *
- *  🔴 `CFG.week` 和 `CFG.cursor` 都存在本机（`zt.settings`），可它们只在
- *     **当天**有意义。2026-10-23 用户报的「周切日显示的不是当天」就是这条：
- *     他昨天看过日视图，cursor 停在 10-22，今天切过去还画 10-22。
- *     更危险的是周视图那一半 —— 上周日看的是第 7 周，周一已经第 8 周，
- *     开 App 还停在第 7 周，照着上周的课表走**会跑错教室**。
+ *  🔴 `CFG.cursor` 存在本机，可它只在**当天**有意义。2026-10-23 用户报的
+ *     「周切日显示的不是当天」就是这条：昨天看过日视图，cursor 停在 10-22，
+ *     今天切过去还画 10-22。
  *
- *  规则：同一天内照旧记住（「我刚翻到第 12 周」不能被冲掉），
- *        跨了一天就归位。判断依据是 `seenDay` 而不是「有没有 cursor」。
+ *  🔴 0.1.11：周次已经改成会话级（sessionWeek），但 `CFG.week` 仍要留着
+ *     当「本次会话当前周」的载体（十几处地方在读它），所以这里两个一起归位。
  */
 function syncToday() {
   const t = ymd(today0());
   if (CFG.seenDay === t) return;
   CFG.seenDay = t;
   CFG.week = 0;          // 0 = 「没选过」，renderWeek 会补成 currentWeek()
+  sessionWeek = 0;       // 会话级周次也归位（见上面的说明）
   CFG.cursor = '';
   store.set(KEY.settings, CFG);
 }
@@ -1168,7 +1192,8 @@ function syncToday() {
  *    · 不在 —— 取那一周里**今天这个星期几**；看的就是当周时，正好是今天
  */
 function dayAnchor() {
-  const w = Math.min(Math.max(CFG.week || currentWeek(), 1), totalWeeks());
+  // 🔴 0.1.11：读会话级周次，不读 CFG.week（那是本机存的旧值）。
+  const w = Math.min(Math.max(sessionWeek || CFG.week || currentWeek(), 1), totalWeeks());
   const wd = (today0().getDay() + 6) % 7;
   if (CFG.cursor) {
     const cur = parseYmd(CFG.cursor);
@@ -1269,11 +1294,22 @@ function labelWkToday() {
  */
 function renderWeek() {
   const total = totalWeeks();
-  if (!CFG.week) CFG.week = currentWeek();
-  const week = Math.min(Math.max(CFG.week, 1), total);
+  // 🔴 0.1.11：周次改成**会话级**（sessionWeek）。
+  //   为什么不能直接读 CFG.week：它存在本机，同一天内关掉再打开还是旧周次
+  //   —— 用户 2026-11-04 报的「停在第 11 周但当时是第 9 周，看错了课表」。
+  //
+  //   🔴 注意这里**不能**写成 `sessionWeek = CFG.week || currentWeek()`：
+  //   那等于又读回本机存的那个旧周次，问题原封不动。
+  //   会话变量的初值必须是 currentWeek()（今天所在周）。
+  //   CFG.week 仍作为「本次会话当前周」的载体保留（十几处在读它），
+  //   但它的值由 sessionWeek 决定，不再由本机存储决定。
+  if (!sessionWeek) sessionWeek = currentWeek();
+  CFG.week = sessionWeek;
+  const week = Math.min(Math.max(sessionWeek, 1), total);
   // 把夹紧后的值写回去。不然用户在「学期设置」里把总周数从 24 改成 10 时，
   // CFG.week 还停在 18，界面显示第 10 周，但下次 `‹ ›` 是从 18 开始加减的。
   CFG.week = week;
+  sessionWeek = week;
 
   const ws = addDays(startDate(), (week - 1) * 7);
   const we = addDays(ws, 6);
@@ -1945,6 +1981,7 @@ async function switchTerm(sid) {
     // 回到当前学期：TT 一置空，tt() 就退回 DATA 那份，不用再打学校服务器。
     TT = null;
     CFG.week = currentWeek();
+    sessionWeek = CFG.week;          // 0.1.11：会话级周次一起归位
     CFG.cursor = CFG.view === 'day' ? ymd(dayAnchor()) : '';
     store.set(KEY.settings, CFG);
     $('sheetMask').hidden = true;
@@ -1984,6 +2021,7 @@ async function switchTerm(sid) {
   // 换了一张表，周次必须从第 1 周重新开始 —— 上一张表停在第 15 周，
   // 新表如果只有 18 周，会直接落在一半的位置，看着像丢了前半学期。
   CFG.week = 1;
+  sessionWeek = 1;                   // 0.1.11：换表了，会话周次也重置
   CFG.cursor = '';
   store.set(KEY.settings, CFG);
   $('sheetMask').hidden = true;
@@ -2000,7 +2038,7 @@ function openWeekSheet() {
   const total = totalWeeks();
   const cur = CFG.view === 'day'
     ? (CFG.cursor ? weekOf(parseYmd(CFG.cursor)) : currentWeek())
-    : (CFG.week || currentWeek());
+    : (sessionWeek || CFG.week || currentWeek());   // 0.1.11：会话级周次
   // 副标题写「大二上 · 共 24 周」。算不出年级才退回教务系统的学期原文。
   const sl = gradeLabel() || semesterName();
   let html = '';
@@ -2106,6 +2144,7 @@ function openWeekSheet() {
         CFG.cursor = ymd(addDays(startDate(), (w - 1) * 7 + ((CFG.cursor ? (parseYmd(CFG.cursor).getDay() + 6) % 7 : 0))));
       } else {
         CFG.week = w;
+        sessionWeek = w;             // 0.1.11：会话级周次同步
       }
       store.set(KEY.settings, CFG);
       renderSchedule();
@@ -2155,7 +2194,7 @@ let sliding = false;
 function canStep(dir) {
   if (!DATA) return false;
   if (CFG.view === 'day') return true;        // 日视图不设边界，方便看空白天
-  const w = CFG.week || currentWeek();
+  const w = sessionWeek || CFG.week || currentWeek();   // 0.1.11：会话级周次
   return dir < 0 ? w > 1 : w < totalWeeks();
 }
 
@@ -2288,6 +2327,7 @@ function step(n) {
     CFG.cursor = ymd(addDays(d, n));
   } else {
     CFG.week = Math.min(Math.max(1, (CFG.week || currentWeek()) + n), totalWeeks());
+    sessionWeek = CFG.week;          // 0.1.11：会话级周次同步（翻周本次会话内有效）
   }
   store.set(KEY.settings, CFG);
   renderSchedule();
@@ -2301,7 +2341,7 @@ $('wkToday').addEventListener('click', () => {
     return;
   }
   if (CFG.view === 'day') CFG.cursor = ymd(today0());
-  else CFG.week = currentWeek();
+  else { CFG.week = currentWeek(); sessionWeek = CFG.week; }
   store.set(KEY.settings, CFG);
   renderSchedule();
   $('schScroll').scrollTop = 0;
@@ -4655,6 +4695,7 @@ function openSemesterSheet() {
     // 看不到刚改的结果（还会以为没保存成功）。
     TT = null;
     CFG.week = currentWeek();          // 日期变了，当前周要跟着重算
+    sessionWeek = CFG.week;             // 0.1.11：会话级周次一起归位
     store.set(KEY.settings, CFG);
     $('sheetMask').hidden = true;
     renderSchedule(); renderMe();
@@ -4669,6 +4710,7 @@ function openSemesterSheet() {
     CFG.weeks = 0;
     TT = null;                          // 同上：回到当前学期看结果
     CFG.week = currentWeek();
+    sessionWeek = CFG.week;             // 0.1.11：会话级周次一起归位
     store.set(KEY.settings, CFG);
     $('sheetMask').hidden = true;
     renderSchedule(); renderMe();
@@ -6553,6 +6595,7 @@ function applyPayload(res) {
   if (migrateStartDate(DATA.semester)) { /* 旧默认值已纠正 */ }
   if (!CFG.startDate) CFG.startDate = ymd(defaultStart(DATA.semester));
   CFG.week = currentWeek();
+  sessionWeek = CFG.week;              // 0.1.11：同步完就落到今天所在周
   store.set(KEY.settings, CFG);
   renderSchedule(); renderGrades(); renderExams(); renderMe(); renderCredit();
   // 该办的事在后台查（十几秒），不挡住首屏。12 小时内不重复查。
@@ -8619,6 +8662,21 @@ async function boot() {
   if (!TOKEN && !NATIVE) {
     toast('没有访问凭证：请用电脑上启动窗口给的地址打开', 5000);
   }
+  // 🔴 0.1.11：清掉本机存的周次，让会话从「今天所在周」开始。
+  //
+  //   用户 2026-11-04 报的：关闭时停在第 11 周，但当时是第 9 周，
+  //   第二次打开还是第 11 周，看错了课表。
+  //
+  //   根因：周次是「相对于今天」的概念，却被当成「设置」存进了本机。
+  //   `syncToday()` 只在跨天时归位，**同一天内关掉再打开不归位**。
+  //
+  //   这里在启动时无条件清一次 —— 「打开 App = 从今天所在周开始」，
+  //   不管本机存的是什么。同一次会话内左右滑翻周仍然保留（sessionWeek）。
+  //
+  //   ⚠️ 只清 `week`，不动 `cursor`（日视图的日期）、`seenDay`、
+  //      `fiveDay`、`palette` 这些 —— 那些是偏好或另有判据，跨会话保留是对的。
+  CFG.week = 0;                 // 0 = 「没选过」，renderWeek 会补成 currentWeek()
+  sessionWeek = 0;              // 会话级周次：让 renderWeek 用今天所在周
   // 老版本存的默认开学日期比真实开学早一周（见 migrateStartDate），先修再画
   if (DATA && migrateStartDate(DATA.semester)) store.set(KEY.settings, CFG);
   applyEnvTexts();
