@@ -575,24 +575,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 只有一节的格子（56px）放不下「课名 2 行 + 教室 + 老师」，
    老师让位 —— 完整名单在点开的详情里。 */
 .g-block.one .bt { display: none; }
-/* 单双周：右下角一个小角标，不占文字位置 */
-.g-block[data-par]::after {
-  position: absolute; right: 0; bottom: 0;
-  font-size: 8px; line-height: 1;
-  padding: 2px 2px 1px 3px;
-  border-top-left-radius: 5px;
-  background: rgba(0, 0, 0, .09);
-  color: inherit;
-}
-.g-block[data-par="odd"]::after { content: "单"; }
-.g-block[data-par="even"]::after { content: "双"; }
-/* 角标压在右下角，教师名要让出它的位置。
-   ⚠️ 这个数字**不再承担「刚好放下三个字」的责任** —— 那是 fitRoomLines 的活
-      （量出来压字号）。这里只负责「别被角标压住」。
-      2026-10-30 用户截图：周三那门带「双」角标的大学英语，老师显示成「李…」。
-      原注释写「留 12px 正好放下三个字」，是按 9px 算的，而 .bt 实际是 10px ——
-      差 1px 就截了。写死字号去凑宽度，换台手机就又不对。 */
-.g-block[data-par] .bt { padding-right: 12px; }
+/* 🔴 0.1.7：课程块右下角的「单/双」角标按用户要求删除（连同上面那段
+   `.bt { padding-right: 12px }` 让位规则一起删，老师名因此多回 12px）。
+   只删**角标这层视觉**：周次仍是教务给的逐周精确列表，隔周上课照常只在
+   对应周出现；课程详情弹层里的「1-16 周（双周）」文字说明也保留。
+   以前留角标是为了扫一眼知道隔周课，实测在 44px 窄格里它反而挤掉了
+   教师名（2026-10-30 用户截图），现在判定权交回周次本身，更诚实。 */
 
 /* 压到 8px 还放不下（四个字以上的名字）：折到第二行，别截成「李…」。
    限高两行 —— 再多就会把格子撑破，那比截断更糟。
@@ -1657,22 +1645,35 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .c6 { background: #f2effc; color: #334155; }   /* 紫底   */
 .c7 { background: #edf0fc; color: #334155; }   /* 靛底   */
 
-/* 🔴 0.1.6 预设配色 B「鲜亮糖果」：样品那种整块高饱和 + 白字。
-   默认仍是上面那套 A（清爽浅彩），只在 #app 上挂 class 覆盖。
-   · 用 `#app.palette-vivid .cN`（ID + 2 class）而不是裸 .cN：
-     特异性高于深色 media 里的 .cN，两套主题下都能稳定覆盖。
-   · colorSlot(name) 按课程名 hash 到 0..7，一行没改 ——
-     换配色不会让同一门课换颜色；课表、日视图、课程页色带同步生效。
-   · 亮度比样品压了一档：样品原色在橙/黄上白字对比度只有 2~3，
-     这里全部 ≥ 4.5，课名仍然读得清。 */
-#app.palette-vivid .c0 { background: #c94560; color: #fff; }
-#app.palette-vivid .c1 { background: #b06a17; color: #fff; }
-#app.palette-vivid .c2 { background: #9c7a10; color: #fff; }
-#app.palette-vivid .c3 { background: #1f7a48; color: #fff; }
-#app.palette-vivid .c4 { background: #137a70; color: #fff; }
-#app.palette-vivid .c5 { background: #2665b0; color: #fff; }
-#app.palette-vivid .c6 { background: #5f47ab; color: #fff; }
-#app.palette-vivid .c7 { background: #3850a6; color: #fff; }
+/* 🔴 0.1.7 预设配色 B「柔雾」：替换掉 0.1.6 那套「鲜亮糖果」。
+   用户反馈：鲜亮太艳、清爽又太淡，要一个中间档。
+
+   做法不是「把鲜亮调淡一点」，而是换一套色彩逻辑：
+   · 饱和度 S≈34%（清爽 ≈10%，鲜亮 ≈65%），亮度按 WCAG 相对亮度
+     对齐到 0.72 —— 8 个色相不会有的发飘、有的发闷（绿色尤其容易跳）。
+   · 文字统一深墨 #2f3a45，**不用白字**。白字是高饱和配色才需要的，
+     它一出现就会把整屏推向「糖果感」；深字在 8 个底色上对比度 8.5（AAA）。
+   · 🔴 去掉 .g-block 顶部那层 48% 白光：它原本是「小糖块」质感，
+     但会把任何中等饱和的底色洗回接近白 —— 这正是「浅色看着太淡」的
+     技术原因。默认清爽配色**保留**白光（用户 2026-10-28 要求课表保持
+     原样），只有切到本预设时才关掉。
+   · 用 `#app.palette-vivid .cN`（ID + 2 class）：特异性高于深色 media
+     里的 .cN，两套主题下都能稳定覆盖。
+   · colorSlot(name) 按课程名 hash 到 0..7，一行没改 —— 换配色不会让
+     同一门课换颜色；课表、日视图、课程页色带同步生效。
+
+   ⚠️ class / CFG 值仍叫 `palette-vivid`、`vivid`，是 0.1.6 的历史内部名。
+      故意不改：老用户本机已经存了这个值，改名会让他们的选择悄悄回退。
+      界面上显示的文案已改成「柔和」。 */
+#app.palette-vivid .c0 { background: #ecd8db; color: #2f3a45; }
+#app.palette-vivid .c1 { background: #e8dad0; color: #2f3a45; }
+#app.palette-vivid .c2 { background: #e3ddc6; color: #2f3a45; }
+#app.palette-vivid .c3 { background: #c7e3d5; color: #2f3a45; }
+#app.palette-vivid .c4 { background: #c7e2e3; color: #2f3a45; }
+#app.palette-vivid .c5 { background: #d4deea; color: #2f3a45; }
+#app.palette-vivid .c6 { background: #e2d9ec; color: #2f3a45; }
+#app.palette-vivid .c7 { background: #ebd7e7; color: #2f3a45; }
+#app.palette-vivid .g-block { background-image: none; }
 #app.palette-vivid .g-block .bn,
 #app.palette-vivid .g-block .br,
 #app.palette-vivid .g-block .bt { text-shadow: none; }
@@ -1688,22 +1689,22 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   .c5 { background: #333c43; color: #dbe2ec; }
   .c6 { background: #3c3343; color: #dbe2ec; }
   .c7 { background: #333843; color: #dbe2ec; }
-  /* 0.1.6：鲜亮配色在深色下压暗一档，避免一屏亮块刺眼；仍是白字。
-     🔴 深浅两套必须同时给，否则深色用户切到「鲜亮」会看到浅色那套过曝的色。 */
-  #app.palette-vivid .c0 { background: #a83650; color: #fff; }
-  #app.palette-vivid .c1 { background: #8f5512; color: #fff; }
-  #app.palette-vivid .c2 { background: #7d620d; color: #fff; }
-  #app.palette-vivid .c3 { background: #186139; color: #fff; }
-  #app.palette-vivid .c4 { background: #0f625a; color: #fff; }
-  #app.palette-vivid .c5 { background: #1e5090; color: #fff; }
-  #app.palette-vivid .c6 { background: #4c3889; color: #fff; }
-  #app.palette-vivid .c7 { background: #2d4085; color: #fff; }
-  /* 深色给 .g-block 叠的那层白光会把鲜亮块染灰，这里去掉，只留一道上沿高光 */
+  /* 0.1.7「柔雾」深色版：同色相压到相对亮度 0.105，浅字 #e6ebf3，
+     8 色对比度 5.6~5.7（AA+）。深色下也要**成对**给，否则切过去会
+     看到浅色那套在暗背景上过曝。 */
+  #app.palette-vivid .c0 { background: #814c55; color: #e6ebf3; }
+  #app.palette-vivid .c1 { background: #715642; color: #e6ebf3; }
+  #app.palette-vivid .c2 { background: #635b3a; color: #e6ebf3; }
+  #app.palette-vivid .c3 { background: #3a644f; color: #e6ebf3; }
+  #app.palette-vivid .c4 { background: #3b6264; color: #e6ebf3; }
+  #app.palette-vivid .c5 { background: #465d77; color: #e6ebf3; }
+  #app.palette-vivid .c6 { background: #6a5088; color: #e6ebf3; }
+  #app.palette-vivid .c7 { background: #7e4a73; color: #e6ebf3; }
+  /* 深色那层 7% 白光会把柔雾块染灰，去掉，只留一道上沿高光 */
   #app.palette-vivid .g-block {
     background-image: none;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
   }
-  /* 深色下白字阴影反而糊，去掉 */
   .g-block .bn { text-shadow: none; }
   /* 深色不能用投影（糊成一团），也不能用浅色那层 .48 的白光（会发灰）。
      留一道 8% 的上沿高光，色块才不是一块死色。 */
@@ -1718,7 +1719,6 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
     box-shadow: inset 0 0 0 2px var(--accent),
                 inset 0 1px 0 rgba(255, 255, 255, .07);
   }
-  .g-block[data-par]::after { background: rgba(255, 255, 255, .12); }
 }
 
 /* 同一格有多门课时，名字之间要有分隔，否则看起来像一门课的超长名字 */

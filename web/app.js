@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.6';
-const APP_CODE = 66;
+const APP_VERSION = '0.1.7';
+const APP_CODE = 67;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -164,7 +164,10 @@ let prefetchDone = 0;
 let prefetchTok = 0;
 let CFG = Object.assign(
   { startDate: '', week: 0, view: 'week', cursor: '', times: null, hidden: [],
-    // 0.1.6 课程块配色：'clean' 清爽浅彩（默认）/ 'vivid' 鲜亮糖果
+    // 课程块配色：'clean' 清爽浅彩（默认）/ 'vivid' 柔雾。
+    // ⚠️ 'vivid' 是 0.1.6 遗留的内部值名，0.1.7 已把那套高饱和白字换成
+    //    柔雾中间档，但**故意不改值**：老用户本机存着 'vivid'，改名会
+    //    让他们的选择悄悄回退到默认。界面文案已是「柔和」。
     palette: 'clean',
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
@@ -560,24 +563,13 @@ function roomFull(room) {
     .join(' · ');
 }
 
-/** 单/双周判定。
- *
- *  教务系统给的是「逐周精确列表」，所以 [1,3,5,7] 就是隔周上课。
- *  判据：至少 2 周、相邻差全是 2。差不是 2 就是连续周或者有跳跃，
- *  那种情况宁可**不标**也不猜（标错了比不标更坑）。
- *  返回 'odd' / 'even' / ''。
- */
-function parityOf(weeks) {
-  if (!weeks || weeks.length < 2) return '';
-  // 🔴 判据是「所有周次奇偶性一致」，不是「相邻差恒为 2」。
-  //    大学英语I（三）周三实测周次 [2,4,6,8,10,12,16,18]——第 14 周停课，
-  //    12→16 差 4，用「相邻差 == 2」就判不出双周，角标直接丢掉。
-  //    （2026-10-18 跟用户 WakeUp 截图逐格对比时发现。）
-  const odd = weeks.filter((w) => w % 2 === 1).length;
-  if (odd === 0) return 'even';
-  if (odd === weeks.length) return 'odd';
-  return '';
-}
+/* 🔴 0.1.7：原 `parityOf(weeks)`（单/双周判定）随课程块右下角角标一起删除。
+   它唯一的用途就是给那个 ::after 写 `data-par`，角标没了函数就是死代码。
+   ⚠️ 删的只是**角标**，不是单双周信息本身：
+      · 课表仍按教务给的逐周精确列表画，隔周课只在对应周出现（occupancy）
+      · 课程详情弹层里「1-16 周（双周）」那段文字说明照常保留（weekText）
+   历史教训留在 CHANGELOG：判据曾用「相邻差恒为 2」，实测 [2,4,...,12,16,18]
+   （第 14 周停课）会漏判，后来改成「所有周次奇偶性一致」。 */
 
 /** 某周某天的课：day -> period -> [course] */
 function occupancy(week) {
@@ -1340,13 +1332,14 @@ function renderWeek() {
  *  管两类元素，都是「裁一半等于没写」的东西：
  *    · `.br2` —— 双教室号 `02B506`。9.5px 在电脑上量得下，在用户手机上
  *      末尾那个 6 被裁掉一半（2026-10-19 截图）。
- *    · `.bt`  —— 老师名字。带单双周角标的块还要让出右下角 12px，
- *      于是「李怡琦」显示成「李…」（2026-10-30 截图）。
+ *    · `.bt`  —— 老师名字。以前右下角有单双周角标，还要让出 12px，
+ *      于是「李怡琦」显示成「李…」（2026-10-30 截图）。0.1.7 角标删了，
+ *      这 12px 已经还给文字，但格子依旧只有 44px，量宽这一步不能省。
  *
  *  🔴 为什么不靠 CSS 定死字号：Android WebView 的 Roboto 比桌面 Chromium 宽。
  *     只有**量出来**才知道放不放得下。判据用 scrollWidth > clientWidth ——
  *     元素是 nowrap + overflow:hidden，放不下时 scrollWidth 会大于可视宽度。
- *     `clientWidth` 不含 padding，所以 `.bt` 让给角标的那 12px 自动算在内。
+ *     `clientWidth` 不含 padding，所以任何 padding 都会自动算在内。
  */
 function fitRoomLines(root) {
   const els = root.querySelectorAll('.br2, .bt');
@@ -1534,8 +1527,8 @@ function buildWeekGrid(week) {
         if (tname) foot += '<div class="bt">' + esc(tname) + '</div>';
       }
       blk.innerHTML = names + foot;
-      const par = parityOf(main.weeks);
-      if (par) blk.dataset.par = par;         // 右下角单/双周角标，纯 CSS 画
+      // 0.1.7：不再写 data-par（右下角单/双周角标已按用户要求删除）。
+      // 不写之后 .bt 也不用再为它让出 12px，教师名能多显示一两个字。
       blk.addEventListener('click', () => openCourseSheet(here, d, startP, span, week));
       frag.appendChild(blk);
       p = q;
@@ -2052,13 +2045,13 @@ function openWeekSheet() {
     '<button class="btn" data-step="-1">‹ ' + stepLab[0] + '</button>' +
     '<button class="btn" data-step="1">' + stepLab[1] + ' ›</button>' +
     '</div>';
-  // 0.1.6 课程块配色：对所有学期都有效（不像校历只对当前学期），
-  // 所以放在 ttIsNow() 判断外面。
+  // 课程块配色：对所有学期都有效（不像校历只对当前学期），
+  // 所以放在 ttIsNow() 判断外面。0.1.7：第二档从「鲜亮」换成「柔和」。
   const vivid = CFG.palette === 'vivid';
   html += '<div class="palrow"><span class="pallab">课程块配色</span>' +
     '<div class="palopts">' +
       '<button class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">清爽</button>' +
-      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">鲜亮</button>' +
+      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">柔和</button>' +
     '</div></div>';
   // 「只看工作日」也收进这个弹层（2026-11-04）：顶栏原来 6 个控件，
   // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
@@ -2094,7 +2087,7 @@ function openWeekSheet() {
       store.set(KEY.settings, CFG);
       applyPalette();
       $('sheetMask').hidden = true;
-      toast(CFG.palette === 'vivid' ? '已切换为鲜亮配色' : '已切换为清爽配色');
+      toast(CFG.palette === 'vivid' ? '已切换为柔和配色' : '已切换为清爽配色');
     });
   });
   $('sheetBody').querySelectorAll('.sh-terms .chip').forEach((b) => {
