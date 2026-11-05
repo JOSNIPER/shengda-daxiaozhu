@@ -14,5 +14,5 @@
     "修了一个会看错课表的问题：之前关掉时停在第11周、当时其实是第9周，再打开还是第11周",
     "登录、取数、翻周手势、顶栏图标、底部四个 tab 一律没动"
   ],
-  "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；APK 尚未发布到 Releases，这三个地址是预留位置。自更新入口在 app.js UPD_SRC 处保持禁用。"
+  "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.11 的 APK 已发布到 Releases，apk/apk_cn 指向同一份包。自更新入口在 app.js UPD_SRC 处保持禁用。"
 }

@@ -11,7 +11,8 @@
 | 网页版 | 电脑跑 `bridge.py`，手机浏览器打开同一 Wi-Fi 下的地址 | 电脑上的 Python 服务 |
 | APK | 装到手机上直接打开，不需要电脑 | App 原生 HTTP 层 |
 
-> 现阶段 APK 尚未公开发布，也没在校内真机上完整验证；想用请按下面的步骤自行构建。
+> 安装包在 [Releases](https://github.com/JOSNIPER/shengda-daxiaozhu/releases/latest) 上，也可以按下面的步骤自行构建。
+> 这一版仍是 debug 构建，尚未在校内真机上完整验证。
 
 ---
 
@@ -113,7 +114,7 @@ node tests/parse_check.js          # 课表解析
 - 智慧门户、一卡通、办事应用，以及 APK 侧的校园公告**未适配**，接口固定返回「未适配本校系统」，并且不会把账号密码发往任何第三方。
 - 直饮水整块删除（升达不用该平台）。
 - 仓库里的 `eams.py` / `portal.py` / `notice.py` / `chaoxing.py` 是上游时期留下的模块，其中的端点指向另一所学校，**不代表升达已接入**。
-- 自更新入口当前禁用，`version.json` 里的下载地址是预留位置，APK 尚未发布到 Releases。
+- 自更新入口仍保持禁用；0.1.11 的安装包已发布到 [Releases](https://github.com/JOSNIPER/shengda-daxiaozhu/releases/tag/v0.1.11)，`version.json` 里的下载地址已生效。
 
 ---
 

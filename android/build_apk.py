@@ -70,8 +70,8 @@ JAVAC = JDK / "bin" / "javac.exe"
 KEYTOOL = JDK / "bin" / "keytool.exe"
 
 # APK 与发布页的地址前缀 —— 只在这里写一次，version.json 和发布页都从这儿派生。
-# ⚠️ 自更新入口在 app.js 里已注释禁用，APK 也尚未发布到 Releases；
-#    下面这几个地址是预留位置，等真正发版时再接上。
+# ⚠️ 自更新入口在 app.js 里仍保持禁用；0.1.11 已发布到 Releases，
+#    apk / apk_cn 暂时指向同一份包，等国内线路接好再给 apk_cn 换地址。
 GITHUB_USER = os.environ.get("DZX_GH_USER", "JOSNIPER")
 REPO = "shengda-daxiaozhu"
 UPD_PAGE_BASE = "https://JOSNIPER.github.io/" + REPO   # GitHub Pages（待启用）
@@ -237,7 +237,7 @@ def write_manifest(apk: Path):
     info["date"] = datetime.date.today().isoformat()
     # GitHub Releases：tag 用 v<版本号>，文件名与 dist/ 里的产物一致。
     # 两条线路暂时指向同一个地址 —— 上游的国内 CNB 线路尚未接入本项目。
-    # ⚠️ 这条地址要求该版本已经发到 Releases；APK 未发布时它只是预留值。
+    # ⚠️ 这条地址要求该版本已经发到 Releases；出新版本时先上传 APK 再改清单。
     _apk_url = (RELEASE_BASE + "/v" + VERSION_NAME
                 + "/daxiaozhu-" + VERSION_NAME + ".apk")
     info["apk"] = _apk_url

@@ -96,7 +96,7 @@
     "fid": null
   },
   "update": {
-    "_comment": "自更新在 app.js UPD_SRC 处保持禁用；APK 尚未发布，以下地址为预留位置。",
+    "_comment": "自更新在 app.js UPD_SRC 处保持禁用；0.1.11 已发布到 Releases，以下地址为该版本的实际位置。",
     "page_base": "https://JOSNIPER.github.io/shengda-daxiaozhu",
     "github_user": "JOSNIPER",
     "repo": "shengda-daxiaozhu",

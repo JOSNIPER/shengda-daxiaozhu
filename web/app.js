@@ -6907,7 +6907,8 @@ window.appBack = function () {
  *    表现成「永远显示已是最新版本」—— 又是一个把错误说成事实的坑。
  */
 /* 🔴 达小助改造（W1）：自更新源暂时禁用。
- * APK 尚未发布到 Releases，正式发版时把下面两行取消注释即可：
+ * 0.1.11 的 APK 已发布到 Releases，但自更新入口仍保持禁用；
+ * 需要启用时把下面两行取消注释即可：
  *   ['https://JOSNIPER.github.io/shengda-daxiaozhu/version.json',
  *    'https://raw.githubusercontent.com/JOSNIPER/shengda-daxiaozhu/main/version.json']
  * 在恢复之前保持空数组：fetchManifest() 拿到空列表会直接返回失败，
