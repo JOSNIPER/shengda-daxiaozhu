@@ -6907,15 +6907,14 @@ window.appBack = function () {
  *    表现成「永远显示已是最新版本」—— 又是一个把错误说成事实的坑。
  */
 /* 🔴 达小助改造（W1）：自更新源暂时禁用。
- * 原地址指向航院通作者的 dpdns 域名与 GitHub 仓库，直接用会提示升级到郑航的
- * APK。正式发布（W9）时把 DZX_GH_USER / 域名配好后，恢复为：
- *   ['https://<用户域名>/daxiaozhu/version.json',
- *    'https://raw.githubusercontent.com/<GH用户>/daxiaozhu/main/version.json']
+ * APK 尚未发布到 Releases，正式发版时把下面两行取消注释即可：
+ *   ['https://JOSNIPER.github.io/shengda-daxiaozhu/version.json',
+ *    'https://raw.githubusercontent.com/JOSNIPER/shengda-daxiaozhu/main/version.json']
  * 在恢复之前保持空数组：fetchManifest() 拿到空列表会直接返回失败，
  * checkUpdate(manual) 的失败路径是安静提示，不会误报「已是最新」。 */
 const UPD_SRC = [
-  // 'https://johan.ccwu.cc/daxiaozhu/version.json',        // W9: 待 Cloudflare Pages 配置
-  // 'https://raw.githubusercontent.com/<GH_USER>/daxiaozhu/main/version.json',
+  // 'https://JOSNIPER.github.io/shengda-daxiaozhu/version.json',
+  // 'https://raw.githubusercontent.com/JOSNIPER/shengda-daxiaozhu/main/version.json',
 ];
 // 频率 → 允许的间隔（秒）。always = 0，即每次打开都查。
 const UPD_FREQ_SEC = { always: 0, daily: 86400, weekly: 7 * 86400 };

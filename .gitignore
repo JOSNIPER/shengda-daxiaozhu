@@ -22,3 +22,12 @@ package-lock.json
 Thumbs.db
 tests/_js_err.txt
 tests/_py_err.txt
+
+# 抓包 / 凭据 / 本机账号文件一律不入库
+*.har
+*.apk
+*.bin
+secrets.properties
+local_secrets.py
+account.bin
+

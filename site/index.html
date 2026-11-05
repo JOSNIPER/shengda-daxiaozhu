@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>达小助 · 郑航课表</title>
+<title>达小助 · 升达课表</title>
 <meta name="description" content="郑州升达经贸管理学院的课表、考试、成绩、空闲教室、校园公告。一个 APK，装到手机上就能用。">
 <meta name="theme-color" content="#edf2fb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#101828" media="(prefers-color-scheme: dark)">
@@ -388,12 +388,10 @@ footer a{color:var(--accent);text-decoration:none}
 <nav class="topnav">
   <a class="brand" href="/">{{BRAND}}</a>
   <div class="tlinks">
-    <a href="/">首页</a>
-    <a href="/campus/">校园网</a>
     <a class="on" href="/daxiaozhu/">达小助</a>
-    <a href="/wanshitong/">宛师通</a>
-    <a href="/daxiaozhu/history">历史版本</a>
-    <a href="https://cnb.cool/johan/daxiaozhu">源码</a>
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu">源码</a>
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu/releases">版本</a>
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu/issues">反馈</a>
   </div>
 </nav>
 
@@ -402,7 +400,7 @@ footer a{color:var(--accent);text-decoration:none}
   <div class="shead"><div class="wrap">
     <p class="sgreet" id="greet"></p>
     <h1>达小助</h1>
-    <p class="ssub">郑航课表 · 考试 · 成绩 · 学分 · 空闲教室 · 校园公告</p>
+    <p class="ssub">升达课表 · 考试 · 成绩 · 学分 · 空闲教室 · 校园公告</p>
     <span class="spill">v{{VERSION}}</span>
   </div></div>
 </header>
@@ -435,22 +433,19 @@ footer a{color:var(--accent);text-decoration:none}
   </section>
 
   <!-- 「我还想看看别的」的入口。放在下载区正下方，而不是塞进页尾 ——
-       会找源码 / 仓库的人，通常在下载按钮那儿就已经开始找了。
-       ⚠️ 2026-10-21：GitHub 那两条换成了腾讯云 CNB。原来链到
-         github.com/johan/daxiaozhu，账号被停用之后两条全 404 ——
-         而「源码」这条链接恰恰是给最愿意动手的人看的，断了最难堪。 -->
+       会找源码 / 仓库的人，通常在下载按钮那儿就已经开始找了。 -->
   <div class="links">
-    <a href="/daxiaozhu/history">
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu">
+      <span class="k">源码仓库</span>
+      <span class="v">MIT 开源 · GitHub</span><span class="arw">›</span>
+    </a>
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu/releases">
       <span class="k">历史版本</span>
-      <span class="v">每一版都能下</span><span class="arw">›</span>
+      <span class="v">Releases 里看每一版</span><span class="arw">›</span>
     </a>
-    <a href="https://cnb.cool/johan/daxiaozhu">
-      <span class="k">源码仓库（CNB）</span>
-      <span class="v">MIT 开源 · 国内可访问</span><span class="arw">›</span>
-    </a>
-    <a href="https://cnb.cool/johan/campus-login">
-      <span class="k">腾讯云 CNB 制品库</span>
-      <span class="v">国内线路的安装包</span><span class="arw">›</span>
+    <a href="https://github.com/JOSNIPER/shengda-daxiaozhu/issues">
+      <span class="k">问题反馈</span>
+      <span class="v">提 issue 就行</span><span class="arw">›</span>
     </a>
   </div>
 
@@ -521,8 +516,7 @@ footer a{color:var(--accent);text-decoration:none}
     <p>数据只从学校教务系统读取，<b>不会提交任何申请、选课或修改</b>。
        学号密码只加密存在你自己的手机里（Android Keystore，AES-256-GCM），
        不经过任何第三方服务器。</p>
-    <p>App 对外的连接只有两类：学校教务系统，以及本项目的更新发布站
-       （johan.ccwu.cc 与镜像线路；内测版暂未启用）。
+    <p>App 对外的连接只有学校教务系统；自更新当前禁用，未启用任何发布站。
        没有统计、上报、崩溃收集，也没有广告。</p>
   </div>
 
@@ -534,9 +528,8 @@ footer a{color:var(--accent);text-decoration:none}
   </div>
 
   <footer>
-    <p>开源（MIT）：<a href="https://cnb.cool/johan/daxiaozhu">cnb.cool/johan/daxiaozhu</a></p>
-    <p>同站还有：<a href="/campus/">校园网自动登录</a>（Windows 上用的）、
-       <a href="/wanshitong/">宛师通</a>（南阳师范学院，同一套界面）。</p>
+    <p>开源（MIT）：<a href="https://github.com/JOSNIPER/shengda-daxiaozhu">github.com/JOSNIPER/shengda-daxiaozhu</a></p>
+    <p>非学校官方客户端，与学校无隶属关系；基于 <a href="https://cnb.cool/Hobson2233/hangyuantong">航院通</a>（MIT）改造。</p>
   </footer>
 
 </div>

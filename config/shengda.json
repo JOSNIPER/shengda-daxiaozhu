@@ -96,9 +96,10 @@
     "fid": null
   },
   "update": {
-    "_comment": "W9 发布前自更新在 app.js UPD_SRC 处保持禁用。",
-    "page_base": "https://johan.ccwu.cc/daxiaozhu",
-    "github_user": "TBD-github-user",
+    "_comment": "自更新在 app.js UPD_SRC 处保持禁用；APK 尚未发布，以下地址为预留位置。",
+    "page_base": "https://JOSNIPER.github.io/shengda-daxiaozhu",
+    "github_user": "JOSNIPER",
+    "repo": "shengda-daxiaozhu",
     "enabled": false
   }
 }

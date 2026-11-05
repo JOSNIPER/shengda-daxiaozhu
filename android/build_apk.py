@@ -69,15 +69,14 @@ JAVA = JDK / "bin" / "java.exe"
 JAVAC = JDK / "bin" / "javac.exe"
 KEYTOOL = JDK / "bin" / "keytool.exe"
 
-# 国内线路（腾讯云 CNB）上这个包的地址前缀 —— 换它等于换一条下载线路，
-# 只在这里写一次，version.json 和发布页都从这儿派生。
-# ⚠️ W9 待办：用户的 GitHub 用户名与 Cloudflare 加速域名确认后填入；
-#    在此之前自更新入口在 app.js 里已被注释禁用，本常量不会生效。
-GITHUB_USER = os.environ.get("DZX_GH_USER", "TBD-github-user")
-UPD_PAGE_BASE = "https://johan.ccwu.cc/daxiaozhu"          # 用户域名(CNAME 到 Pages,待配置)
-CNB_APK_BASE = ("https://maven.cnb.cool/" + GITHUB_USER + "/campus-login"
-                "/-/packages/cnb/daxiaozhu")
-CNB_APK_NAME = "达小助.apk"
+# APK 与发布页的地址前缀 —— 只在这里写一次，version.json 和发布页都从这儿派生。
+# ⚠️ 自更新入口在 app.js 里已注释禁用，APK 也尚未发布到 Releases；
+#    下面这几个地址是预留位置，等真正发版时再接上。
+GITHUB_USER = os.environ.get("DZX_GH_USER", "JOSNIPER")
+REPO = "shengda-daxiaozhu"
+UPD_PAGE_BASE = "https://JOSNIPER.github.io/" + REPO   # GitHub Pages（待启用）
+RELEASE_BASE = ("https://github.com/" + GITHUB_USER + "/" + REPO
+                + "/releases/download")
 
 VERSION_NAME = "0.1.11"
 VERSION_CODE = 71
@@ -236,16 +235,13 @@ def write_manifest(apk: Path):
     #    （2026-10-27 南师侧在他那边翻出来的，同一个形状；我这边也一样，
     #      上一版 0.17.3 的日期是我手工改的，不是脚本写的。）
     info["date"] = datetime.date.today().isoformat()
-    # 放在 /dl/ 子目录下：_headers 只支持尾部通配（/daxiaozhu/dl/*），
-    # 放在 /daxiaozhu/ 根上就没法给 .apk 单独一条长缓存规则。
-    info["apk"] = (UPD_PAGE_BASE + "/dl/daxiaozhu-" + VERSION_NAME + ".apk")
-    # 国内线路（腾讯云 CNB）。和上面那条是**同一个包**，只是线路不同 ——
-    # 主站走 Cloudflare，国内下起来慢，App 的「立即更新」优先用这条。
-    # ⚠️ 这条地址要求**已经用 upload_cnb.py 传过这个版本**（见 README「发版顺序」）。
-    # ⚠️ 拼的时候用 + 不用 %：`quote("达小助.apk")` 的结果里全是 `%E8%88%AA…`，
-    #    拿去 `%` 格式化会被当成格式符，报 "not enough arguments for format string"。
-    info["apk_cn"] = (CNB_APK_BASE + "/" + VERSION_NAME + "/"
-                      + urllib.parse.quote(CNB_APK_NAME))
+    # GitHub Releases：tag 用 v<版本号>，文件名与 dist/ 里的产物一致。
+    # 两条线路暂时指向同一个地址 —— 上游的国内 CNB 线路尚未接入本项目。
+    # ⚠️ 这条地址要求该版本已经发到 Releases；APK 未发布时它只是预留值。
+    _apk_url = (RELEASE_BASE + "/v" + VERSION_NAME
+                + "/daxiaozhu-" + VERSION_NAME + ".apk")
+    info["apk"] = _apk_url
+    info["apk_cn"] = _apk_url
     info["page"] = UPD_PAGE_BASE + "/"
     notes = read_notes()
     if notes:

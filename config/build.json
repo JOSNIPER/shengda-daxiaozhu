@@ -80,7 +80,7 @@
   },
   "update": {
     "page_base": "http://__PC_IP__:8090/daxiaozhu",
-    "github_user": "TBD",
+    "github_user": "JOSNIPER",
     "enabled": false
   }
 }

@@ -79,7 +79,7 @@
     semester: { total_weeks: null },
     free_room: { max_periods: null },
     chaoxing: { fid: null },
-    update: { page_base: 'https://johan.ccwu.cc/daxiaozhu', github_user: 'TBD-github-user', enabled: false }
+    update: { page_base: 'https://JOSNIPER.github.io/shengda-daxiaozhu', github_user: 'JOSNIPER', repo: 'shengda-daxiaozhu', enabled: false }
   };
 
   var CFG = CFG_DEFAULT;
