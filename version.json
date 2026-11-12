@@ -1,18 +1,18 @@
 {
   "name": "达小助",
-  "version": "0.1.11",
-  "code": 71,
-  "date": "2026-11-04",
+  "version": "0.1.12",
+  "code": 72,
+  "date": "2026-11-12",
   "size": 539024,
-  "sha256": "256dbf54ec83556490db3c37c9c4b3a46600eccb1b4410516d725b6f303e3355",
-  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.11/daxiaozhu-0.1.11.apk",
-  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.11/daxiaozhu-0.1.11.apk",
+  "sha256": "2e7ff2f7aef13d6bdc0121279e8bb0a2978678236ea748408b472b08d747d629",
+  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.12/daxiaozhu-0.1.12.apk",
+  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.12/daxiaozhu-0.1.12.apk",
   "page": "https://JOSNIPER.github.io/shengda-daxiaozhu/",
   "notes": [
-    "课表每周都从「今天所在的那一周」开始，不会再停在上次关掉时的那一周",
-    "同一次打开里左右滑翻周还是照常的，只是不再带到下次打开",
-    "修了一个会看错课表的问题：之前关掉时停在第11周、当时其实是第9周，再打开还是第11周",
-    "登录、取数、翻周手势、顶栏图标、底部四个 tab 一律没动"
+    "学习页上面四个选项改成「课程、成绩、学习通、学分」，打开默认停在课程",
+    "成绩一次列全，不用再点「还有几门没显示」",
+    "「检查更新」里加上项目仓库和个人网页地址，点一下直接去 GitHub Releases 看最新版，不再在应用内检查或下载",
+    "顺手修了默认视图会先闪一下学习通的问题"
   ],
-  "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.11 的 APK 已发布到 Releases，apk/apk_cn 指向同一份包。自更新入口在 app.js UPD_SRC 处保持禁用。"
+  "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.12 的 APK 发布到 Releases，apk/apk_cn 指向同一份包。0.1.12 起「检查更新」是纯外链入口，App 不再读取本清单做自更新。"
 }

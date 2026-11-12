@@ -4,7 +4,7 @@
 
 教务系统是青果（KINGOSOFT），走 CAS 单点登录。这不是学校官方客户端，只是把本来要一次次打开教务网页才能看到的东西，收进一个手机上顺手的地方。
 
-当前版本 **0.1.11**（code 71）。两种形态共用同一套界面代码：
+当前版本 **0.1.12**（code 72）。两种形态共用同一套界面代码：
 
 | 形态 | 怎么用 | 谁去连教务 |
 | --- | --- | --- |
@@ -72,10 +72,13 @@ python bridge.py --port 8788
 不用 Gradle，走 Android 官方命令行：`aapt2 → javac → d8 → zipalign → apksigner`。需要 JDK 17、Android SDK build-tools 34、`android-14/android.jar`，以及你自己的签名 keystore（keystore 已被 `.gitignore` 排除，丢了只能卸载重装，千万别提交进仓库）。最低支持 minSdk 23。
 
 ```bash
-python android/build_apk.py --clean
+python android/build_apk.py --clean           # 正式包：config/shengda.json，真实教务端点
+python android/build_apk.py --clean --debug   # 调试包：config/build.json，连本机离线 mock
 ```
 
-产物在 `android/dist/daxiaozhu-0.1.11.apk`，同时会重写 `version.json` 里的体积与 sha256。改版本号要同时改 `version.json`、`android/build_apk.py`、`web/app.js`、`MainActivity.java` 四处，脚本有一致性校验，对不上会拒绝出包。
+默认打的就是可发布的正式包。调试包必须显式加 `--debug`（`__PC_IP__` 会被换成构建机局域网 IP，手机要和电脑同网段）。这个开关是 2026-11-12 加的：以前只看 `config/build.json` 在不在，结果新增了那份模板以后，默认打出来的包会连本机 mock，装到手机上连不上教务。
+
+产物在 `android/dist/daxiaozhu-0.1.12.apk`，同时会重写 `version.json` 里的体积与 sha256。改版本号要同时改 `version.json`、`android/build_apk.py`、`web/app.js`、`MainActivity.java` 四处（`version` / `code` 各两个，加上 UA 后缀共六个值），脚本有一致性校验，对不上会拒绝出包。
 
 ### 测试
 
@@ -114,7 +117,7 @@ node tests/parse_check.js          # 课表解析
 - 智慧门户、一卡通、办事应用，以及 APK 侧的校园公告**未适配**，接口固定返回「未适配本校系统」，并且不会把账号密码发往任何第三方。
 - 直饮水整块删除（升达不用该平台）。
 - 仓库里的 `eams.py` / `portal.py` / `notice.py` / `chaoxing.py` 是上游时期留下的模块，其中的端点指向另一所学校，**不代表升达已接入**。
-- 自更新入口仍保持禁用；0.1.11 的安装包已发布到 [Releases](https://github.com/JOSNIPER/shengda-daxiaozhu/releases/tag/v0.1.11)，`version.json` 里的下载地址已生效。
+- 「检查更新」改成纯外链入口（去 GitHub Releases），不提供应用内更新；0.1.12 的安装包已发布到 [Releases](https://github.com/JOSNIPER/shengda-daxiaozhu/releases/tag/v0.1.12)，`version.json` 里的下载地址已生效。
 
 ---
 

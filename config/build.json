@@ -1,5 +1,5 @@
 {
-  "_comment": "🔴 W6 debug APK 专用：教务/CAS 全部指向 PC 上的离线 mock。装到手机前把 __PC_IP__ 替换成电脑局域网 IP，并在电脑上跑：python 离线mock_ui跑通/mock_server.py --lan 8090。正式发布包禁用本文件（改名或删除即可回退 shengda.json）。",
+  "_comment": "🔴 W6 debug APK 专用：教务/CAS 全部指向 PC 上的离线 mock。只在 build_apk.py --debug 时使用；__PC_IP__ 由打包脚本替换成构建机局域网 IP，并在电脑上跑：python 离线mock_ui跑通/mock_server.py --lan 8090。默认打包走 config/shengda.json（正式端点），不会读本文件。",
   "cas": {
     "base": "http://__PC_IP__:8090/lyuapServer",
     "portal": "http://__PC_IP__:8090/",

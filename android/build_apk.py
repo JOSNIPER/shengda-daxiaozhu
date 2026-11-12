@@ -3,14 +3,14 @@
 不用 Gradle —— 本机没有 Android Studio，而且这点代码用不上它。
 走官方那套命令行：aapt2 → javac → d8 → zipalign → apksigner。
 
-前置（都在 _lab/out/sdk/ 下，已验证）：
-    zulu17.60.17-ca-jdk17.0.16-win_x64/   JDK 17
+前置（仓库内 tools/sdk/ 下，已验证；也可用 DZX_SDK 指到别处）：
+    zulu17.54.21-ca-jdk17.0.13-win_x64/   JDK 17
     android-14/                           build-tools 34（aapt2/d8/zipalign/apksigner）
     android-13/android.jar                platform-33
 
 用法：
-    python build_apk.py                # 打包
-    python build_apk.py --clean        # 先清 build/ 再打
+    python build_apk.py --clean        # 正式包（默认，config/shengda.json 真实教务端点）
+    python build_apk.py --clean --debug # 调试包（config/build.json，连本机离线 mock）
 """
 from __future__ import annotations
 
@@ -33,18 +33,21 @@ WEB = MOBILE / "web"
 BUILD = HERE / "build"
 DIST = HERE / "dist"
 
-# Android SDK / JDK 的位置。本机放在工作区的 _lab/out/sdk 下，**不随仓库分发**。
+# Android SDK / JDK 的位置。**不随仓库分发**。
 # 🔴 这里以前写的是本机绝对路径（带用户目录的那种）。公开仓库里带着用户名
 #    既没意义（别人用不了这个路径），也没必要露。现在按「环境变量 → 仓库相对位置」找。
+#    2026-11-12 补了 tools/sdk：SDK 实际就放在那儿，而脚本只认 _lab/out/sdk，
+#    结果不设 DZX_SDK 就报「找不到 Android SDK」（其实是找错地方，不是没装）。
 def _sdk_dir():
     env = os.environ.get("DZX_SDK")
     if env:
         return Path(env)
-    near = MOBILE.parent / "_lab" / "out" / "sdk"
-    if near.exists():
-        return near
+    for near in (MOBILE.parent / "tools" / "sdk",
+                 MOBILE.parent / "_lab" / "out" / "sdk"):
+        if near.exists():
+            return near
     sys.exit("找不到 Android SDK：把 DZX_SDK 指到 build-tools 那层，"
-             "或者按文件开头「前置」里说的放到 _lab/out/sdk")
+             "或者按文件开头「前置」里说的放到 tools/sdk")
 
 SDK = _sdk_dir()
 # 🔴 必须是 JDK 17：更高版本 javac 给匿名内部类写的调试信息会让 d8/R8 崩
@@ -70,7 +73,8 @@ JAVAC = JDK / "bin" / "javac.exe"
 KEYTOOL = JDK / "bin" / "keytool.exe"
 
 # APK 与发布页的地址前缀 —— 只在这里写一次，version.json 和发布页都从这儿派生。
-# ⚠️ 自更新入口在 app.js 里仍保持禁用；0.1.11 已发布到 Releases，
+# ⚠️ 0.1.12 起「检查更新」改成纯外链入口（去 GitHub Releases），不再读这份清单；
+#    version.json 仍由本脚本重写，作为发布记录与发布页的数据来源。
 #    apk / apk_cn 暂时指向同一份包，等国内线路接好再给 apk_cn 换地址。
 GITHUB_USER = os.environ.get("DZX_GH_USER", "JOSNIPER")
 REPO = "shengda-daxiaozhu"
@@ -78,8 +82,8 @@ UPD_PAGE_BASE = "https://JOSNIPER.github.io/" + REPO   # GitHub Pages（待启�
 RELEASE_BASE = ("https://github.com/" + GITHUB_USER + "/" + REPO
                 + "/releases/download")
 
-VERSION_NAME = "0.1.11"
-VERSION_CODE = 71
+VERSION_NAME = "0.1.12"
+VERSION_CODE = 72
 PKG = "cc.ccwu.johan.daxiaozhu"
 MIN_SDK = 23
 TARGET_SDK = 33
@@ -259,8 +263,16 @@ def write_manifest(apk: Path):
           % (VERSION_NAME, VERSION_CODE, len(raw)))
 
 
-def stage_assets():
-    """把 web/ 整个搬进 assets/web/ —— APK 里的页面和网页版是同一份代码。"""
+def stage_assets(debug=False):
+    """把 web/ 整个搬进 assets/web/ —— APK 里的页面和网页版是同一份代码。
+
+    🔴 2026-11-12：正式包 / 调试包必须用**显式开关**区分，不能靠「文件在不在」。
+       以前是「config/build.json 存在就优先」—— 那份是 W6 的离线 mock 模板
+       （端点 http://__PC_IP__:8090）。11-05 加进来以后，默认打包就悄悄变成
+       调试包：装到手机上连的是构建机局域网的 mock，连不上真实教务。
+       0.1.11 是 11-04 打的，那时还没有 build.json，所以发布的是正式包。
+       现在默认走 config/shengda.json（升达真实端点），只有 --debug 才用 mock。
+    """
     dst = BUILD / "assets" / "web"
     if dst.exists():
         shutil.rmtree(dst)
@@ -270,13 +282,16 @@ def stage_assets():
             shutil.copy2(f, dst / f.name)
     names = sorted(x.name for x in dst.iterdir())
     print("  assets/web: " + ", ".join(names))
-    # 🔴 达小助改造（W6）：native.js 运行时 fetch('config.json') 拿学校配置。
-    #    优先用 config/build.json（打包专用，可指 mock），否则用 config/shengda.json。
-    cfg_src = MOBILE / "config" / ("build.json" if (MOBILE / "config" / "build.json").exists()
-                                   else "shengda.json")
+    # native.js 运行时 fetch('config.json') 拿学校配置。
+    if debug:
+        cfg_src = MOBILE / "config" / "build.json"
+        if not cfg_src.exists():
+            raise SystemExit("--debug 需要 config/build.json（离线 mock 模板）")
+    else:
+        cfg_src = MOBILE / "config" / "shengda.json"
     cfg_text = cfg_src.read_text(encoding="utf-8")
-    # build.json 是模板：__PC_IP__ 换成构建机局域网 IP（手机连电脑跑 mock 用）
-    if "__PC_IP__" in cfg_text:
+    if debug and "__PC_IP__" in cfg_text:
+        # build.json 是模板：__PC_IP__ 换成构建机局域网 IP（手机连电脑跑 mock 用）
         import socket
         ip = ""
         try:
@@ -286,8 +301,11 @@ def stage_assets():
             ip = "127.0.0.1"
         cfg_text = cfg_text.replace("__PC_IP__", ip)
         print("  [debug包] __PC_IP__ -> %s（手机需与本机同网段、mock 用 --lan 起）" % ip)
+    # 🔴 护栏：正式包里绝不能出现 mock 占位符或本机回环地址。
+    if not debug and ("__PC_IP__" in cfg_text or "127.0.0.1:8090" in cfg_text):
+        raise SystemExit("config/shengda.json 里混进了离线 mock 地址，拒绝打正式包")
     (dst / "config.json").write_text(cfg_text, encoding="utf-8", newline="\n")
-    print("  config.json <- %s" % cfg_src.name)
+    print("  config.json <- %s（%s）" % (cfg_src.name, "调试包" if debug else "正式包"))
     # 网页版那套 Python 服务不在包里，但页面里引用了它 —— 少个文件会白屏，
     # 所以这里硬检查一遍必需文件，别等到手机上才发现。
     for need in ("index.html", "app.js", "app.css", "native.js",
@@ -429,6 +447,9 @@ def verify(apk: Path):
 def main():
     ap = argparse.ArgumentParser(description="打包 达小助 APK")
     ap.add_argument("--clean", action="store_true")
+    ap.add_argument("--debug", action="store_true",
+                     help="打离线 mock 调试包（config/build.json + 本机局域网 IP）；"
+                          "默认打正式包（config/shengda.json 真实教务端点）")
     args = ap.parse_args()
 
     check_env()
@@ -438,7 +459,7 @@ def main():
     BUILD.mkdir(parents=True, exist_ok=True)
 
     print("\n1/6 收网页资源")
-    stage_assets()
+    stage_assets(args.debug)
     print("2/6 编译资源（aapt2）")
     apk, gen = compile_res()
     print("3/6 编译 Java")
