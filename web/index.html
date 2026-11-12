@@ -145,20 +145,23 @@
          「查询成绩使用的频率比较低，不需要单独列出」——
          一个学期就期末看几次，占着一个常驻入口不值当。
          现在几块内容共用这一屏，靠这个分段切换。
-         2026-10-22 又把学习通并进来、整个 tab 改叫「学习」：
-         进去先看学习通，考试 / 成绩 / 学分是它的子选项。 -->
+         2026-10-22 又把学习通并进来、整个 tab 改叫「学习」。
+         2026-11-05 用户要求把顺序改成「课程、成绩、学习通、学分」：
+         每天要看的课表排第一，也是默认落进来的视图。 -->
     <div class="seg" id="exSeg">
-      <button class="seg-btn on" data-view="cx">学习通</button>
-      <button class="seg-btn" data-view="course">课程</button>
+      <button class="seg-btn on" data-view="course">课程</button>
       <button class="seg-btn" data-view="grade">成绩</button>
+      <button class="seg-btn" data-view="cx">学习通</button>
       <button class="seg-btn" data-view="credit">学分</button>
     </div>
 
     <!-- ---------------- 学习通视图（作业待办） ----------------
          只读 —— 不签到、不刷课、不自动答题、不代交。
          作业挂在每门课下面，32 门课要 40 秒，所以是「检查一次 → 缓存 →
-         写清更新于何时」，不是实时。 -->
-    <div class="scroll" id="exViewCx">
+         写清更新于何时」，不是实时。
+         🔴 0.1.12 默认视图改成「课程」，这里的静态 hidden 必须跟着改：
+            JS 还没跑完的那一瞬也该显示课程，别先闪一下学习通再跳。 -->
+    <div class="scroll" id="exViewCx" hidden>
       <div id="cxBody"></div>
     </div>
 
@@ -167,7 +170,7 @@
          数据只用已经拿到的课表（不额外请求），按课程名聚合成一张清单。
          ⚠️ 「这门课有没有学习通内容」需要超星那边接通才能标 —— 现在只留位置，
             不假装知道。-->
-    <div class="scroll" id="exViewCourse" hidden>
+    <div class="scroll" id="exViewCourse">
       <div class="empty" id="coEmpty" hidden>
         <div class="empty-ico">
           <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M8 7h8M8 11h8"/></svg>

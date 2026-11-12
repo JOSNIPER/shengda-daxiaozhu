@@ -175,9 +175,9 @@ let CFG = Object.assign(
     // 余额提醒：默认开着、阈值 20 元。一卡通刷完才发现没钱是最常见的懊恼，
     // 而这条提示是**常驻行内提示**，不弹窗 —— 弹窗会被点掉，行内的一直在。
     alertOn: true, alertLow: 20,
-    // 检查更新：默认开着，默认**每天查一次**（一次请求，几百字节）。
-    // 为什么不是「每次打开」：一天开十次 App 就查十次，而一天之内
-    // 根本不会有新版本 —— 纯属白耗流量。想更勤可以在设置里改成「每次打开」。
+    // 🔴 0.1.12 起「检查更新」改成纯外链入口（去 GitHub Releases），
+    // 不再自动检查、也不在应用内下载。下面四个字段是旧自更新实现留下的，
+    // 只为兼容老用户本机已存的 settings 而保留，界面已经不再读写它们。
     updOn: true, updFreq: 'daily', updLast: 0, updSkip: '' },
   store.get(KEY.settings, {})
 );
@@ -2406,10 +2406,9 @@ boundEl('wkDays', 'click', () => {
 let gradeTerm = 'all';
 let gradeFind = '';        // 搜索词（课程名 / 课程号）
 let gradeSort = 0;         // 0 默认 / 1 分数优先 / 2 学分优先
-// 0.33.0：列表**首屏**显示几门。一学期十几门 × 65px 就是 900+，
-// 这一页可用只有 678（上面还有汇总卡、绩点趋势、学期筛选、搜索框）。
-// 5 门 + 一颗「还有 N 门」正好一屏；要看全套点一下，或者用上面的搜索。
-let gradeShowN = 5;
+// 2026-11-05 用户要求「成绩直接全部显示」，去掉 0.33.0 的首屏 5 门折叠 +
+// 「还有 N 门没显示」按钮。这一页本身是 .scroll，十几门课往下滚就行，
+// 多一次点击反而让人以为成绩没出全。
 const GRADE_SORTS = ['默认排序', '分数优先', '学分优先'];
 
 /** 课程号 → 它在培养计划里的身份。
@@ -2746,7 +2745,6 @@ function renderGrades() {
   $('grChips').querySelectorAll('.chip').forEach((b) => {
     b.addEventListener('click', () => {
       gradeTerm = b.dataset.term;
-      gradeShowN = 5;      // 换了学期，首屏重新从 5 门开始
       renderGrades();
     });
   });
@@ -2785,11 +2783,8 @@ function renderGrades() {
   const pidx = planIndex();
   const hasPlan = pidx.size > 0;
 
-  // 0.33.0：首屏只铺前 `gradeShowN` 门（默认 5），多的收在「还有 N 门」后面。
-  // 🔴 只截**渲染**：会话统计（`list.length`）和下面的空态判断仍按全量算。
-  const shown = list.slice(0, gradeShowN);
-
-  $('grList').innerHTML = (shown.map((c) => {
+  // 全量铺开，不再截前 N 门。容器 #exViewGrade 是 .scroll，长列表自己滚。
+  $('grList').innerHTML = (list.map((c) => {
     const score = c.final || c.score || '';
     const num = parseFloat(score);
     let cls = '';
@@ -2813,14 +2808,7 @@ function renderGrades() {
       '</div>';
   }).join('') || ('<div class="gradeitem"><div class="gi-main"><div class="gi-meta">' +
     (q ? '没搜到「' + esc(gradeFind.trim()) + '」' : '这个学期没有成绩记录') +
-    '</div></div></div>')) +
-    (list.length > shown.length
-      ? '<button class="cx-more" id="grMore">还有 ' + (list.length - shown.length) +
-        ' 门没显示</button>'
-      : '');
-  if ($('grMore')) {
-    $('grMore').addEventListener('click', () => { gradeShowN = 9999; renderGrades(); });
-  }
+    '</div></div></div>'));
 }
 
 // ------------------------------------------------------------------ 学分进度
@@ -3408,20 +3396,26 @@ function renderExamChips(terms) {
  *   名字跟着高频的那个走：考试一学期看几次，学习通天天要看。
  *
  * 🔴 选中的视图记进 CFG（`examView`）：连着看成绩的那几天，
- *    不该每次进来都先点一下「成绩」。默认是「学习通」。
+ *    不该每次进来都先点一下「成绩」。
+ *
+ * 2026-11-05：用户要求分段顺序改成「课程、成绩、学习通、学分」。
+ * 顺带把默认视图从「学习通」改成「课程」——否则第一项写着课程、
+ * 高亮的却是第三项，看起来像切错了。老用户本机存过的 examView 仍然
+ * 优先（他上次看什么这次还看什么），只影响没存过的新装。
  */
 // 2026-11-03：用户要求「把原本考试那一页改成课程」。考试数据本校还没抓，
 // 摆着一个空页不如换成每天都会看的课程清单。
-const EX_VIEWS = ['cx', 'course', 'grade', 'credit'];
-const EX_HEAD = { cx: '学习', course: '课程', grade: '成绩', credit: '学分' };
+const EX_VIEWS = ['course', 'grade', 'cx', 'credit'];
+const EX_HEAD = { course: '课程', grade: '成绩', cx: '学习', credit: '学分' };
+const EX_DEFAULT = 'course';
 
 function renderExamView() {
-  const v = EX_VIEWS.indexOf(CFG.examView) >= 0 ? CFG.examView : 'cx';
+  const v = EX_VIEWS.indexOf(CFG.examView) >= 0 ? CFG.examView : EX_DEFAULT;
   EX_VIEWS.forEach((k) => {
     const el = $('exView' + k.charAt(0).toUpperCase() + k.slice(1));
     if (el) el.hidden = (k !== v);
   });
-  $('exHead').textContent = EX_HEAD[v] || '学习';
+  $('exHead').textContent = EX_HEAD[v] || EX_HEAD[EX_DEFAULT];
   $('exSeg').querySelectorAll('.seg-btn').forEach((b) => {
     b.classList.toggle('on', b.dataset.view === v);
   });
@@ -3432,14 +3426,16 @@ function renderExamView() {
 }
 
 function setExamView(v) {
-  CFG.examView = EX_VIEWS.indexOf(v) >= 0 ? v : 'cx';
+  CFG.examView = EX_VIEWS.indexOf(v) >= 0 ? v : EX_DEFAULT;
   store.set(KEY.settings, CFG);
   renderExamView();
 }
 
 $('exSeg').querySelectorAll('.seg-btn').forEach((b) => {
   b.addEventListener('click', () => {
-    if (b.dataset.view === (CFG.examView || 'cx')) return;
+    // 没存过 examView 时界面默认在第一项「课程」，这里也按同一个默认值比，
+    // 否则点第一项会被当成「没变」而直接 return，高亮永远切不过去。
+    if (b.dataset.view === (EX_VIEWS.indexOf(CFG.examView) >= 0 ? CFG.examView : EX_DEFAULT)) return;
     setExamView(b.dataset.view);
   });
 });
@@ -4576,12 +4572,10 @@ $('todoRefresh').addEventListener('click', () => loadTodo(true));
 //    所以绑一次就够，重画列表也不会丢焦点。
 $('grFind').addEventListener('input', () => {
   gradeFind = $('grFind').value;
-  gradeShowN = 5;        // 换了搜索词，首屏重新从 5 门开始
   renderGrades();
 });
 $('grSort').addEventListener('click', () => {
   gradeSort = (gradeSort + 1) % GRADE_SORTS.length;
-  gradeShowN = 5;        // 换了排序，首屏重新从 5 门开始
   renderGrades();
 });
 
@@ -6906,17 +6900,13 @@ window.appBack = function () {
  *    两边都是跨域请求。少了这个头，fetch 会静默失败，
  *    表现成「永远显示已是最新版本」—— 又是一个把错误说成事实的坑。
  */
-/* 🔴 达小助改造（W1）：自更新源暂时禁用。
- * 0.1.11 的 APK 已发布到 Releases，但自更新入口仍保持禁用；
- * 需要启用时把下面两行取消注释即可：
- *   ['https://JOSNIPER.github.io/shengda-daxiaozhu/version.json',
- *    'https://raw.githubusercontent.com/JOSNIPER/shengda-daxiaozhu/main/version.json']
- * 在恢复之前保持空数组：fetchManifest() 拿到空列表会直接返回失败，
- * checkUpdate(manual) 的失败路径是安静提示，不会误报「已是最新」。 */
-const UPD_SRC = [
-  // 'https://JOSNIPER.github.io/shengda-daxiaozhu/version.json',
-  // 'https://raw.githubusercontent.com/JOSNIPER/shengda-daxiaozhu/main/version.json',
-];
+/* 🔴 0.1.12：自更新通道彻底关闭，不是「暂时禁用」。
+ * 用户 2026-11-05 明确「不需要提供在线更新」，检查更新改为跳 GitHub Releases。
+ * 这一段连同 checkUpdate / showUpdateSheet / 应用内下载器一起留作历史实现，
+ * 但已无任何调用路径：UPD_SRC 为空、boot 不调 autoCheckUpdate()、
+ * openUpdateSheet() 也不再调 checkUpdate()。别单独把它恢复 —— 那是产品决定。
+ */
+const UPD_SRC = [];
 // 频率 → 允许的间隔（秒）。always = 0，即每次打开都查。
 const UPD_FREQ_SEC = { always: 0, daily: 86400, weekly: 7 * 86400 };
 const UPD_FREQ_CN = { always: '每次打开', daily: '每天一次', weekly: '每周一次' };
@@ -7551,81 +7541,62 @@ function openExternal(url) {
   return false;
 }
 
-/** 「我的 → 检查更新」：开关 + 频率 + 立即检查，一屏放完。 */
+/* 「检查更新」的三个去处。用户 2026-11-05 原话：
+   「把检查更新里边加上我的仓库地址和我的个人网页地址，检查更新的话，
+    让他直接去 GitHub 上找就行，不需要提供在线更新」。
+   /releases/latest 是 GitHub 的固定跳转，永远指向最新一版 —— 以后发版
+   不用回来改这里的地址。 */
+const UPD_REPO = 'https://github.com/JOSNIPER/shengda-daxiaozhu';
+const UPD_RELEASES = UPD_REPO + '/releases/latest';
+const UPD_HOME = 'https://johan.ccwu.cc/';
+
+/** 「我的 → 检查更新」：只给版本信息和去处，不做应用内检查 / 下载。
+ *
+ *  下面那套 fetchManifest / checkUpdate / 应用内下载是上游留下的完整实现，
+ *  现在入口全部关闭：UPD_SRC 为空、boot 里没调 autoCheckUpdate()、本函数
+ *  也不再调 checkUpdate()。留着不删是因为它牵着 NativeApi.update 一整套
+ *  下载器接口，硬删容易在别处踩空；行为上以「没有任何调用路径」为准。
+ */
 function openUpdateSheet() {
-  const on = CFG.updOn !== false;
-  const freq = UPD_FREQ_SEC[CFG.updFreq] === undefined ? 'daily' : CFG.updFreq;
+  const links = [
+    { id: 'updRepo', k: '项目仓库', u: UPD_REPO },
+    { id: 'updHome', k: '个人网页', u: UPD_HOME },
+  ];
   $('sheetBody').innerHTML =
     '<div class="sh-title">检查更新</div>' +
-    '<div class="sh-sub">当前版本 v' + esc(APP_VERSION) + ' · ' + updAgo(CFG.updLast) + '</div>' +
+    '<div class="sh-sub">当前版本 v' + esc(APP_VERSION) + ' · 不在应用内更新</div>' +
+    '<p class="tip note">新版发布在 GitHub Releases。点下面的按钮直接跳过去看，' +
+      '需要升级时自己下载 APK 安装；本应用不会在后台检查或下载更新。</p>' +
     '<div class="setrows">' +
-      '<div class="setrow">' +
-        '<span class="sk">自动检查更新</span>' +
-        '<button class="switch' + (on ? ' on' : '') + '" id="updSw" role="switch" ' +
-        'aria-checked="' + (on ? 'true' : 'false') + '" aria-label="自动检查更新"></button>' +
-      '</div>' +
+      links.map((x) =>
+        '<button class="sh-link" id="' + x.id + '" type="button">' +
+          '<span class="sk">' + esc(x.k) + '</span>' +
+          '<span class="sl">' + esc(x.u) + '</span>' +
+        '</button>').join('') +
     '</div>' +
-    '<div id="updFreqBox"' + (on ? '' : ' hidden') + '>' +
-      '<div class="setlabel">多久查一次</div>' +
-      '<div class="seg flat" id="updSeg">' +
-        UPD_FREQ_LIST.map((k) =>
-          '<button class="seg-btn' + (k === freq ? ' on' : '') + '" data-freq="' + k + '">' +
-          UPD_FREQ_CN[k] + '</button>').join('') +
-      '</div>' +
-    '</div>' +
-    '<div class="sheetbtns"><button class="btn primary" id="updNow">立即检查</button></div>' +
+    '<div class="sheetbtns"><button class="btn primary" id="updGo">去 GitHub 查看最新版</button></div>' +
     '<p class="tip note" id="updTip"></p>';
   $('sheetMask').hidden = false;
 
-  $('updSw').addEventListener('click', () => {
-    CFG.updOn = !(CFG.updOn !== false);
-    store.set(KEY.settings, CFG);
-    openUpdateSheet();                 // 重画：频率那一块要跟着显示/隐藏
-  });
-
-  $('updSeg').querySelectorAll('.seg-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      CFG.updFreq = b.dataset.freq;
-      store.set(KEY.settings, CFG);
-      $('updSeg').querySelectorAll('.seg-btn').forEach((x) => {
-        x.classList.toggle('on', x.dataset.freq === CFG.updFreq);
-      });
-    });
-  });
-
-  $('updNow').addEventListener('click', async () => {
-    const btn = $('updNow');
-    if (btn.disabled) return;
-    // 就地变成「正在检查…」，不关弹层：关掉再弹一个 toast 会压在按钮上，
-    // 而且万一网络慢，用户会以为点了没反应。
-    btn.disabled = true;
-    btn.textContent = '正在检查…';
+  const go = (url) => {
     $('updTip').textContent = '';
-    const r = await checkUpdate(true);
-    if (r.busy) return;
-    // 有新版本时，showUpdateSheet 已经把这一整块换掉了 —— 这个按钮已经不在页面上，
-    // 再改它的文字没有任何意义（也改不到）。
-    if (r.ok && r.newer) return;
-    const b2 = $('updNow');
-    if (!b2) return;
-    b2.disabled = false;
-    b2.textContent = '立即检查';
-    const tip = $('updTip');
-    if (!tip) return;
-    if (!r.ok) {
-      tip.textContent = '检查失败：' + r.error;
-      tip.classList.add('bad');
-    } else {
-      tip.classList.remove('bad');
-      tip.textContent = '已经是最新版本 v' + APP_VERSION + ' · ' + updAgo(CFG.updLast);
-      // 顺手把顶部那行「上次检查」也刷新一下
-      const sub = document.querySelector('.sh-sub');
-      if (sub) sub.textContent = '当前版本 v' + APP_VERSION + ' · ' + updAgo(CFG.updLast);
+    $('updTip').classList.remove('bad');
+    // openExternal：APK 走系统浏览器（绕开 WebView 的混合内容限制），
+    // 网页版新开标签页。两头都打不开时把地址摊出来，让人还能手抄。
+    if (!openExternal(url)) {
+      $('updTip').textContent = '没打开浏览器，可以手动复制这个地址：' + url;
+      $('updTip').classList.add('bad');
     }
+  };
+
+  links.forEach((x) => {
+    $(x.id).addEventListener('click', () => go(x.u));
   });
+  $('updGo').addEventListener('click', () => go(UPD_RELEASES));
 }
 
-/** 打开 App 时按设置自动查一次。默认「每次打开」。 */
+/** 打开 App 时按设置自动查一次。
+ *  🔴 0.1.12 起 boot() 不再调用本函数（检查更新改为外链），保留仅供追溯。 */
 function autoCheckUpdate() {
   if (CFG.updOn === false) return;
   const gap = UPD_FREQ_SEC[CFG.updFreq];
@@ -8694,7 +8665,8 @@ async function boot() {
     renderCalendar();
   });
   probeBound();                              // 不 await：别挡住首屏
-  // 🔴 W1 禁用自更新（UPD_SRC 已置空，这里双保险；W9 发布时恢复）
+  // 🔴 0.1.12：不做应用内检查更新。新版本请走「我的 → 检查更新」里的
+  //    GitHub Releases 外链，这里保持注释状态，不再有后台网络请求。
   // autoCheckUpdate();
   // 公告：先把本机那份摆好（立刻有内容），需要新鲜就顺手刷一次 ——
   // 这就是「点打开软件自动更新公告」。同样不 await。

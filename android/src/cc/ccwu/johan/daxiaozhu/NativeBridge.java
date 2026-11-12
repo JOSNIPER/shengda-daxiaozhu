@@ -843,7 +843,8 @@ public class NativeBridge {
     }
 
     /**
-     * 用系统浏览器打开一个链接（「检查更新 → 立即更新」下载 APK 走这里）。
+     * 用系统浏览器打开一个链接（0.1.12 起「检查更新」里的仓库 / 个人网页 /
+     * GitHub Releases 外链，以及用户从 Releases 下载 APK，都走这里）。
      *
      * 🔴 为什么不在 WebView 里直接跳：WebView 默认没有 DownloadListener，
      *    点一个 .apk 链接**什么都不会发生** —— 用户会以为按钮坏了。

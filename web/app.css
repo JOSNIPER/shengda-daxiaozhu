@@ -1932,10 +1932,29 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   padding-top: 10px;
 }
 
-/* ---------------- 检查更新 ----------------
-   开关是自己画的（<button class="switch">），不用 <input type=checkbox>：
-   系统默认的复选框在安卓 WebView 和桌面浏览器上长得完全不一样，
-   而这个开关要紧挨着「自动检查更新」几个字，形状必须两边一致。 */
+/* ---------------- 「检查更新」里的两个外链行 ----------------
+   0.1.12：这一屏不再做在线更新，只摆仓库 / 个人网页地址 + 一颗
+   「去 GitHub」按钮。地址整行可点，长 URL 用 overflow-wrap 断行，
+   免得一个 https 链接把弹层撑出屏幕。 */
+.sh-link {
+  display: block; width: 100%; padding: 11px 0;
+  border: 0; border-bottom: .5px solid var(--line);
+  background: transparent; color: var(--text);
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.sh-link:last-child { border-bottom: 0; }
+.sh-link:active { opacity: .6; }
+.sh-link .sk { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.sh-link .sl {
+  display: block; font-size: 12px; line-height: 1.5;
+  color: var(--accent); overflow-wrap: anywhere;
+}
+
+/* ---------------- 检查更新（历史样式） ----------------
+   0.1.12 起这一屏换成外链卡片，开关和频率选择都没了。下面 .switch 等样式
+   留着给其余弹层复用，别因为「检查更新里找不到它」就以为可以删。
+   原先自己画开关（不用 <input type=checkbox>）是为了安卓 WebView 和
+   桌面浏览器上形状一致。 */
 .switch {
   flex: 0 0 auto; position: relative;
   width: 46px; height: 27px; padding: 0; border: 0; border-radius: 999px;
@@ -2781,8 +2800,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .gradeitem + .gradeitem { margin-top: 4px; }
 .gradeitem:first-child { margin-top: 6px; }
 .gradeitem:last-child { margin-bottom: 6px; }
-/* 「还有 18 门没显示」那一行：它是个按钮，别包成数据块 */
-.gradelist > .cx-more { background: transparent; margin: 0; padding: 14px; }
+/* 0.1.12：成绩改成全量铺开，「还有 N 门没显示」按钮连同这条样式一起撤了。
+   长列表交给 #exViewGrade 自己的 .scroll。 */
 
 /* ------------------------------------------------------------------
    页面顶部的一团光
