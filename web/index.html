@@ -43,8 +43,10 @@
       <button class="wk-btn" id="wkPrev" aria-label="上一周">
         <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
-      <!-- 这一整块点了会打开「跳到第几周」弹层（里面还有校历、学期设置、
-           只看工作日、课程块配色）。▾ 是「能展开」的通用暗示。 -->
+      <!-- 0.1.13 定稿（用户纠错后）：跳周入口**只有这个标题按钮**——
+           它和右侧日历图标（wkJump）弹的是同一个窗，用户要删的是右边的
+           那颗，左侧标题保留可点。「第 N 周 + 日期范围」继续显示。
+           🔴 id 都保留：wkJump 收起（CSS），wkTitle 是唯一跳周入口。 -->
       <button class="wk-title" id="wkTitle" aria-label="跳到第几周">
         <span class="wk-t1">
           <b id="wkNum">第 1 周</b>
@@ -56,7 +58,9 @@
         <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
       </button>
 
-      <!-- ① 跳周（日历）：和点标题同一个弹层 -->
+      <!-- ① 跳周（日历）：0.1.13 收起 —— 和左侧标题（wkTitle）弹同一个窗，
+           重复入口，用户 2026-11-20：「不是让你删掉文字的按钮，是让你删掉
+           右边的按钮」。DOM/绑定保留，CSS display:none（同 wkPrev 方案）。 -->
       <button class="wk-btn wk-icon" id="wkJump" aria-label="跳到第几周">
         <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
       </button>
@@ -74,7 +78,9 @@
         <svg class="ico-day" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="5" rx="2"/><rect x="4" y="9.5" width="16" height="5" rx="2"/><rect x="4" y="16" width="16" height="5" rx="2"/></svg>
         <span id="wkViewLab">周</span>
       </button>
-      <!-- ④ 刷新课表 -->
+      <!-- ④ 刷新课表：0.1.13 起按用户要求收起（CSS display:none），刷新入口
+           只在「我的 → 同步教务处数据」。DOM 和 JS 绑定保留 —— renderSchedule
+           的同步流程还往这颗上加 .busy 转圈，id 一个不删（0.1.6 同款做法）。 -->
       <button class="wk-btn wk-icon" id="schRefresh" aria-label="刷新课表">
         <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>
       </button>
@@ -474,19 +480,9 @@
     <header class="pagehead"><h1>我的</h1></header>
 
     <div class="scroll">
-      <!-- 已绑定 -->
-      <!-- 账号管理**不受教务绑定影响**：里面是学校系统那一串账号
-           （教务 / 学习通 / 门户）。没绑教务的人也要能进去。 -->
-      <div class="card">
-        <button class="row tap" id="rowAccounts">
-          <span class="k">账号管理</span>
-          <span class="rowend">
-            <span class="v muted" id="meAccounts">—</span>
-            <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-            </span>
-          </button>
-        </div>
-
+      <!-- 已绑定。0.1.13 重排（用户：「我的页面重做，你程序设计一下布局」）：
+           头像卡置顶，原来单独一张的「账号管理」卡并进下面「账号与同步」卡。
+           账号管理**不受教务绑定影响**：没绑教务的人也要能进去。 -->
       <div id="meBound" hidden>
         <!-- 头像 + 个人信息原来是**两张卡**（头像卡 82 + 「个人信息」行 44 + 卡间距），
              合起来 138px 只说了一件事：我叫什么、哪个班、学号多少。
@@ -564,7 +560,18 @@
              ⚠️ 这些 id（meSid/meDept/…）已经不在页面上，改成由弹层按需生成 ——
                 别在 renderMe 里再去找它们，找到的是 null。 -->
 
+        <!-- 0.1.13 重排成两张卡：上面管「账号和数据」（账号管理 / 同步 / 学期），
+             下面管「这台手机上的体验」（显示 / 作息 / 校历）。
+             原来五张卡一屏铺下来全是平级行，找不到东西；
+             分组后每卡 2~4 行，一屏就能看全。 -->
         <div class="card">
+          <button class="row tap" id="rowAccounts">
+            <span class="k">账号管理</span>
+            <span class="rowend">
+              <span class="v muted" id="meAccounts">—</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </button>
           <button class="row tap" id="btnSync">
             <span class="k">同步教务处数据</span>
             <!-- 整行都能点，但光看「刚刚同步」四个灰字看不出来能点，
@@ -581,19 +588,17 @@
               <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
             </span>
           </button>
-          <!-- 校历和空教室原来**只能**从课表页顶部进：校历靠点「第 1 周」那行字，
-               空教室靠一扇门的图标 —— 两条都是「不点不知道，点了才知道」。
-               课表页那边已经补了文字和 ▾，这里再给一条纯文字的路径：
-               有人就是习惯从设置里找东西，不该逼他去猜图标。
-               🔴 0.35.0 起只留「校历」这一条：「找空教室」在课表页顶部已经有
-                  一个带字的按钮，两处都能进、两处都要维护，用户还得猜
-                  「这两个是不是同一个东西」。空教室是「第 N 周周几哪节空」，
-                  跟课表是同一件事的两面，入口就留在课表那边。
-                  校历留下，是因为它按学期算、跟「学期设置」挨着看更顺。 -->
-          <button class="row tap" id="rowCalendar">
-            <span class="k">校历</span>
+        </div>
+
+        <div class="card">
+          <!-- 0.1.13 显示设置：字体大小、课程块配色收进一个弹层（原跳周弹层里的
+               配色挪了过来）。摘要显示当前档位，点开即改，所见即所得。
+               🔴 课表页**不跟随**字体缩放 —— 格子宽度是物理约束，
+                  见 app.css 末尾「字体大小设置」区的说明。 -->
+          <button class="row tap" id="rowDisplay">
+            <span class="k">显示设置</span>
             <span class="rowend">
-              <span class="v muted">看这学期怎么排</span>
+              <span class="v muted" id="meDisplay">—</span>
               <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
             </span>
           </button>
@@ -602,6 +607,17 @@
           <button class="row tap" id="btnTimes">
             <span class="k">上课时间</span>
             <span class="v muted" id="meTimes">默认作息，可修改</span>
+          </button>
+          <!-- 校历和空教室原来**只能**从课表页顶部进：校历靠点「第 1 周」那行字，
+               空教室靠一扇门的图标 —— 两条都是「不点不知道，点了才知道」。
+               🔴 0.35.0 起只留「校历」这一条：「找空教室」在课表页顶部已经有
+                  一个带字的按钮，两处都能进、两处都要维护。 -->
+          <button class="row tap" id="rowCalendar">
+            <span class="k">校历</span>
+            <span class="rowend">
+              <span class="v muted">看这学期怎么排</span>
+              <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
           </button>
           <button class="row tap" id="btnHidden" hidden>
             <span class="k">已隐藏的课程</span>
@@ -619,9 +635,6 @@
              这么多地方，还容易让用户误触」。它原来是一整行红字，就压在「学期设置」
              和「校历」这些天天用的入口下面。
              现在只在「我的 → 账号管理 → 教务系统 → 解绑」那一处，一行小字。 -->
-        <div class="card">
-          <button class="row tap" id="btnClearCache">清除本机缓存</button>
-        </div>
       </div>
 
       <!-- 未绑定 -->
@@ -688,6 +701,9 @@
             <svg class="rowico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
           </span>
         </button>
+        <!-- 0.1.13 重排：清缓存从独立卡并进来 —— 低频动作，跟「检查更新」
+             同属「这台 App 自己的事」，不值得单独一张卡。 -->
+        <button class="row tap" id="btnClearCache">清除本机缓存</button>
         <!-- 0.39.1：原来这两句是「数据来自学校教务系统，只做读取，不会提交任何
              申请、选课或修改。账号密码只存在你电脑本地的服务里，不经过任何第三方
              服务器。」—— 第一句在说数据来源和保证，用户看不出跟自己有什么关系；
@@ -745,7 +761,10 @@
          2026-10-21 用户提出来「主流 App 底部最多 5 个」，于是把这两项收进课表页：
          校历点顶部周次、空教室点右上角的门图标。它们本来就是「同一时间维度的另一面」，
          收进去比留在底部更贴心智。底部固定 5 个，以后不要再加第 6 个。 -->
-    <button class="tab" data-tab="campus">
+    <!-- 0.1.13：功能页暂时隐藏（用户 2026-11-20）。tab 收起后底部剩
+         课表 / 学习 / 我的 三个；页面 DOM 和 switchTab('campus') 的编程调用
+         都保留，恢复时删掉 hidden 即可。 -->
+    <button class="tab" data-tab="campus" hidden>
       <!-- 0.38.0：这一格叫「功能」（用户：「把功能名字改成功能吧」）。
            图标跟着从「教学楼」换成四宫格 —— 楼是「校园」的意思，
            而这一页现在装的是饮水、一卡通、19 个办事入口、公告，

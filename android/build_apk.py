@@ -82,8 +82,8 @@ UPD_PAGE_BASE = "https://JOSNIPER.github.io/" + REPO   # GitHub Pages（待启�
 RELEASE_BASE = ("https://github.com/" + GITHUB_USER + "/" + REPO
                 + "/releases/download")
 
-VERSION_NAME = "0.1.12"
-VERSION_CODE = 72
+VERSION_NAME = "0.1.13"
+VERSION_CODE = 73
 PKG = "cc.ccwu.johan.daxiaozhu"
 MIN_SDK = 23
 TARGET_SDK = 33

@@ -187,6 +187,29 @@
      ⚠️ Android WebView 版本由系统决定，老机型（WebView < 139）不会有变化。
         这是「有则更好」，不是卖点。 */
   --corner-shape: round;
+
+  /* ---- 字号变量（0.1.13 字体大小设置）----
+     全文件 226 处 font-size 收敛到这 11 档（DESIGN.md 十二档规范里实际用到的，
+     18/21/24/30 三档没有出现，不定义空变量）。
+     「我的 → 字体大小」三档通过 html[data-fs] 覆盖这组值：
+       标准 ×1（默认）· 小 ×0.9 · 大 ×1.12（覆盖段在文件末尾「字体大小」区）。
+     🔴 档位值必须写成静态值，不能写成 `calc(13px * var(--fs-scale))`：
+        2026-11-20 无头 Chrome 实测，嵌套 var 在**定义处**就解析
+        （_lab/fs-probe.html：section 里 --s:2 仍得 10px 而非 20px），
+        「页面里重设系数」的回退方案不成立。
+        课表页的回退改用 #page-schedule 整组重定义（元素级重定义按计算值继承）。 */
+  --fs-8: 8px;
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-34: 34px;
+
   /* 卡片与卡片之间的距离。0.33.0 从 12 收到 8 —— 一页七八张卡，省下来
      就是一条能放下一行字的高度。2026-11-01 又放回 10：卡变大圆角之后，
      8px 的缝会让两张卡看起来粘在一起，圆角反而变成「锯齿」。 */
@@ -285,7 +308,7 @@ html, body {
   color: var(--text);
   font-family: -apple-system, "SF Pro Text", "PingFang SC", "MiSans",
                "Microsoft YaHei", sans-serif;
-  font-size: 15px; line-height: 1.4;
+  font-size: var(--fs-15); line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
 }
@@ -367,6 +390,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 翻周箭头：step() 与顶层绑定全保留，只在视觉上收起来。
    桌面/浏览器没有左右滑时，用跳周弹层里的「上一周 / 下一周」。 */
 #wkPrev, #wkNext { display: none; }
+/* 🔴 0.1.13 收起清单（用户 2026-11-20）：
+   · 刷新按钮 —— 刷新入口只在「我的 → 同步教务处数据」；
+   · 跳周日历图标 —— 它和左侧标题（wkTitle）弹同一个窗，用户要删的是
+     右边那颗（第一版理解反了删了标题，已纠正回来）。DOM/绑定都保留，
+     id 一个不删。 */
+#schRefresh, #wkJump { display: none; }
 
 /* 「空教室」按钮已随 0.1.5 删除；规则留着只兼容旧缓存页面，不参与本版顶栏。 */
 .wk-btn.wk-lab {
@@ -379,9 +408,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .wk-btn.wk-lab:active { background: var(--line); }
 .wk-btn.wk-lab svg { width: 15px; height: 15px; stroke-width: 2; color: var(--sub); }
-.wk-lab-t { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.wk-lab-t { font-size: var(--fs-12); font-weight: 500; white-space: nowrap; }
 
-/* ---- 标题：靠左、放大 ---- */
+/* ---- 标题：靠左、放大 ----
+   0.1.13 定稿：跳周入口只有这颗标题按钮（右侧日历图标收起，见上方清单）。
+   「第 N 周 + 日期范围」继续显示 —— renderWeek 每次翻周都会重写。 */
 .wk-title {
   flex: 1 1 auto; min-width: 0;
   display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15;
@@ -390,7 +421,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .wk-title:active { background: var(--line); }
 .wk-title .wk-t1 { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
-.wk-title b { font-size: 20px; font-weight: 700; letter-spacing: -.4px; white-space: nowrap; }
+.wk-title b { font-size: var(--fs-20); font-weight: 700; letter-spacing: -.4px; white-space: nowrap; }
 /* ▾ 是「点开有东西」的通用暗示：标题点开跳周弹层，校历/学期设置都在里面。 */
 .wk-caret {
   width: 13px; height: 13px; flex: 0 0 auto; margin-top: 4px;
@@ -398,7 +429,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   stroke-linecap: round; stroke-linejoin: round;
 }
 .wk-title .wk-range {
-  font-size: 10px; color: var(--sub); margin-top: 2px;
+  font-size: var(--fs-10); color: var(--sub); margin-top: 2px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
@@ -412,7 +443,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   .wk-btn.wk-lab { padding: 0; width: 30px; justify-content: center; }
 }
 
-/* ---- 4 颗等宽纯图标按钮 ---- */
+/* ---- 2 颗等宽纯图标按钮（0.1.13：刷新、跳周日历都收起后剩 今天 + 周·日切换） ---- */
 .wk-icon { color: var(--text); }
 /* 「已经在本周」淡一档（它仍是回到本周的入口，不能灰掉像坏按钮） */
 #wkToday.is-here { color: var(--sub); }
@@ -427,7 +458,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* JS 仍会往 wkViewLab 写「周/日」；纯图标版把它收起来，但 id 必须留着，
    否则 renderSchedule 里那行 $('wkViewLab').textContent 会抛错。 */
 #wkViewLab { display: none; }
-/* 跳周日历图标与其余三颗同宽，四颗连成一排 */
+/* 今天 + 周·日切换 两颗连成一排；跳周日历已收起（跳周入口在左侧标题） */
 #wkJump { color: var(--text); }
 
 /* ---------------- 课表网格 ---------------- */
@@ -485,7 +516,21 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   touch-action: pan-y;
 }
 
-.g-corner { grid-column: 1; grid-row: 1; }
+.g-corner {
+  grid-column: 1; grid-row: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+/* 0.1.13 月份角标（用户：「把“11月”放在周一的左边」）。
+   整周同月一行「11月」；跨月两行「10月 / 11月」—— 同时表头回退完整格式。
+   30px 宽的角格只放得下 fs-10；颜色用 --faint，它是辅助信息，
+   比「周一」还淡，别抢表头的戏。 */
+.g-mon {
+  font-size: var(--fs-10); color: var(--faint);
+  line-height: 1.25; text-align: center; white-space: nowrap;
+}
+/* 0.1.13 定稿：角标永远单行（周一所在月），跨月周不再写两行 ——
+   表头「30 1 2 3」紧跟排列，次月人人都认得（用户原话）。 */
+.g-mon { font-variant-numeric: tabular-nums; }
 
 /* 今天那一列的「泳道」底色。5% 就够 —— 再深就会把上面色块的颜色也带偏，
    同一门课在别的列和这一列看起来就不像同一个颜色了。 */
@@ -507,11 +552,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: var(--r-ctl);
 }
 .g-day b {
-  font-size: 10px; font-weight: 500; color: var(--sub);
+  font-size: var(--fs-10); font-weight: 500; color: var(--sub);
   letter-spacing: .5px;
 }
 .g-day .dnum {
-  font-size: 12px; font-weight: 600; color: var(--text);
+  /* 0.1.13：日期简化成裸日号后宽度富余，字号从 fs-12 提到 fs-13；
+     跨月周「30 1 2」混排同宽居中，无前导零（iOS 日历同款）。 */
+  font-size: var(--fs-13); font-weight: 600; color: var(--text);
   font-variant-numeric: tabular-nums; letter-spacing: -.2px;
   padding: 1px 4px; border-radius: var(--r-chip);
 }
@@ -527,9 +574,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   color: var(--sub); border-radius: var(--r-chip); line-height: 1.05; gap: 1px;
 }
 /* 三行：节次 / 开始 / 结束（WakeUp 的排法，一眼能看出上到几点） */
-.g-slot b { font-size: 12px; font-weight: 600; color: var(--text); opacity: .82; }
+.g-slot b { font-size: var(--fs-12); font-weight: 600; color: var(--text); opacity: .82; }
 .g-slot i {
-  font-size: 8px; font-style: normal; opacity: .68;
+  font-size: var(--fs-8); font-style: normal; opacity: .68;
   letter-spacing: -.3px; font-variant-numeric: tabular-nums;
 }
 
@@ -584,7 +631,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
               0 5px 12px -6px rgba(56, 42, 40, .30);
 }
 .g-block .bn {
-  font-size: 13px; font-weight: 600; line-height: 1.18;
+  font-size: var(--fs-13); font-weight: 600; line-height: 1.18;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; word-break: break-all;
   /* 折行尽量「两头一样长」。不写的话「线性代数」会断成「线性代 / 数」，
@@ -602,25 +649,33 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 🔴 教室别用 nowrap + ellipsis。列宽只有 46~50px，`@01B104` 被截成
    `@01B…` 就等于没写 —— 学生最需要的就是那个房间号。
    所以：放得下就一行（`@01B 104`），放不下允许折行，最多两行。 */
+/* 0.1.13 教室贴底 + 提亮（学第三方课表的层级：课名 > 教室 > 老师）。
+   DOM 顺序已改为 老师 → 教室（app.js renderSchedule）：
+   margin-top:auto 把教室压到块底，连堂块越高、整列教室号越对齐，
+   「下一节去哪」扫一眼就有答案；字号提一档、完全不透明、中字重，跟老师拉开主次。 */
 .g-block .br {
-  font-size: 10px; line-height: 1.15; opacity: .85;
+  margin-top: 0;
+  font-size: var(--fs-11); line-height: 1.15; opacity: 1; font-weight: 500;
   /* 🔴 不能用 break-all：`@01B 104` 会被切成「@01B 10 / 4」，
      房间号断在中间比截断还糟。只在空格处折行。 */
   word-break: normal; overflow-wrap: break-word;
   max-height: 2.4em; overflow: hidden;
-  margin-top: 1px;
   flex: 0 0 auto;
 }
+/* 第一间教室（.brf 由 JS 挂）吃 auto —— 贴底的是「教室那一组」整体。
+   🔴 不能每个 .br 都给 auto：flex 会把剩余空间平分成多条缝，两间教室被拆开。 */
+.g-block .br.brf { margin-top: auto; padding-top: 2px; }
 /* 一门课给了两个教室（`02B506(D机房),02B505(C机房)`）时，教室行会变成两行。
    压小半档、行高压紧，两行教室 + 课名 + 老师才塞得进 56px 的单节格。
    两行时楼栋和房间号之间的空格也去掉了（见 buildWeekGrid），所以这里
    锁死 nowrap：再折行就真的塞不下了（360dp 实测会溢出 10px）。 */
 .g-block .br2 {
-  font-size: 10px; line-height: 1.08; max-height: 1.2em; margin-top: 0;
+  font-size: var(--fs-10); line-height: 1.08; max-height: 1.2em;
   white-space: nowrap;
 }
+/* 老师再退一档：教室贴底提亮后，老师是三项里最弱的（第三方课表同款层级） */
 .g-block .bt {
-  font-size: 10px; line-height: 1.15; opacity: .8;
+  font-size: var(--fs-10); line-height: 1.15; opacity: .6;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
 }
@@ -643,7 +698,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .g-block .more {
   position: absolute; right: 3px; top: 3px;
-  font-size: 10px; padding: 0 3px; border-radius: var(--r-chip);
+  font-size: var(--fs-10); padding: 0 3px; border-radius: var(--r-chip);
   background: rgba(0, 0, 0, .12);
 }
 
@@ -662,8 +717,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: grid; place-items: center; margin-bottom: 14px;
 }
 .empty-ico svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.empty h2 { font-size: 17px; margin: 0 0 6px; font-weight: 600; letter-spacing: -.2px; }
-.empty p { font-size: 13px; color: var(--sub); margin: 0 0 20px; max-width: 260px; line-height: 1.55; }
+.empty h2 { font-size: var(--fs-17); margin: 0 0 6px; font-weight: 600; letter-spacing: -.2px; }
+.empty p { font-size: var(--fs-13); color: var(--sub); margin: 0 0 20px; max-width: 260px; line-height: 1.55; }
 /* 「直接同步」按钮里的学号，跟按钮文案之间要有分隔，否则糊成一片 */
 #goQuick .qwho { font-weight: 500; opacity: .75; }
 #goQuick .qwho::before { content: "· "; }
@@ -672,7 +727,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* ---------------- 通用 ---------------- */
 .btn {
   height: 46px; padding: 0 20px; border: 0; border-radius: var(--r-ctl);
-  font-size: 15px; font-weight: 600; font-family: inherit;
+  font-size: var(--fs-15); font-weight: 600; font-family: inherit;
   background: var(--rule); color: var(--text);
 }
 /* 主按钮用近黑（深色下反相成白底黑字），不用品牌蓝铺满。
@@ -710,7 +765,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    旧规范是 21/650 —— 那是「页面标题」，不是「大标题」：
    Apple 的做法是把标题做成**一屏最大的那块**，用户一眼知道在哪一页。
    字距 -.7px 是跟着字号走的：34px 下不收紧，中文字会显得松。 */
-.pagehead h1 { font-size: 34px; margin: 0; font-weight: 700; letter-spacing: -.7px; line-height: 1.14; }
+.pagehead h1 { font-size: var(--fs-34); margin: 0; font-weight: 700; letter-spacing: -.7px; line-height: 1.14; }
 
 .card {
   /* 半透明白 + 背景模糊 = 真玻璃。参考项目的卡是**不透**的纯白，
@@ -744,7 +799,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
      而 1px 用 padding 调会把行距全带偏，所以直接给 min-height。 */
   min-height: 44px;
   border-bottom: .5px solid var(--line);
-  font-size: 15px; width: 100%;
+  font-size: var(--fs-15); width: 100%;
   background: transparent; border-left: 0; border-right: 0; border-top: 0;
   color: var(--text); font-family: inherit; text-align: left;
 }
@@ -752,7 +807,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .row.tap:active { background: var(--line); }
 .row .k { color: var(--text); flex: 0 0 auto; }
 .row .v { color: var(--sub); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .v.muted { color: var(--sub); font-size: 13px; }
+.row .v.muted { color: var(--sub); font-size: var(--fs-13); }
 .rowend { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .rowico {
   width: 15px; height: 15px; flex: 0 0 auto; color: var(--sub);
@@ -761,7 +816,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .row.danger { color: var(--danger); justify-content: center; font-weight: 500; }
 
-.hint { font-size: 13px; color: var(--sub); padding: 0 16px 12px; line-height: 1.45; }
+.hint { font-size: var(--fs-13); color: var(--sub); padding: 0 16px 12px; line-height: 1.45; }
 
 /* ---------------- 成绩 ---------------- */
 .sumcard {
@@ -770,15 +825,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; gap: 16px;
 }
 .sum-main { flex: 1 1 auto; display: flex; flex-direction: column; }
-.sum-label { font-size: 13px; color: var(--sub); }
-.sum-main b { font-size: 34px; font-weight: 700; letter-spacing: -.5px; line-height: 1.1; }
+.sum-label { font-size: var(--fs-13); color: var(--sub); }
+.sum-main b { font-size: var(--fs-34); font-weight: 700; letter-spacing: -.5px; line-height: 1.1; }
 /* 绩点用主色写。参考项目里所有「这一页最重要的那个数」都上色 ——
    黑字大数字只是大，上色的数字才会先被看见。 */
 .sum-main b { color: var(--accent); }
 .sum-side { display: flex; gap: 20px; }
 .sum-side div { display: flex; flex-direction: column; align-items: center; }
-.sum-side b { font-size: 17px; font-weight: 600; }
-.sum-side span { font-size: 11px; color: var(--sub); }
+.sum-side b { font-size: var(--fs-17); font-weight: 600; }
+.sum-side span { font-size: var(--fs-11); color: var(--sub); }
 
 /* ---------------- 「现在这节 / 下一节」 ---------------- */
 
@@ -788,23 +843,23 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
      以前是 14px（合计 21px），比卡片多出一截，看着像两套排版。 */
   margin: 0 8px 8px; padding: 10px 12px;
   background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 .daynext.live { background: var(--accent-soft); box-shadow: none; }
 .dn-tag {
-  flex: 0 0 auto; font-size: 10px; font-weight: 600;
+  flex: 0 0 auto; font-size: var(--fs-10); font-weight: 600;
   color: var(--accent); background: var(--accent-soft);
   padding: 2px 8px; border-radius: var(--r-chip); white-space: nowrap;
 }
 .daynext.live .dn-tag { background: var(--accent); color: var(--primary-ink); }
 .dn-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .dn-main b {
-  font-size: 13px; font-weight: 600;
+  font-size: var(--fs-13); font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dn-main em { font-style: normal; font-size: 11px; color: var(--sub); }
+.dn-main em { font-style: normal; font-size: var(--fs-11); color: var(--sub); }
 .dn-side {
-  flex: 0 0 auto; font-size: 12px; color: var(--sub);
+  flex: 0 0 auto; font-size: var(--fs-12); color: var(--sub);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .daynext.live .dn-side { color: var(--accent); font-weight: 600; }
@@ -821,14 +876,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .todocard.bare { padding: 8px 16px; }
 .todocard.bare .todohd { margin-bottom: 0; min-height: 32px; }
 .todohd { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-.todotitle { flex: 1 1 auto; font-size: 15px; font-weight: 600; }
+.todotitle { flex: 1 1 auto; font-size: var(--fs-15); font-weight: 600; }
 /* 32px：卡片头里的紧凑控件。规范给的中位控件高是 34，
    28 是原来手写的，按上去发飘。 */
 .todobtn {
   flex: 0 0 auto; height: 32px; padding: 0 12px;
   border: 1px solid var(--line-strong); border-radius: 999px;
   background: transparent; color: var(--accent);
-  font-family: inherit; font-size: 13px; font-weight: 500;
+  font-family: inherit; font-size: var(--fs-13); font-weight: 500;
   cursor: pointer;
 }
 .todobtn:disabled { color: var(--sub); cursor: default; }
@@ -876,15 +931,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   width: 8px; height: 8px;
 }
 .todo-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.todo-name { font-size: 15px; font-weight: 550; }
-.todo-text { font-size: 13px; color: var(--sub); line-height: 1.5; }
-.todo-detail { font-size: 11px; color: var(--sub); opacity: .85; line-height: 1.5; }
-.todo-tag { flex: 0 0 auto; font-size: 11px; color: var(--sub); padding-top: 3px; }
+.todo-name { font-size: var(--fs-15); font-weight: 550; }
+.todo-text { font-size: var(--fs-13); color: var(--sub); line-height: 1.5; }
+.todo-detail { font-size: var(--fs-11); color: var(--sub); opacity: .85; line-height: 1.5; }
+.todo-tag { flex: 0 0 auto; font-size: var(--fs-11); color: var(--sub); padding-top: 3px; }
 .todo-item.on .todo-tag { color: var(--accent); font-weight: 600; }
-.todo-msg { font-size: 13px; color: var(--sub); line-height: 1.65; padding: 8px 0 2px; }
+.todo-msg { font-size: var(--fs-13); color: var(--sub); line-height: 1.65; padding: 8px 0 2px; }
 .todo-msg.bad { color: var(--danger); }
 .todo-foot {
-  font-size: 11px; color: var(--sub); line-height: 1.65;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.65;
   margin: 6px 0 0; padding-top: 8px; border-top: .5px solid var(--line);
 }
 
@@ -898,12 +953,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .crhero-top { display: flex; align-items: baseline; gap: 6px; }
 .crhero-top b {
-  font-size: 34px; font-weight: 700; letter-spacing: -.5px; line-height: 1;
+  font-size: var(--fs-34); font-weight: 700; letter-spacing: -.5px; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.crhero-top span { font-size: 13px; color: var(--sub); }
+.crhero-top span { font-size: var(--fs-13); color: var(--sub); }
 .crhero-top i {
-  margin-left: auto; font-style: normal; font-size: 15px; font-weight: 600;
+  margin-left: auto; font-style: normal; font-size: var(--fs-15); font-weight: 600;
   color: var(--accent); font-variant-numeric: tabular-nums;
 }
 .crbar {
@@ -911,7 +966,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   margin: 14px 0 8px; overflow: hidden;
 }
 .crbar i { display: block; height: 100%; border-radius: var(--r-chip); background: var(--accent); }
-.crhero-sub { font-size: 11px; color: var(--sub); line-height: 1.5; }
+.crhero-sub { font-size: var(--fs-11); color: var(--sub); line-height: 1.5; }
 
 .crcats {
   background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
@@ -920,9 +975,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .crcat { padding: 12px 0; border-bottom: .5px solid var(--line); }
 .crcat:last-child { border-bottom: 0; }
 .crcat-top { display: flex; align-items: baseline; gap: 8px; }
-.crcat-n { flex: 1 1 auto; font-size: 15px; font-weight: 550; min-width: 0; }
+.crcat-n { flex: 1 1 auto; font-size: var(--fs-15); font-weight: 550; min-width: 0; }
 .crcat-v {
-  flex: 0 0 auto; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+  flex: 0 0 auto; font-size: var(--fs-15); font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .crcat-v em { font-style: normal; font-weight: 400; color: var(--sub); }
 .crcat-bar {
@@ -932,7 +987,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .crcat-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .crcat.full .crcat-bar i { background: var(--ok); }
 .crcat.full .crcat-v { color: var(--ok); }
-.crcat-meta { font-size: 11px; color: var(--sub); }
+.crcat-meta { font-size: var(--fs-11); color: var(--sub); }
 .crcat-bad { color: var(--danger); }
 
 .crcard {
@@ -940,24 +995,24 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   padding: 14px 16px; margin-bottom: 12px;
 }
 .crcard-h { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-.crcard-t { flex: 1 1 auto; font-size: 13px; font-weight: 600; }
-.crcard-n { flex: 0 0 auto; font-size: 13px; color: var(--sub); }
+.crcard-t { flex: 1 1 auto; font-size: var(--fs-13); font-weight: 600; }
+.crcard-n { flex: 0 0 auto; font-size: var(--fs-13); color: var(--sub); }
 .crcard-bad .crcard-t { color: var(--danger); }
 .crcard-f {
-  font-size: 11px; color: var(--sub); line-height: 1.65;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.65;
   margin-top: 8px; padding-top: 8px; border-top: .5px solid var(--line);
 }
 
-.crline { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; font-size: 13px; }
+.crline { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; font-size: var(--fs-13); }
 .crline + .crline { border-top: .5px solid var(--line); }
 .crline-n { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
 .crline-v { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .crline-q {
-  font-style: normal; font-size: 11px; color: var(--warn-text);
+  font-style: normal; font-size: var(--fs-11); color: var(--warn-text);
   background: var(--warn-bg); padding: 1px 4px; border-radius: var(--r-chip);
   margin-left: 4px; white-space: nowrap;
 }
-.crgroup { font-size: 11px; color: var(--sub); margin: 10px 0 1px; }
+.crgroup { font-size: var(--fs-11); color: var(--sub); margin: 10px 0 1px; }
 .crgroup:first-of-type { margin-top: 6px; }
 
 .crtoggle { cursor: pointer; }
@@ -970,7 +1025,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 各类小计 ≠ 全程总计时的说明。不能做成警告色 ——
    这是教务系统的表格本来就这样，不是出错。 */
 .crnote {
-  font-size: 11px; color: var(--sub); line-height: 1.7;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.7;
   padding: 0 4px 12px;
 }
 
@@ -984,7 +1039,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: 999px; border: .5px solid rgba(56, 42, 40, .06);
   background: var(--card); color: var(--sub);
   box-shadow: 0 1px 2px rgba(56, 42, 40, .05);
-  font-size: 13px; font-family: inherit;
+  font-size: var(--fs-13); font-family: inherit;
 }
 /* 🔴 选中态在 2026-11-01 改回「蓝糖果」：
      上一版为了「一屏只有一个彩色控件」把选中做成了中性灰，
@@ -1002,11 +1057,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .gradeitem:last-child { border-bottom: 0; }
 .gi-main { flex: 1 1 auto; min-width: 0; }
-.gi-name { font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gi-meta { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.gi-name { font-size: var(--fs-15); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gi-meta { font-size: var(--fs-11); color: var(--sub); margin-top: 2px; }
 .gi-score { text-align: right; flex: 0 0 auto; }
-.gi-score b { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
-.gi-score span { display: block; font-size: 11px; color: var(--sub); margin-top: -1px; }
+.gi-score b { font-size: var(--fs-17); font-weight: 700; letter-spacing: -.3px; }
+.gi-score span { display: block; font-size: var(--fs-11); color: var(--sub); margin-top: -1px; }
 .s-good b { color: #1f8a5b; }
 .s-mid b { color: #b07a12; }
 .s-bad b { color: var(--danger); }
@@ -1014,7 +1069,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 「计划外 / 替代」小标签。只在这两种情况下打 ——
    计划内的课什么都不写，副行里本来就有「必修课 / 选修课」。 */
 .gitag {
-  display: inline-block; font-style: normal; font-size: 11px; line-height: 1.6;
+  display: inline-block; font-style: normal; font-size: var(--fs-11); line-height: 1.6;
   padding: 0 4px; border-radius: var(--r-chip); margin-left: 4px;
   vertical-align: 1px; white-space: nowrap;
 }
@@ -1027,14 +1082,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   padding: 8px 16px; margin-bottom: var(--gap-card);
 }
 .gpt-hd { display: flex; align-items: baseline; justify-content: space-between; }
-.gpt-hd span { font-size: 13px; font-weight: 600; }
-.gpt-d { font-style: normal; font-size: 13px; font-weight: 600; }
+.gpt-hd span { font-size: var(--fs-13); font-weight: 600; }
+.gpt-d { font-style: normal; font-size: var(--fs-13); font-weight: 600; }
 /* 涨了绿、掉了红 —— 这里不是股票，别套「红涨绿跌」。 */
 .gpt-d.up { color: var(--ok); }
 .gpt-d.down { color: var(--danger); }
 .gpt-bars { display: flex; align-items: flex-end; gap: 6px; margin-top: 6px; }
 .gpt-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
-.gpt-col b { font-size: 13px; font-weight: 700; letter-spacing: -.3px; }
+.gpt-col b { font-size: var(--fs-13); font-weight: 700; letter-spacing: -.3px; }
 .gpt-track {
   width: 100%; height: 32px; margin-top: 2px;
   display: flex; align-items: flex-end; justify-content: center;
@@ -1044,7 +1099,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: var(--r-chip) var(--r-chip) 2px 2px; background: var(--accent); opacity: .85;
 }
 .gpt-col span {
-  font-size: 11px; color: var(--sub); margin-top: 4px;
+  font-size: var(--fs-11); color: var(--sub); margin-top: 4px;
   max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -1054,7 +1109,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   flex: 1 1 auto; min-width: 0; height: 36px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--card); color: var(--text);
-  padding: 0 12px; font-size: 13px; font-family: inherit;
+  padding: 0 12px; font-size: var(--fs-13); font-family: inherit;
   -webkit-appearance: none; appearance: none;
 }
 .grfind-in::placeholder { color: var(--sub); }
@@ -1065,7 +1120,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   flex: 0 0 auto; height: 36px; padding: 0 12px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--card); color: var(--sub);
-  font-size: 13px; font-family: inherit; white-space: nowrap;
+  font-size: var(--fs-13); font-family: inherit; white-space: nowrap;
 }
 .grfind-sort.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 @media (prefers-color-scheme: dark) {
@@ -1099,7 +1154,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   flex: 1 1 0; height: 32px;
   border: 0; border-radius: var(--r-ctl); background: transparent;
   color: var(--sub); font-family: inherit;
-  font-size: 13px; font-weight: 500;
+  font-size: var(--fs-13); font-weight: 500;
 }
 /* 选中的那颗：白面 + 影子 + 蓝字。蓝字是这次的改动 ——
    参考项目里「当前这一格」永远是主色，不是黑字。 */
@@ -1113,14 +1168,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    一行字比转圈更让人安心（知道它在干什么，而不是卡死了）。 */
 .exloading {
   padding: 44px 24px; text-align: center;
-  font-size: 13px; color: var(--sub);
+  font-size: var(--fs-13); color: var(--sub);
 }
 
 /* 后台补取其他学期考试的进度条。故意做得比正文淡：
    它是「顺手告诉你一声」，不该跟考试内容抢注意力。 */
 .expf {
   margin: 2px 2px 10px;
-  font-size: 11px; color: var(--sub);
+  font-size: var(--fs-11); color: var(--sub);
   display: flex; align-items: center; gap: 6px;
 }
 .expf::before {
@@ -1136,11 +1191,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; justify-content: space-between;
 }
 .exsum-main { display: flex; align-items: baseline; gap: 4px; }
-.exsum-main span { font-size: 13px; color: var(--sub); }
-.exsum-main b { font-size: 22px; font-weight: 700; letter-spacing: -.5px; line-height: 1.1; }
+.exsum-main span { font-size: var(--fs-13); color: var(--sub); }
+.exsum-main b { font-size: var(--fs-22); font-weight: 700; letter-spacing: -.5px; line-height: 1.1; }
 .exsum-side { display: flex; flex-direction: column; align-items: flex-end; }
-.exsum-side b { font-size: 17px; font-weight: 600; color: var(--accent); }
-.exsum-side span { font-size: 11px; color: var(--sub); }
+.exsum-side b { font-size: var(--fs-17); font-weight: 600; color: var(--accent); }
+.exsum-side span { font-size: var(--fs-11); color: var(--sub); }
 
 .exlist { display: flex; flex-direction: column; gap: 10px; }
 .exitem {
@@ -1158,7 +1213,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; min-height: 44px; padding: 10px 14px;
   background: none; border: 0; font: inherit;
-  font-size: 13px; color: var(--sub); text-align: left;
+  font-size: var(--fs-13); color: var(--sub); text-align: left;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .exfold i { font-style: normal; color: var(--accent); font-weight: 500; }
@@ -1170,22 +1225,22 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-right: .5px solid var(--line);
   padding-right: 10px; margin-right: 2px;
 }
-.exdate b { font-size: 15px; font-weight: 700; letter-spacing: -.4px; }
+.exdate b { font-size: var(--fs-15); font-weight: 700; letter-spacing: -.4px; }
 /* 日期不是「5/16」而是「未安排 / 待定」时：17px 会把三个字折成两行 */
-.exdate.txt b { font-size: 13px; letter-spacing: 0; white-space: nowrap; }
-.exdate span { font-size: 11px; color: var(--sub); margin-top: 1px; }
+.exdate.txt b { font-size: var(--fs-13); letter-spacing: 0; white-space: nowrap; }
+.exdate span { font-size: var(--fs-11); color: var(--sub); margin-top: 1px; }
 /* 「还有几天」：日期列里的第三行。
    列宽只有 37px（48 减去右边框和 padding），所以字号压到 9.5px 且不换行 ——
    「10天后」四个字刚好放得下，再多一个字就会被挤成两行、把日期块撑歪。 */
 .exdate .excd {
-  font-style: normal; font-size: 11px; line-height: 1.35;
+  font-style: normal; font-size: var(--fs-11); line-height: 1.35;
   color: var(--sub); margin-top: 2px; white-space: nowrap;
 }
 .exdate .excd.soon { color: var(--accent); font-weight: 600; }
 .exmain { flex: 1 1 auto; min-width: 0; }
-.exname { font-size: 15px; font-weight: 600; line-height: 1.35; }
-.exmeta { font-size: 11px; color: var(--sub); margin-top: 3px; }
-.exrow { display: flex; gap: 8px; font-size: 13px; margin-top: 4px; }
+.exname { font-size: var(--fs-15); font-weight: 600; line-height: 1.35; }
+.exmeta { font-size: var(--fs-11); color: var(--sub); margin-top: 3px; }
+.exrow { display: flex; gap: 8px; font-size: var(--fs-13); margin-top: 4px; }
 .exrow i { flex: 0 0 auto; color: var(--sub); font-style: normal; }
 .exrow span { min-width: 0; word-break: break-word; }
 
@@ -1196,7 +1251,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: block; margin: 8px 0 0 auto;
   padding: 4px 12px; border: 0; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
-  font: inherit; font-size: 13px; font-weight: 600;
+  font: inherit; font-size: var(--fs-13); font-weight: 600;
   cursor: pointer;
 }
 .excal:active { opacity: .7; }
@@ -1207,11 +1262,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .rmq { padding: 12px 14px 14px; }
 .rmq-row { display: flex; align-items: flex-start; gap: 8px; }
 .rmq-k {
-  flex: 0 0 28px; font-size: 13px; color: var(--sub);
+  flex: 0 0 28px; font-size: var(--fs-13); color: var(--sub);
   padding-top: 8px; line-height: 1;
 }
 .rmq-chips { flex: 1 1 auto; min-width: 0; padding: 0 0 10px; }
-.rmq .chip { height: 32px; padding: 0 12px; font-size: 13px; }
+.rmq .chip { height: 32px; padding: 0 12px; font-size: var(--fs-13); }
 /* 节次用 3 列网格，不用横向滚动。
    块数按学校节数走（郑航 10 节 = 5 块，别的学校可能 12 节 = 6 块），
    所以行数会是 2 行（5~6 块）—— 网格自动换行，不用写死。
@@ -1245,10 +1300,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: none; font: inherit; color: var(--text); text-align: left;
 }
 .rmpick:active { background: var(--line); }
-.rmpick .k { flex: 0 0 auto; font-size: 13px; color: var(--sub); }
+.rmpick .k { flex: 0 0 auto; font-size: var(--fs-13); color: var(--sub); }
 .rmpick .v {
   flex: 1 1 auto; min-width: 0; text-align: right;
-  font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--fs-15); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rmpick .v.muted { color: var(--sub); }
 .rmpick svg {
@@ -1259,29 +1314,29 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 .rmfield { display: block; padding-top: 12px; }
 .rmfield span {
-  display: block; font-size: 11px; color: var(--sub); margin-bottom: 6px;
+  display: block; font-size: var(--fs-11); color: var(--sub); margin-bottom: 6px;
 }
 .rmfield input {
   width: 100%; height: 44px; padding: 0 12px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--bg); color: var(--text);
-  font-family: inherit; font-size: 15px;
+  font-family: inherit; font-size: var(--fs-15);
 }
 .rmfield input:focus { outline: none; border-color: var(--accent); }
-.rmfilter .rmfilter-err { font-size: 11px; color: var(--danger); line-height: 1.5; padding: 10px 0; }
+.rmfilter .rmfilter-err { font-size: var(--fs-11); color: var(--danger); line-height: 1.5; padding: 10px 0; }
 
-.rmloading { padding: 32px 24px; text-align: center; font-size: 13px; color: var(--sub); }
+.rmloading { padding: 32px 24px; text-align: center; font-size: var(--fs-13); color: var(--sub); }
 .rmfirst { padding: 24px 24px 0; }
-.rmfirst h2 { font-size: 15px; }
+.rmfirst h2 { font-size: var(--fs-15); }
 .rmfirst p { margin-bottom: 0; }
 
-.rmsum { font-size: 13px; color: var(--sub); padding: 2px 3px 8px; line-height: 1.5; }
-.rmsum b { color: var(--text); font-size: 15px; font-weight: 650; }
+.rmsum { font-size: var(--fs-13); color: var(--sub); padding: 2px 3px 8px; line-height: 1.5; }
+.rmsum b { color: var(--text); font-size: var(--fs-15); font-weight: 650; }
 .rmsum i { font-style: normal; }
 
 /* 容量那句吐槽：跟在统计下面，比结果列表更早看到 —— 免得先怀疑我们算错 */
 .rmnote {
-  font-size: 11px; color: var(--sub); line-height: 1.6;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.6;
   padding: 0 3px 10px;
 }
 
@@ -1298,16 +1353,16 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 教室名里有学校自己加的括号备注（「08A402（仪器储藏室）」），
    一行放不下就省略 —— 换行会把每一行撑成两行，两百个教室翻起来没完。 */
 .rm-name {
-  font-size: 15px; font-weight: 600; line-height: 1.3;
+  font-size: var(--fs-15); font-weight: 600; line-height: 1.3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rm-meta {
-  font-size: 11px; color: var(--sub); margin-top: 2px;
+  font-size: var(--fs-11); color: var(--sub); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rm-cap { flex: 0 0 auto; text-align: right; min-width: 34px; }
-.rm-cap b { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.rm-cap span { display: block; font-size: 11px; color: var(--sub); margin-top: -1px; }
+.rm-cap b { font-size: var(--fs-15); font-weight: 650; font-variant-numeric: tabular-nums; }
+.rm-cap span { display: block; font-size: var(--fs-11); color: var(--sub); margin-top: -1px; }
 
 /* 「停课」这类状态行。学校会把它混在结果表里，
    不画成教室，也不能悄悄吞掉 —— 单独说一句「学校返回了这个」。 */
@@ -1315,9 +1370,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: var(--warn-bg); border: 1px solid var(--warn-line);
   color: var(--warn-text); border-radius: var(--r); corner-shape: var(--corner-shape);
   padding: 10px 12px; margin-bottom: 10px;
-  font-size: 13px; line-height: 1.5;
+  font-size: var(--fs-13); line-height: 1.5;
 }
-.rmtrunc { font-size: 11px; color: var(--sub); padding: 10px 3px 0; line-height: 1.5; }
+.rmtrunc { font-size: var(--fs-11); color: var(--sub); padding: 10px 3px 0; line-height: 1.5; }
 
 /* ---------------- 我的 ---------------- */
 /* 头像卡 = 个人信息入口（0.33.0 合并）。整张卡可点，右边用箭头暗示。
@@ -1332,7 +1387,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   width: 44px; height: 44px; border-radius: var(--r-ctl); flex: 0 0 auto;
   background: var(--accent-grad); color: var(--primary-ink);
   box-shadow: var(--accent-glow);
-  display: grid; place-items: center; font-size: 17px; font-weight: 600;
+  display: grid; place-items: center; font-size: var(--fs-17); font-weight: 600;
 }
 .pinfo { flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 /* 姓名 + 学号 一行（学号靠右）：正文抬到 17px 之后，学号原来单独占一列，
@@ -1340,30 +1395,30 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .prow { display: flex; align-items: baseline; justify-content: space-between;
         gap: 8px; min-width: 0; }
 .prow b {
-  font-size: 15px; font-weight: 600; min-width: 0;
+  font-size: var(--fs-15); font-weight: 600; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pinfo .pmeta {
-  font-size: 13px; color: var(--sub);
+  font-size: var(--fs-13); color: var(--sub);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* 学号靠右，等宽数字 */
 .profilecard .pid {
-  flex: 0 0 auto; font-size: 11px; color: var(--sub);
+  flex: 0 0 auto; font-size: var(--fs-11); color: var(--sub);
   font-variant-numeric: tabular-nums;
 }
 
 .bindcard { padding: 16px 16px; }
-.bindcard h2 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
-.bindcard .sub { font-size: 13px; color: var(--sub); margin: 0 0 16px; line-height: 1.55; }
+.bindcard h2 { font-size: var(--fs-17); margin: 0 0 4px; font-weight: 600; }
+.bindcard .sub { font-size: var(--fs-13); color: var(--sub); margin: 0 0 16px; line-height: 1.55; }
 
 .field { display: block; margin-bottom: 12px; }
-.field span { display: block; font-size: 13px; color: var(--sub); margin-bottom: 4px; }
+.field span { display: block; font-size: var(--fs-13); color: var(--sub); margin-bottom: 4px; }
 .field input {
   width: 100%; height: 44px; padding: 0 12px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--bg); color: var(--text);
-  font-size: 15px; font-family: inherit;
+  font-size: var(--fs-15); font-family: inherit;
 }
 .field input:focus { outline: none; border-color: var(--accent); }
 
@@ -1411,14 +1466,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center;
   min-height: 32px; margin: -6px 0 14px; padding: 0;
   border: 0; background: none; font-family: inherit;
-  font-size: 13px; color: var(--accent); cursor: pointer; text-align: left;
+  font-size: var(--fs-13); color: var(--accent); cursor: pointer; text-align: left;
 }
-.pwdlost::after { content: "›"; margin-left: 4px; font-size: 15px; opacity: .7; }
+.pwdlost::after { content: "›"; margin-left: 4px; font-size: var(--fs-15); opacity: .7; }
 
 /* 「忘记密码」下面那句补充说明（教务的重置页只认绑过的邮箱）。
    要贴着链接：`.pwdlost` 自己有 14px 下边距，`.bindcard .sub` 又有 16px
    下边距，不抵消的话这一行会孤零零地飘在中间。 */
-.bindcard .pwdhint { margin: -8px 0 14px; font-size: 13px; line-height: 1.5; }
+.bindcard .pwdhint { margin: -8px 0 14px; font-size: var(--fs-13); line-height: 1.5; }
 
 /* 「密码已保存」那一行：长得像输入框，其实是个按钮（点一下切成手动输入）。
    用按钮而不是把输入框禁用掉，是因为用户得能一眼看出「这里能改」——
@@ -1428,14 +1483,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; gap: 8px; text-align: left;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--bg); color: var(--text);
-  font-family: inherit; font-size: 15px; cursor: pointer;
+  font-family: inherit; font-size: var(--fs-15); cursor: pointer;
 }
 .savedpw b { font-weight: 600; }
-.savedpw i { font-style: normal; font-size: 13px; color: var(--sub); }
+.savedpw i { font-style: normal; font-size: var(--fs-13); color: var(--sub); }
 
 .checkline {
   display: flex; align-items: flex-start; gap: 8px;
-  font-size: 13px; color: var(--sub); margin: 4px 0 16px; line-height: 1.5;
+  font-size: var(--fs-13); color: var(--sub); margin: 4px 0 16px; line-height: 1.5;
 }
 .checkline input { margin: 2px 0 0; width: 16px; height: 16px; flex: 0 0 auto; }
 
@@ -1451,19 +1506,19 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
      现在空闲教室的错误卡也用这个类，一起补上。 */
   padding: 14px 16px;
 }
-.warncard h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; color: var(--warn-text); }
+.warncard h2 { font-size: var(--fs-15); margin: 0 0 4px; font-weight: 600; color: var(--warn-text); }
 .warncard .sub { color: var(--warn-text); opacity: .82; margin: 0 0 12px; }
 .warncard .field span { color: var(--warn-text); opacity: .82; }
 .warncard .btn.primary { margin-top: 2px; }
 .warncard .tip { color: var(--danger); }
 
-.tip { font-size: 13px; margin: 10px 0 0; min-height: 18px; color: var(--danger); text-align: center; }
+.tip { font-size: var(--fs-13); margin: 10px 0 0; min-height: 18px; color: var(--danger); text-align: center; }
 
 .about { padding: 14px 16px; }
 /* 「关于」这张卡里那几行挨得紧，但**不能低于可点高度**：
    原来只给 0 0 10px，行高算出来 29px，手指按不准（规范要求 ≥40）。 */
 .about .row { padding: 10px 0; min-height: 44px; border-bottom: 0; }
-.about .sub { font-size: 11px; color: var(--sub); margin: 0; line-height: 1.6; }
+.about .sub { font-size: var(--fs-11); color: var(--sub); margin: 0; line-height: 1.6; }
 
 /* ---------------- 底部导航 ---------------- */
 /* 2026-11-04 · 0.1.5：按用户给的样品改成「纯文字 tab」。
@@ -1502,7 +1557,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .tab {
   flex: 1 1 0; min-width: 0; border: 0; background: transparent;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
-  color: var(--faint); font-family: inherit; font-size: 15px; font-weight: 400;
+  color: var(--faint); font-family: inherit; font-size: var(--fs-15); font-weight: 400;
   letter-spacing: .5px;
   padding: 0; height: 100%;
   position: relative;
@@ -1524,7 +1579,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   box-shadow: 0 0 0 1.5px var(--tabbar-bg, var(--card));
 }
 @media (max-width: 340px) {
-  .tab { font-size: 14px; }
+  .tab { font-size: var(--fs-14); }
 }
 
 /* ---------------- 详情弹层 ---------------- */
@@ -1564,8 +1619,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .sheet-x:active { background: var(--fill); }
 .sheet-grab { width: 36px; height: 4px; border-radius: 999px; background: var(--line-strong); margin: 0 auto 14px; }
 /* 右边留出 ✕ 的位置：标题最长也就「发现新版本 0.38.0」，不让它钻到按钮底下。 */
-.sh-title { font-size: 17px; font-weight: 600; margin: 0 0 3px; padding-right: 40px; }
-.sh-sub { font-size: 13px; color: var(--sub); margin: 0 0 16px; }
+.sh-title { font-size: var(--fs-17); font-weight: 600; margin: 0 0 3px; padding-right: 40px; }
+.sh-sub { font-size: var(--fs-13); color: var(--sub); margin: 0 0 16px; }
 /* 学期 chip 行（课表页「跳到第几周」弹层顶部，2026-10-31）。
    不复用 `.chips`：那个类自带 `padding: 2px 0 12px`，是给页面里横滑列表的，
    套进弹层会多出一截下边距，把下面的周次格子往下推。 */
@@ -1578,14 +1633,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .sh-terms .chip { display: inline-flex; align-items: center; gap: 5px; }
 /* 「在读」标记：教务系统此刻认定的那个学期。
    历史学期里翻来翻去时，没有这个标记就分不清哪一格是「现在」。 */
-.sh-now { font-style: normal; font-size: 11px; opacity: .6; }
+.sh-now { font-style: normal; font-size: var(--fs-11); opacity: .6; }
 /* 课表副标题里的学期名（只在看历史学期时出现）。
    用正文色 + 加粗、不用主色：它只是「这是哪一学期」的说明，
    不是可点入口 —— 染成蓝色会让人去戳它。 */
 .wk-title .wk-term { font-style: normal; color: var(--text); font-weight: 600; }
 .sh-rows { display: flex; flex-direction: column; gap: 12px; }
-.sh-row { display: flex; gap: 12px; font-size: 15px; }
-.sh-row .k { flex: 0 0 44px; color: var(--sub); font-size: 13px; }
+.sh-row { display: flex; gap: 12px; font-size: var(--fs-15); }
+.sh-row .k { flex: 0 0 44px; color: var(--sub); font-size: var(--fs-13); }
 .sh-row .v { flex: 1 1 auto; }
 .sh-block { margin-top: 14px; padding-top: 14px; border-top: .5px solid var(--line); }
 
@@ -1593,13 +1648,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .pickgap { height: 8px; }.picklist { display: flex; flex-direction: column; margin: 0 -4px; }
 /* 分组标题（「按楼号」「其他」）。楼号多的那一屏不分组就是一堵墙。 */
 .pickhead {
-  font-size: 11px; color: var(--sub);
+  font-size: var(--fs-11); color: var(--sub);
   padding: 12px 4px 4px; letter-spacing: .02em;
 }
 .pickopt {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 4px; border: 0; border-bottom: .5px solid var(--line);
-  background: none; font: inherit; font-size: 15px; color: var(--text);
+  background: none; font: inherit; font-size: var(--fs-15); color: var(--text);
   text-align: left;
 }
 .pickopt:active { background: var(--line); }
@@ -1621,7 +1676,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .sh-hide {
   margin-top: 14px; width: 100%; padding: 10px 0; border-radius: var(--r-ctl);
   border: 1px solid var(--line-strong); background: transparent;
-  color: var(--sub); font-size: 13px; font-family: inherit;
+  color: var(--sub); font-size: var(--fs-13); font-family: inherit;
 }
 .sh-hide:active { background: var(--line); }
 .hidlist { display: flex; flex-direction: column; }
@@ -1631,12 +1686,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .hidrow:last-child { border-bottom: 0; }
 .hidtxt { flex: 1 1 auto; min-width: 0; }
-.hidname { font-size: 15px; }
-.hidsub { font-size: 13px; color: var(--sub); margin-top: 3px; }
+.hidname { font-size: var(--fs-15); }
+.hidsub { font-size: var(--fs-13); color: var(--sub); margin-top: 3px; }
 .hidback {
   flex: 0 0 auto; padding: 8px 16px; border-radius: 999px;
   border: 1px solid var(--line-strong); background: transparent;
-  color: var(--accent); font-size: 13px; font-family: inherit;
+  color: var(--accent); font-size: var(--fs-13); font-family: inherit;
 }
 .hidback:active { background: var(--line); }
 
@@ -1650,7 +1705,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   /* 2026-11-04 UI 第一阶段：小一号、胶囊形、最多两行 ——
      「绑定成功，已同步 19 条课程安排」这种话原来折成两大行黑块，
      比课表还抢眼。Toast 的本职是一句话反馈。 */
-  font-size: 12px; line-height: 1.45; padding: 7px 14px; border-radius: 999px;
+  font-size: var(--fs-12); line-height: 1.45; padding: 7px 14px; border-radius: 999px;
   max-width: 72%; text-align: center; z-index: 60;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   animation: fade .16s ease;
@@ -1806,7 +1861,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    两门课各给 3 行 —— 跨两节的格子纵向有 106px，塞得下
    （2 × 3 行 × 12.4px ≈ 75px）。以前只给 2 行，
    「企业管理与价值创造」就被截成「企业管理与价值…」。 */
-.g-block.multi .bn { -webkit-line-clamp: 3; font-size: 10px; }
+.g-block.multi .bn { -webkit-line-clamp: 3; font-size: var(--fs-10); }
 
 /* 日视图的裁剪盒。滚动容器的 `overflow: hidden` 裁在内边距盒上，
    直接让轨道溢到 padding 里会漏出上一页的一条彩边。 */
@@ -1834,8 +1889,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   flex: 0 0 44px; text-align: right;
   display: flex; flex-direction: column; padding-top: 10px;
 }
-.dv-time b { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.dv-time i { font-size: 11px; font-style: normal; color: var(--sub); margin-top: 1px; }
+.dv-time b { font-size: var(--fs-13); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dv-time i { font-size: var(--fs-11); font-style: normal; color: var(--sub); margin-top: 1px; }
 
 .dv-card {
   flex: 1 1 auto; min-width: 0;
@@ -1847,10 +1902,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .dv-card:active { filter: brightness(.95); }
 .dv-card.live { box-shadow: 0 0 0 2px var(--accent); }
 .dv-head { display: flex; align-items: baseline; gap: 8px; }
-.dv-name { font-size: 15px; font-weight: 600; flex: 1 1 auto; min-width: 0;
+.dv-name { font-size: var(--fs-15); font-weight: 600; flex: 1 1 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dv-period { flex: 0 0 auto; font-size: 11px; opacity: .8; }
-.dv-meta { font-size: 11px; opacity: .78; margin-top: 3px;
+.dv-period { flex: 0 0 auto; font-size: var(--fs-11); opacity: .8; }
+.dv-meta { font-size: var(--fs-11); opacity: .78; margin-top: 3px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------- 周次选择器 ---------------- */
@@ -1858,7 +1913,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .wkcell {
   height: 42px; border-radius: var(--r-ctl);
   border: 1px solid var(--line-strong); background: var(--card); color: var(--text);
-  font-size: 15px; font-family: inherit; font-weight: 500;
+  font-size: var(--fs-15); font-family: inherit; font-weight: 500;
 }
 .wkcell.on { background: var(--accent); border-color: var(--accent); color: var(--primary-ink); font-weight: 600; }
 .wkcell:active { opacity: .8; }
@@ -1870,43 +1925,43 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   padding: 12px 0; border-bottom: .5px solid var(--line);
 }
 .setrow:last-child { border-bottom: 0; }
-.setrow .sk { flex: 0 0 auto; font-size: 13px; }
+.setrow .sk { flex: 0 0 auto; font-size: var(--fs-13); }
 .setinput {
   flex: 1 1 auto; min-width: 0; text-align: right;
   border: 0; background: transparent; color: var(--accent);
-  font-family: inherit; font-size: 13px; padding: 2px 0;
+  font-family: inherit; font-size: var(--fs-13); padding: 2px 0;
 }
-.setinput::placeholder { color: var(--sub); font-size: 13px; }
+.setinput::placeholder { color: var(--sub); font-size: var(--fs-13); }
 .setinput:focus { outline: none; }
 /* 边填边算的预览条：告诉用户「按你现在填的，今天是第几周」 */
 .setpreview {
   margin-top: 14px; padding: 12px 12px;
   background: var(--accent-soft); color: var(--accent);
-  border-radius: var(--r-ctl); font-size: 13px; line-height: 1.55;
+  border-radius: var(--r-ctl); font-size: var(--fs-13); line-height: 1.55;
 }
 
 /* ---------------- 上课时间编辑 ---------------- */
 .timerows { display: flex; flex-direction: column; gap: 8px; }
 .timerow { display: flex; align-items: center; gap: 8px; }
-.timerow .tn { flex: 0 0 52px; font-size: 13px; color: var(--sub); }
+.timerow .tn { flex: 0 0 52px; font-size: var(--fs-13); color: var(--sub); }
 .timerow input[type=time] {
   flex: 1 1 0; min-width: 0; height: 38px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: var(--bg); color: var(--text);
-  font-family: inherit; font-size: 13px; text-align: center;
+  font-family: inherit; font-size: var(--fs-13); text-align: center;
   padding: 0 4px;
 }
-.timerow .tdash { color: var(--sub); font-size: 13px; }
+.timerow .tdash { color: var(--sub); font-size: var(--fs-13); }
 /* 0.1.6 跳周弹层里的「课程块配色」二选一。和「只看工作日」同属
    「课表怎么看」的偏好，放同一个弹层；选中态用白面 + 主色字，
    不再往设置里引入一颗彩色糖。 */
 .palrow { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; }
-.pallab { flex: 0 0 auto; font-size: 12px; color: var(--sub); }
+.pallab { flex: 0 0 auto; font-size: var(--fs-12); color: var(--sub); }
 .palopts { flex: 1 1 auto; display: flex; gap: 6px; }
 .popt {
   flex: 1 1 0; height: 34px; border: 0; border-radius: var(--r-ctl);
   background: var(--fill); color: var(--sub);
-  font-family: inherit; font-size: 13px; font-weight: 500;
+  font-family: inherit; font-size: var(--fs-13); font-weight: 500;
 }
 .popt.on {
   background: var(--card); color: var(--accent); font-weight: 600;
@@ -1915,7 +1970,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 0.1.6 方案 2 把顶栏的翻周箭头收起来了，弹层里补一对等宽按钮兜底。
    复用 .btn 的材质，只管两等分、间距和比主按钮矮一档的高度。 */
 .wkstep { display: flex; gap: 10px; margin-top: 12px; }
-.wkstep .btn { flex: 1 1 0; height: 38px; padding: 0 8px; font-size: 13px; }
+.wkstep .btn { flex: 1 1 0; height: 38px; padding: 0 8px; font-size: var(--fs-13); }
 
 .sheetbtns { display: flex; gap: 10px; margin-top: 16px; }
 .sheetbtns .btn { flex: 1 1 0; }
@@ -1944,9 +1999,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .sh-link:last-child { border-bottom: 0; }
 .sh-link:active { opacity: .6; }
-.sh-link .sk { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.sh-link .sk { display: block; font-size: var(--fs-13); font-weight: 600; margin-bottom: 3px; }
 .sh-link .sl {
-  display: block; font-size: 12px; line-height: 1.5;
+  display: block; font-size: var(--fs-12); line-height: 1.5;
   color: var(--accent); overflow-wrap: anywhere;
 }
 
@@ -1973,7 +2028,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 /* 弹层里的小标题（「多久查一次」） */
 .setlabel {
-  margin: 16px 0 8px; font-size: 13px; color: var(--sub);
+  margin: 16px 0 8px; font-size: var(--fs-13); color: var(--sub);
 }
 /* 分段控件挪进弹层时要贴边，页面里那套左右 14px 的边距在这儿是错的 */
 .seg.flat { margin: 0; }
@@ -1983,7 +2038,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .updnotes { margin: 2px 0 0; padding: 0; list-style: none; }
 .updnotes li {
   position: relative; padding-left: 16px; margin-top: 6px;
-  font-size: 13px; line-height: 1.6; color: var(--text);
+  font-size: var(--fs-13); line-height: 1.6; color: var(--text);
 }
 .updnotes li::before {
   content: ''; position: absolute; left: 4px; top: 9px;
@@ -2002,17 +2057,17 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-radius: var(--r-card); corner-shape: var(--corner-shape); padding: 16px 16px 16px;
   margin-bottom: 4px;
 }
-.calhero-lab { font-size: 13px; color: var(--sub); }
+.calhero-lab { font-size: var(--fs-13); color: var(--sub); }
 .calhero-main {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 12px; margin-top: 4px;
 }
 .calhero-main b {
-  font-size: 34px; font-weight: 650; letter-spacing: -1px; line-height: 1.1;
+  font-size: var(--fs-34); font-weight: 650; letter-spacing: -1px; line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 .calhero-main span {
-  font-size: 13px; color: var(--sub);
+  font-size: var(--fs-13); color: var(--sub);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .calprog {
@@ -2024,7 +2079,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: var(--accent); min-width: 4px;
 }
 .calfind {
-  margin: 12px 0 0; font-size: 13px; line-height: 1.55; color: var(--text);
+  margin: 12px 0 0; font-size: var(--fs-13); line-height: 1.55; color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2041,8 +2096,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   -webkit-tap-highlight-color: transparent;
 }
 .calsec:active { opacity: .62; }
-.calsec h2 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -.1px; flex: 1 1 auto; }
-.calsec span { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.calsec h2 { font-size: var(--fs-15); margin: 0; font-weight: 650; letter-spacing: -.1px; flex: 1 1 auto; }
+.calsec span { font-size: var(--fs-11); color: var(--sub); font-variant-numeric: tabular-nums; }
 .calsec .calchev {
   flex: 0 0 auto; width: 14px; height: 14px;
   fill: none; stroke: var(--faint); stroke-width: 1.8;
@@ -2064,13 +2119,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .caltl li:last-child { border-bottom: 0; }
 .caltl .d {
-  flex: 0 0 66px; font-size: 13px; color: var(--sub);
+  flex: 0 0 66px; font-size: var(--fs-13); color: var(--sub);
   font-variant-numeric: tabular-nums; padding-top: 1px;
   /* 🔴 必须 nowrap：`9.7–9.8` 里的短横（–）在浏览器眼里是个**合法断行点**，
      不锁死的话 62px 的列会把它拆成两行（实测 41px 高，整个列表参差不齐）。 */
   white-space: nowrap;
 }
-.caltl .t { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.5; }
+.caltl .t { flex: 1 1 auto; min-width: 0; font-size: var(--fs-13); line-height: 1.5; }
 /* 已经过去的条目退到次要灰 —— 但**不降透明度**：
    透明度会把它压到 4.5:1 以下，看着像坏了。 */
 .caltl li.past .t, .caltl li.past .d { color: var(--sub); }
@@ -2079,7 +2134,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .caltl li.next .t { font-weight: 600; }
 
 .calnote {
-  margin: 16px 2px 4px; font-size: 11px; line-height: 1.65; color: var(--sub);
+  margin: 16px 2px 4px; font-size: var(--fs-11); line-height: 1.65; color: var(--sub);
 }
 
 /* ================= 校园（智慧门户） ================= */
@@ -2094,15 +2149,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    别给每张卡配个彩色图标圈 —— 那是模板脸。 */
 .ykt { padding: 16px 16px 0; }
 .ykt-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.ykt-k { font-size: 13px; color: var(--sub); }
-.ykt-t { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.ykt-k { font-size: var(--fs-13); color: var(--sub); }
+.ykt-t { font-size: var(--fs-11); color: var(--sub); font-variant-numeric: tabular-nums; }
 .ykt-bal { display: flex; align-items: baseline; gap: 4px; margin: 2px 0 10px; }
 .ykt-bal b {
-  font-size: 34px; font-weight: 600; letter-spacing: -.6px;
+  font-size: var(--fs-34); font-weight: 600; letter-spacing: -.6px;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
 }
-.ykt-bal span { font-size: 13px; color: var(--sub); }
+.ykt-bal span { font-size: var(--fs-13); color: var(--sub); }
 /* 余额卡里的「消费明细」行：卡片自己有 padding，行要自己贴边 */
 .ykt .row { margin: 0 -16px; padding: 12px 16px; border-top: .5px solid var(--line); }
 
@@ -2111,15 +2166,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .ykt-row:last-child { border-bottom: 0; }
 .ykt-r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .ykt-place {
-  font-size: 15px; min-width: 0;
+  font-size: var(--fs-15); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ykt-amt { font-size: 15px; font-weight: 550; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.ykt-amt { font-size: var(--fs-15); font-weight: 550; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 /* 支出用墨色、充值才用绿。🔴 别把支出染成红色：中国用户看到红字
    第一反应是「涨了 / 出事了」，不是「花钱了」。 */
 .ykt-amt.out { color: var(--text); }
 .ykt-amt.in { color: var(--ok); }
-.ykt-r2 { font-size: 11px; color: var(--sub); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ykt-r2 { font-size: var(--fs-11); color: var(--sub); margin-top: 2px; font-variant-numeric: tabular-nums; }
 /* 「数据更新于 X」—— 只在本机缓存、且这次没连网刷新时出现。
    余额是会变的数字，不说清楚它是什么时候的，就是在骗人。 */
 .ykt-at { margin: -6px 0 10px; font-variant-numeric: tabular-nums; }
@@ -2129,7 +2184,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .lowbal {
   margin: 0 0 10px; padding: 8px 10px; border-radius: var(--r-ctl);
   background: var(--warn-bg); color: var(--warn-text);
-  font-size: 13px; line-height: 1.5;
+  font-size: var(--fs-13); line-height: 1.5;
 }
 .lowbal b { font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -2139,15 +2194,15 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .ykt-stat { padding: 12px 0 12px; border-bottom: 1px solid var(--rule); }
 .ykt-s1 { display: flex; align-items: baseline; gap: 8px; }
 .ykt-s1 b {
-  font-size: 22px; font-weight: 600; letter-spacing: -.4px;
+  font-size: var(--fs-22); font-weight: 600; letter-spacing: -.4px;
   font-variant-numeric: tabular-nums;
 }
-.ykt-s1 span { font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums; }
-.ykt-s2 { font-size: 13px; color: var(--sub); margin-top: 4px; line-height: 1.5; }
+.ykt-s1 span { font-size: var(--fs-13); color: var(--sub); font-variant-numeric: tabular-nums; }
+.ykt-s2 { font-size: var(--fs-13); color: var(--sub); margin-top: 4px; line-height: 1.5; }
 .ykt-s2 em { font-style: normal; color: var(--text); font-variant-numeric: tabular-nums; }
-.ykt-note { font-size: 11px; color: var(--sub); margin-top: 4px; line-height: 1.5; }
+.ykt-note { font-size: var(--fs-11); color: var(--sub); margin-top: 4px; line-height: 1.5; }
 
-.cp-h { font-size: 15px; margin: 0; font-weight: 600; }
+.cp-h { font-size: var(--fs-15); margin: 0; font-weight: 600; }
 
 /* ---- 校园页顶部两个大入口（0.24.1）----
    用户 2026-10-30：「zuawiki 对新生应该很有用，出水功能对所有学生都很有用，
@@ -2175,10 +2230,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   stroke-linecap: round; stroke-linejoin: round;
 }
 .cphero-k {
-  font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.25;
+  font-size: var(--fs-15); font-weight: 600; color: var(--text); line-height: 1.25;
 }
 .cphero-s {
-  font-size: 11px; color: var(--sub); line-height: 1.35;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.35;
   /* 副标题最多两行：窄屏（320dp）下「宿舍食堂 · 转专业」会折，
      不夹的话第二格会比第一格高，两块就对不齐了。 */
   display: -webkit-box; -webkit-box-orient: vertical;
@@ -2206,8 +2261,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-family: inherit; text-align: left; cursor: pointer;
 }
 .appitem:active { background: var(--active); }
-.appname { font-size: 13px; line-height: 1.35; }
-.appdept { font-size: 11px; color: var(--sub); }
+.appname { font-size: var(--fs-13); line-height: 1.35; }
+.appdept { font-size: var(--fs-11); color: var(--sub); }
 
 /* 验证码：输入框 + 图片一行。图片点一下换一张，所以给手型光标。
    底色固定白 —— 验证码图本身是白底 PNG，深色主题下用深底会出现一圈白框。 */
@@ -2220,7 +2275,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 
 .cpnote {
-  font-size: 11px; color: var(--sub); line-height: 1.6;
+  font-size: var(--fs-11); color: var(--sub); line-height: 1.6;
   margin: 14px 4px 10px;
 }
 
@@ -2249,8 +2304,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 急不急由数字本身说（见 .cx-l.urgent），不再给条目加左侧色条 ——
    那是「AI 生成页面」最典型的记号之一（impeccable 的 side-tab borders），
    而且等于把颜色花在边框上，不是花在数据上。 */
-.cx-t { font-size: 15px; font-weight: 500; line-height: 1.4; color: var(--text); }
-.cx-m { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 13px; }
+.cx-t { font-size: var(--fs-15); font-weight: 500; line-height: 1.4; color: var(--text); }
+.cx-m { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: var(--fs-13); }
 .cx-c { color: var(--sub); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 右边两行共用一条右边缘：上面「还剩多久」，下面「截止 10-23 23:59」。
    两行都比标题小一档，且都是数字 —— 等宽才不跳。 */
@@ -2262,7 +2317,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .cx-l { color: var(--sub); white-space: nowrap; }
 /* 红色只落在这个数字上。全屏只该有这一处红。 */
 .cx-l.urgent { color: var(--danger); }
-.cx-due { color: var(--sub); opacity: .82; white-space: nowrap; font-size: 11px; }
+.cx-due { color: var(--sub); opacity: .82; white-space: nowrap; font-size: var(--fs-11); }
 .cx-l.none { opacity: .72; }
 .cx-bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 4px 0 10px; }
 .cx-bar > i { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
@@ -2276,13 +2331,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    · 说明文字不能用 .tip —— 那是红色的错误提示样式，
      一进页面就红一片，像出错了。用 .cx-note（灰色，出错时加 .err 才变红）。 */
 .cx-login { padding: 16px 16px 14px; }
-.cx-h { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
-.cx-p { font-size: 13px; color: var(--sub); line-height: 1.65; margin: 0 0 12px; }
+.cx-h { font-size: var(--fs-17); font-weight: 600; margin: 0 0 6px; }
+.cx-p { font-size: var(--fs-13); color: var(--sub); line-height: 1.65; margin: 0 0 12px; }
 /* 灰色说明文字。⚠️ 别用 .tip —— 那是**红色的错误提示**样式
    （.tip 的 color 是 var(--danger) 且居中），拿它写普通说明，
    整段会红着，看起来像出错了。出错时才加 .err 变红。 */
 .cx-note, .note {
-  font-size: 13px; color: var(--sub); line-height: 1.6;
+  font-size: var(--fs-13); color: var(--sub); line-height: 1.6;
   margin: 10px 0 0; text-align: left;
 }
 .cx-note.err { color: var(--danger); }
@@ -2295,7 +2350,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: block; width: 100%; min-height: 44px;
   margin: 2px 0 0; padding: 12px 0;
   background: none; border: 0;
-  font: inherit; font-size: 13px; font-weight: 500; color: var(--accent);
+  font: inherit; font-size: var(--fs-13); font-weight: 500; color: var(--accent);
   text-align: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -2305,10 +2360,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    数字放大，其余靠右压灰 —— 一眼先看到「几条」。 */
 .cx-hd {
   display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
-  font-size: 15px; color: var(--text); margin: 2px 2px 10px;
+  font-size: var(--fs-15); color: var(--text); margin: 2px 2px 10px;
 }
-.cx-hd b { font-size: 15px; font-weight: 700; }
-.cx-hdm { font-size: 11px; color: var(--sub); margin-left: auto; }
+.cx-hd b { font-size: var(--fs-15); font-weight: 700; }
+.cx-hdm { font-size: var(--fs-11); color: var(--sub); margin-left: auto; }
 
 /* ---- 扫描中的细进度条（0.16.0）----
    🔴 它挂在上次结果的**上面**，不替换结果。用户点「重新检查」以后照样能
@@ -2322,7 +2377,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: var(--card);
 }
 .cx-strip-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
-.cx-strip-l { font-size: 13px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
+.cx-strip-l { font-size: var(--fs-13); font-weight: 600; color: var(--text); flex: 0 0 auto; }
 .cx-dot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
   background: var(--accent); margin-right: 5px; vertical-align: 1px;
@@ -2332,7 +2387,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 @keyframes cxPulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .cx-dot { animation: none; } }
 .cx-strip-p {
-  margin-left: auto; min-width: 0; font-size: 11px; color: var(--sub);
+  margin-left: auto; min-width: 0; font-size: var(--fs-11); color: var(--sub);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .cx-strip-bar { height: 3px; border-radius: 999px; background: var(--line); overflow: hidden; }
@@ -2340,7 +2395,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: block; height: 100%; border-radius: 999px;
   background: var(--accent); transition: width .4s ease;
 }
-.cx-strip-t { font-size: 11px; color: var(--sub); margin: 7px 0 0; }
+.cx-strip-t { font-size: var(--fs-11); color: var(--sub); margin: 7px 0 0; }
 
 /* 「这次新查到 N 条」。一条就够，不做弹窗、不做红点。 */
 .cx-newbar {
@@ -2348,13 +2403,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   margin: 0 0 10px; padding: 8px 12px;
   border-radius: var(--r);
   corner-shape: var(--corner-shape);
-  background: var(--card); font-size: 13px; color: var(--text);
+  background: var(--card); font-size: var(--fs-13); color: var(--text);
 }
 .cx-newbar b { font-weight: 700; }
 .cx-newbar-x {
   margin-left: auto; flex: 0 0 auto;
   border: 0; background: none; padding: 2px 4px;
-  font: inherit; font-size: 11px; color: var(--accent); cursor: pointer;
+  font: inherit; font-size: var(--fs-11); color: var(--accent); cursor: pointer;
 }
 
 /* 条目上的「新」标。用浅底+强调色字，不用色块 ——
@@ -2364,7 +2419,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   margin-right: 5px; padding: 0 4px;
   border-radius: var(--r-chip);
   background: var(--accent-soft); color: var(--accent);
-  font-size: 11px; font-weight: 600; line-height: 15px;
+  font-size: var(--fs-11); font-weight: 600; line-height: 15px;
   flex: 0 0 auto;
 }
 
@@ -2396,11 +2451,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 /* 第一组紧贴上面的切换条，不用再空 18px */
 .cx-grp:first-child .cx-grph { margin-top: 4px; }
 .cx-grpn {
-  font-size: 13px; font-weight: 600; letter-spacing: .07em; color: var(--sub);
+  font-size: var(--fs-13); font-weight: 600; letter-spacing: .07em; color: var(--sub);
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.cx-grpc { font-size: 11px; color: var(--sub); margin-left: auto; flex: 0 0 auto; }
+.cx-grpc { font-size: var(--fs-11); color: var(--sub); margin-left: auto; flex: 0 0 auto; }
 
 /* 底部两个按钮等分一行（0.39.1 起是两颗：重新检查 / 打开学习通） */
 .cx-acts { display: flex; gap: 8px; margin: 8px 0 0; }
@@ -2431,7 +2486,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   height: 32px; padding: 0 10px;
   border: .5px solid var(--line); border-radius: 999px;
   background: var(--card); color: var(--sub);
-  font-family: inherit; font-size: 13px; font-weight: 500;
+  font-family: inherit; font-size: var(--fs-13); font-weight: 500;
   display: inline-flex; align-items: center; gap: 3px;
 }
 .cx-cat.on {
@@ -2441,13 +2496,13 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-weight: 600;
 }
 /* 计数用比正文更小的字号，选中时跟着变浅 —— 别让它抢标题的注意力 */
-.cx-cat i { font-style: normal; font-size: 11px; opacity: .72; }
+.cx-cat i { font-style: normal; font-size: var(--fs-11); opacity: .72; }
 
 /* 按紧急度 / 按课程：这条比分类条低一级，压小一点 */
 .cx-seg-mini { margin: 0 0 8px; }
 /* 30px：这是全 App 最小的可点控件了。28 的时候手指按偏的概率明显上升，
    而它旁边就是「按课程 / 全部」这种会重画整页的切换，按错代价不小。 */
-.cx-seg-mini .seg-btn { height: 32px; font-size: 13px; border-radius: var(--r-ctl); }
+.cx-seg-mini .seg-btn { height: 32px; font-size: var(--fs-13); border-radius: var(--r-ctl); }
 
 /* 条目左上角那枚分类标（只在「全部」里出现，分类视图里标题栏已经写着了） */
 .cx-k {
@@ -2455,7 +2510,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   margin-right: 4px; padding: 1px 4px;
   border-radius: var(--r-chip);
   background: var(--line); color: var(--sub);
-  font-size: 11px; font-weight: 600; letter-spacing: .2px;
+  font-size: var(--fs-11); font-weight: 600; letter-spacing: .2px;
 }
 
 /* 条目里那句状态文字（「已签到」「待批阅」）。
@@ -2476,16 +2531,16 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: baseline; gap: 8px;
   padding-bottom: 4px;
 }
-.cx-signhd b { font-size: 15px; font-weight: 600; color: var(--text); }
-.cx-signlive { font-size: 13px; font-weight: 600; color: var(--danger); }
-.cx-signidle { font-size: 13px; color: var(--sub); }
+.cx-signhd b { font-size: var(--fs-15); font-weight: 600; color: var(--text); }
+.cx-signlive { font-size: var(--fs-13); font-weight: 600; color: var(--danger); }
+.cx-signidle { font-size: var(--fs-13); color: var(--sub); }
 
 .cx-srows { border-top: 1px solid var(--rule); }
 .cx-srow {
   display: flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 8px 0;
   border-bottom: 1px solid var(--rule);
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 .cx-srow:last-child { border-bottom: 0; }
 .cx-scourse {
@@ -2494,12 +2549,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 /* 日期用等宽数字，一列对齐了才扫得动 */
 .cx-sdate {
-  flex: 0 0 auto; font-size: 11px; color: var(--sub);
+  flex: 0 0 auto; font-size: var(--fs-11); color: var(--sub);
   font-variant-numeric: tabular-nums;
 }
 .cx-sstate {
   margin-left: auto; flex: 0 0 auto;
-  font-size: 13px; color: var(--sub); white-space: nowrap;
+  font-size: var(--fs-13); color: var(--sub); white-space: nowrap;
 }
 /* 漏签是这张卡里唯一该报警的东西 —— 但它不是「出错」，
    所以用 --danger 的字色，不加底色块。 */
@@ -2509,7 +2564,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   display: flex; align-items: center; gap: 8px;
   width: 100%; min-height: 44px; margin: 0; padding: 8px 0 0;
   border: 0; border-top: 1px solid var(--rule);
-  background: none; font: inherit; font-size: 13px; color: var(--sub);
+  background: none; font: inherit; font-size: var(--fs-13); color: var(--sub);
   text-align: left; cursor: pointer;
 }
 .cx-signtot span {
@@ -2521,7 +2576,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 /* 更早的那些只给一句「还有 N 条」——
    签到记录能到几十条，全铺出来会把下面的作业全挤到屏幕外。 */
-.cx-smore { font-size: 11px; color: var(--sub); padding: 8px 0 0; }
+.cx-smore { font-size: var(--fs-11); color: var(--sub); padding: 8px 0 0; }
 
 /* 「有东西没读到」那一块。
    🔴 用琥珀色不用红：这不是「出错了」，是「有东西没读到」，
@@ -2562,8 +2617,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    跟「明天要交的」一样高、一样黑，就是在跟真正还能办的事抢眼睛。
    压到一半高、字号掉一档 —— 还在，但不再喊。 */
 .cx-item.cx-over { padding: 7px 14px; opacity: .62; }
-.cx-item.cx-over .cx-t { font-size: 13px; font-weight: 500; }
-.cx-item.cx-over .cx-m { margin-top: 2px; font-size: 11px; }
+.cx-item.cx-over .cx-t { font-size: var(--fs-13); font-weight: 500; }
+.cx-item.cx-over .cx-m { margin-top: 2px; font-size: var(--fs-11); }
 /* 右边那个小箭头：告诉人「这条能点」。
    不点、只是看着的条目（签到/讨论/通知）没有它。 */
 .cx-go {
@@ -2583,7 +2638,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    而这一屏真正要看的是「哪一行没连」。 */
 .acc-note {
   margin: 2px 2px 10px;
-  font-size: 13px; line-height: 1.55; color: var(--sub);
+  font-size: var(--fs-13); line-height: 1.55; color: var(--sub);
 }
 .acc-note:last-child { margin: 10px 2px 0; }
 
@@ -2596,11 +2651,11 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 .acc-row:last-child { border-bottom: 0; }
 
 .acc-main { flex: 1 1 auto; min-width: 0; }
-.acc-k { display: block; font-size: 15px; color: var(--text); }
+.acc-k { display: block; font-size: var(--fs-15); color: var(--text); }
 .acc-s {
   display: flex; align-items: center; gap: 6px;
   margin-top: 3px;
-  font-size: 13px; color: var(--sub);
+  font-size: var(--fs-13); color: var(--sub);
   /* 学号/账号是数字，等宽才不会在换行时抖 */
   font-variant-numeric: tabular-nums;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2617,7 +2672,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   min-width: 58px; min-height: 44px; padding: 0 12px;
   border: 1px solid var(--line-strong); border-radius: var(--r-ctl);
   background: transparent; color: var(--text);
-  font-family: inherit; font-size: 13px;
+  font-family: inherit; font-size: var(--fs-13);
 }
 .acc-act.quiet { border-color: transparent; color: var(--sub); }
 .acc-act:active { background: var(--active); }
@@ -2643,7 +2698,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 #page-campus .scroll > div:last-child > .card:last-child { margin-bottom: 2px; }
 
 /* 页脚那句边界说明：11px 一行就够，别让它自己占出一条缝 */
-#page-campus .acc-note { margin: 6px 2px 0; font-size: 11px; line-height: 1.5; }
+#page-campus .acc-note { margin: 6px 2px 0; font-size: var(--fs-11); line-height: 1.5; }
 
 /* ==================================================================
    0.33.0：一屏装下（用户：「把每个界面的内容都放在一页内，不需要上下滑动」）
@@ -2660,7 +2715,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    每条 12px + 10px 上边距 + 18px 最小高，四条就是 100+。
    🔴 只压字号和间距，不删 ——「没读到」必须留在屏幕上。 */
 #page-campus .tip.note {
-  font-size: 11px; line-height: 1.45;
+  font-size: var(--fs-11); line-height: 1.45;
   margin: 6px 0 0; min-height: 0;
 }
 
@@ -2876,7 +2931,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    不是课表 —— 做得越像课表，越容易有人把它当成已经适配好了。 */
 .rawlist { margin-top: 12px; text-align: left; }
 .rawrow { padding: 7px 0; border-bottom: .5px solid var(--line);
-          font-size: 12px; line-height: 1.55; }
+          font-size: var(--fs-12); line-height: 1.55; }
 .rawrow:last-child { border-bottom: 0; }
 /* 🔴 0.1.10：这两个变量也从来没定义过（同样是 git 历史里搜不到）。
    .rawk 是键名、.rawv 是值 —— 未定义时 color 会退化成 inherit，
@@ -2898,12 +2953,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   background: var(--row-bg); border: .5px solid var(--line);
 }
 .cosum-row b {
-  display: block; font-size: 22px; font-weight: 700;
+  display: block; font-size: var(--fs-22); font-weight: 700;
   letter-spacing: -.5px; line-height: 1.1;
 }
-.cosum-row span { font-size: 11px; color: var(--sub); }
-.cosum-term { font-size: 12px; color: var(--sub); margin: 10px 4px 0; }
-.cosum-note { font-size: 11px; color: var(--ter); margin: 6px 4px 0; line-height: 1.6; }
+.cosum-row span { font-size: var(--fs-11); color: var(--sub); }
+.cosum-term { font-size: var(--fs-12); color: var(--sub); margin: 10px 4px 0; }
+.cosum-note { font-size: var(--fs-11); color: var(--ter); margin: 6px 4px 0; line-height: 1.6; }
 
 .colist {
   margin: 12px 16px 0;
@@ -2914,7 +2969,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    让「先考试后考查」一眼看得出来，又不抢课程名的视觉重量。 */
 .cogrp-h {
   padding: 10px 14px 6px;
-  font-size: 11px; font-weight: 600; color: var(--sub);
+  font-size: var(--fs-11); font-weight: 600; color: var(--sub);
   letter-spacing: .4px;
   border-top: .5px solid var(--line);
 }
@@ -2933,19 +2988,19 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 }
 .ci-main { flex: 1 1 auto; min-width: 0; }
 .ci-name {
-  font-size: 15px; font-weight: 500; line-height: 1.35;
+  font-size: var(--fs-15); font-weight: 500; line-height: 1.35;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ci-meta {
-  font-size: 11px; color: var(--sub); margin-top: 3px; line-height: 1.5;
+  font-size: var(--fs-11); color: var(--sub); margin-top: 3px; line-height: 1.5;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ci-meta.dim { color: var(--ter); }
 .ci-n {
   flex: 0 0 auto; align-self: center; text-align: right;
-  font-size: 15px; font-weight: 600; color: var(--sub);
+  font-size: var(--fs-15); font-weight: 600; color: var(--sub);
 }
-.ci-n span { display: block; font-size: 10px; font-weight: 400; color: var(--ter); }
+.ci-n span { display: block; font-size: var(--fs-10); font-weight: 400; color: var(--ter); }
 
 /* 上午 / 下午 / 晚上之间的分隔线。
    依据是「上一节结束到这节开始隔了多久」——课间只有几分钟，
@@ -2965,7 +3020,7 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    不占图标位 —— 顶栏已经够挤了。 */
 .wk-days { min-width: 34px; padding-left: 2px; padding-right: 2px; }
 .wk-days span {
-  font-size: 12px; font-weight: 500; letter-spacing: -.2px;
+  font-size: var(--fs-12); font-weight: 500; letter-spacing: -.2px;
   white-space: nowrap;      /* 「5 天」不能折成两行 —— 折了就比旁边的按钮高一截 */
 }
 
@@ -2973,3 +3028,79 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    用户 2026-11-03：这块空间要常驻 —— 没上完之前是空白占位，
    上完之后提示才浮出来；否则提示出现的一瞬间会把课表最后几节顶走。 */
 .daynext.ph { visibility: hidden; }
+
+/* ================= 字体大小设置（0.1.13） =================
+   三档：小 ×0.9 / 标准 ×1（默认）/ 大 ×1.12，存 CFG.fontScale（'s'|'std'|'l'），
+   app.js 的 applyFontScale() 挂到 <html data-fs>。
+   🔴 为什么覆盖整组值而不是一个系数：html[data-fs] 和 :root 是同一个元素，
+      嵌套 var 又在定义处解析（见 :root 字号变量注释），系数方案只会在
+      :root 上求值一次 —— 这里直接用更高特异性把 11 个值各写三份。
+      calc(13px * .9) 这种常数倍会在 html 上解析成固定长度，没有继承陷阱。
+   🔴 #page-schedule 整页重定义回基准值：课表格子 50px 宽、8/10px 字是
+      物理空间逼出来的（DESIGN.md 第 4 条注释），字号跟着缩放必然撑爆格子
+      —— 2026-11-20 zoom 1.25 实测 7 列挤出屏幕（_lab/shots/141）。
+      课表页整体密度固定，顶部周次条一起不缩；弹层挂在 #app 直下、
+      不属于任何页，正常缩放。 */
+html[data-fs="s"] {
+  --fs-8: calc(8px * .9);     --fs-10: calc(10px * .9);   --fs-11: calc(11px * .9);
+  --fs-12: calc(12px * .9);   --fs-13: calc(13px * .9);   --fs-14: calc(14px * .9);
+  --fs-15: calc(15px * .9);   --fs-17: calc(17px * .9);   --fs-20: calc(20px * .9);
+  --fs-22: calc(22px * .9);   --fs-34: calc(34px * .9);
+}
+html[data-fs="l"] {
+  --fs-8: calc(8px * 1.12);   --fs-10: calc(10px * 1.12);  --fs-11: calc(11px * 1.12);
+  --fs-12: calc(12px * 1.12); --fs-13: calc(13px * 1.12);  --fs-14: calc(14px * 1.12);
+  --fs-15: calc(15px * 1.12); --fs-17: calc(17px * 1.12);  --fs-20: calc(20px * 1.12);
+  --fs-22: calc(22px * 1.12); --fs-34: calc(34px * 1.12);
+}
+/* ID 特异性压过 html[data-fs]，课表子树继承到的是基准值本身 */
+#page-schedule {
+  --fs-8: 8px;   --fs-10: 10px;  --fs-11: 11px;
+  --fs-12: 12px; --fs-13: 13px;  --fs-14: 14px;
+  --fs-15: 15px; --fs-17: 17px;  --fs-20: 20px;
+  --fs-22: 22px; --fs-34: 34px;
+}
+
+/* 「我的 → 字体大小」行内三颗档位胶囊，所见即所得（不弹层）。
+   选中主色渐变 + 辉光：这一屏的另一处发光是头像，共两处，符合 DESIGN.md 配额。
+   按钮自己的字号也走 var(--fs-13) —— 档位文字跟着变大是预期行为。 */
+.fs-seg { display: flex; gap: 4px; }
+.fs-opt {
+  height: 30px; padding: 0 12px; border: 0; border-radius: var(--r-chip);
+  background: transparent; color: var(--sub); font-family: inherit;
+  font-size: var(--fs-13); font-weight: 500; cursor: pointer;
+}
+.fs-opt.on {
+  background: var(--accent-grad); color: var(--primary-ink); font-weight: 600;
+  box-shadow: var(--accent-glow);
+}
+.fs-opt:active { opacity: .85; }
+
+/* ============ 每课自定义颜色（0.1.13） ============
+   课程详情弹层里一排马卡龙圆点，按课程 code 存 CFG.courseColors。
+   备选色是从用户给的第三方课表截图逐块采样的（app.js MACARON）。 */
+/* 自定义块挂 .cc：马卡龙全是浅底，文字恒深；
+   🔴 绝不能落进 .c0~c7 —— 那组在深色主题下会换成深底浅字（app.css:1781）。
+   live 高亮环是 inset box-shadow，叠在浅底上照常可见，不用另配。 */
+.g-block.cc { color: #262122; }
+@media (prefers-color-scheme: dark) {
+  .g-block.cc { color: #262122; }   /* 深色下同样深字：色块本身就是浅色 */
+}
+
+/* 「课表颜色」小标题 + 一排圆点。圆点 26px 是弹层里可点尺寸的下限，
+   再小手指按不准；间距 8px 和 .cx-m 等处的元信息行一致。 */
+.cclab { font-size: var(--fs-12); color: var(--sub); margin: 12px 0 8px; }
+.ccrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.cc-dot {
+  width: 26px; height: 26px; border: 0; border-radius: 50%;
+  cursor: pointer; padding: 0;
+  box-shadow: inset 0 0 0 .5px rgba(38, 33, 34, .12);
+}
+/* 选中态：双圈 ring（卡底色隔开色块 + 主色外圈），跟 .chip.on 一个语系 */
+.cc-dot.on {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--accent);
+}
+/* 「跟随配色」圆点：现有四色系转一圈，一眼看出"回到自动分配" */
+.cc-dot.cc-auto {
+  background: conic-gradient(#bebcd9 0 25%, #b7c2b2 0 50%, #d4baa9 0 75%, #b5c0cb 0);
+}

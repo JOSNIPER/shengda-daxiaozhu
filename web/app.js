@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.12';
-const APP_CODE = 72;
+const APP_VERSION = '0.1.13';
+const APP_CODE = 73;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -169,6 +169,12 @@ let CFG = Object.assign(
     //    老用户本机存着 'vivid'，改名会让他们的选择悄悄回退到默认。
     //    界面文案随当前实际配色走（0.1.8 起为「暖调 / 淡彩」）。
     palette: 'clean',
+    // 字体大小（0.1.13）：'s' 小 ×0.9 / 'std' 标准 ×1 / 'l' 大 ×1.12。
+    // 只影响课表以外的页面 —— 课表格子字号是物理约束，见 app.css「字体大小设置」区。
+    fontScale: 'std',
+    // 每课自定义颜色（0.1.13）：课程 code → 马卡龙色 hex（详情弹层里选）。
+    // 没选过的课走 colorSlot(name) 自动槽位；删键 = 恢复跟随配色。
+    courseColors: {},
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
     seenDay: '',
@@ -191,6 +197,18 @@ function applyPalette() {
   if (el) el.classList.toggle('palette-vivid', CFG.palette === 'vivid');
 }
 applyPalette();
+
+/* 0.1.13 字体大小：把档位挂到 <html data-fs>，11 个字号变量由 CSS 三档覆盖接管。
+   🔴 这里和上面一样用原生 querySelectorAll / setAttribute：$ 在下面才定义，
+      提前调用会踩 TDZ —— 整份 app.js 直接罢工（applyPalette 注释同款）。 */
+function applyFontScale() {
+  const v = ['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std';
+  document.documentElement.setAttribute('data-fs', v);
+  document.querySelectorAll('#fsSeg .fs-opt').forEach((b) => {
+    b.classList.toggle('on', b.dataset.fs === v);
+  });
+}
+applyFontScale();
 
 // 认旧的默认作息：等于 LEGACY_TIMES 就说明用户没真改过，直接换成新的。
 // （只要有一条不一样就尊重用户的选择，不覆盖）
@@ -523,6 +541,12 @@ function colorSlot(name) {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return h % 8;
 }
+
+/* 0.1.13 每课自定义颜色的备选色板（10 色）。
+   色值不是拍的，是从用户给的第三方课表截图上逐块采样出来的马卡龙浅色
+   （_lab 提色脚本，2026-11-20）。全是浅底，所以选中后的文字恒深（.cc）。 */
+const MACARON = ['#f8d1c5', '#f5c9df', '#efc2a3', '#f7de97', '#e0f5ac',
+                 '#ace2e9', '#e3c7f9', '#c1fcd3', '#d2dcf4', '#f3b6b4'];
 
 /** 把 room 拆成「楼栋 / 房间号」两段，**所有教室都返回**。
  *
@@ -1344,7 +1368,7 @@ function renderWeek() {
   $('wkToday').classList.toggle('is-here', ttIsNow() && week === currentWeek());
   labelWkToday();
 
-  renderGutter();
+  renderGutter(week);
   const track = $('wkTrack');
   track.innerHTML = '';
   // 越界那一页画成空表：拖到头时橡皮筋只露一点点边，
@@ -1427,13 +1451,22 @@ function toMin(hhmm) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-function renderGutter() {
+function renderGutter(week) {
   const units = (curTT().unitCount || 10);
   const tt = times();
   const g = $('wkGutter');
   g.style.setProperty('--units', units);
   const seps = blockStarts(tt, units);
-  let html = '<div class="g-corner"></div>';
+  // 0.1.13 月份角标（用户 2026-11-20 两轮）：周一左边写月份，**永远只写
+  // 周一所在这一个月**——跨月周也是（用户原话：「周一是哪一月的？那你就
+  // 写几月就行了。然后后边的次月1号2号3号是个人都能认出来是下个月的」）。
+  // 上一版「跨月两行 10月/11月 + 表头回退完整格式」按用户意见废掉。
+  let monHtml = '';
+  if (week >= 1) {
+    const ws = addDays(startDate(), (week - 1) * 7);
+    monHtml = '<div class="g-mon">' + (ws.getMonth() + 1) + '月</div>';
+  }
+  let html = '<div class="g-corner">' + monHtml + '</div>';
   for (let p = 0; p < units; p++) {
     // 节次 + 起 + 止（WakeUp 那样三行）。只写开始时间看不出上到几点。
     html += '<div class="g-slot' + (seps.indexOf(p) >= 0 ? ' g-slot-sep' : '') +
@@ -1484,18 +1517,24 @@ function buildWeekGrid(week) {
     }
   }
 
+  // 0.1.13 表头日期（用户 2026-11-20 定稿）：**永远裸日号、不带前导零**，
+  // 月份看左侧角标（= 周一所在月）。跨月周「30 1 2 3」紧跟排列，
+  // 次月不写前缀、也不写「12/」—— 用户：「是个人都能认出来是下个月的」。
+  // 无前导零和 iOS 日历同款惯例；对 10–31 日的显示和上一版完全一致
+  // （pad2 只影响 1–9 号，07→7），已认可的场景零变化。
   for (let ci = 0; ci < days; ci++) {
     const d = cols[ci];
     const el = document.createElement('div');
     el.className = 'g-day' + (d === todayIdx ? ' is-today' : '');
     el.style.gridColumn = (ci + 1);
-    // 两行：星期在上（小、灰），月/日在下（大、深）。
+    // 两行：星期在上（小、灰），日期在下（大、深）。
     // 以前是「一 12」挤在一行、日期还是 <i> 斜体 —— 又小又斜，
     // 基本看不出那是日期，用户直接说「怎么不写日期」。
     // 写「周一」不写「一」：单个「一」渲染出来就是一根横线，
     // 摆在日期上面像条分隔符，不像星期。
+    const dd = addDays(ws, d);
     el.innerHTML = '<b>周' + DAY_CN[d] + '</b>' +
-      '<span class="dnum">' + mdSlash(addDays(ws, d)) + '</span>';
+      '<span class="dnum">' + dd.getDate() + '</span>';
     frag.appendChild(el);
   }
 
@@ -1533,10 +1572,18 @@ function buildWeekGrid(week) {
       // 翻到别的周 todayIdx 已经是 -1，天然不亮 —— 别让用户以为第 5 周
       // 也有节课正在上。
       const isNow = todayIdx >= 0 && cols[ci] === todayIdx && liveAt(tt, p, q, nowMin);
-      blk.className = 'g-block c' + colorSlot(main.name) +
+      // 0.1.13 每课自定义颜色：详情弹层里选过的马卡龙色优先（按课程 code 存），
+      // 没选过的走 colorSlot 自动槽位。自定义块挂 .cc —— 马卡龙全是浅底，
+      // 文字恒深；不能落进 .c0~c7，那组在深色主题下会换成深底浅字。
+      const custom = main.code ? (CFG.courseColors || {})[main.code] : '';
+      blk.className = 'g-block' + (custom ? ' cc' : ' c' + colorSlot(main.name)) +
         (here.length > 1 ? ' multi' : '') +
         (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
         (isNow ? ' live' : '');
+      // 颜色本体走 inline style（马卡龙 hex 来自截图采样，CSS 里没有这些档）。
+      // 恢复跟随配色时必须显式清掉 inline，否则旧颜色会粘在重建的块上。
+      if (custom) blk.style.background = custom;
+      else blk.style.background = '';
       blk.style.gridRow = (p + 2) + ' / span ' + span;
       blk.style.gridColumn = (ci + 1);
       const names = here.map((c) => '<div class="bn">' + esc(c.name) + '</div>').join('');
@@ -1545,22 +1592,27 @@ function buildWeekGrid(week) {
       // 「这节课在哪个教室」比「课名多显示两个字」重要。
       let foot = '';
       if (here.length === 1) {
+        // 0.1.13 教室贴底：老师写在前（贴着课名），教室写在最后（.br 用
+        // margin-top:auto 压到块底）。连堂块越高，整列教室号底部对齐越好认，
+        // 「下一节去哪」扫一眼就有答案。单节格子老师隐藏后教室仍然贴底。
+        // 多个老师只写第一个。`张强,苏博` 在 27px 宽的角落只能显示成
+        // 「张强,...」，还不如干净显示一个；完整名单在详情面板里。
+        const tname = String(main.teacher || '').split(/[,，、]/)[0].trim();
+        if (tname) foot += '<div class="bt">' + esc(tname) + '</div>';
         if (main.room) {
           // 一间一行。两个教室就两行 —— 不能只写第一个（用户 2026-10-19 提的）。
           // 两间时把「楼栋 房间」中间那个空格去掉，**并且不要 @ 前缀**：
           // 格子只有 44px 宽，`@02B506` 在手机 WebView 里正好差几个像素，
           // 末尾的 6 被裁掉一半（用户 2026-10-19 第二次截图）。
+          // 🔴 brf 只给第一间教室：贴底的 margin-top:auto 挂在它身上 ——
+          //    如果两行都吃 auto，flex 会把剩余空间平分成两条缝，教室被拆开。
           const rl = roomList(main.room);
-          rl.forEach((r) => {
+          rl.forEach((r, i) => {
             const two = rl.length > 1;
-            foot += '<div class="br' + (two ? ' br2' : '') + '">' +
+            foot += '<div class="br' + (two ? ' br2' : '') + (i === 0 ? ' brf' : '') + '">' +
               (two ? '' : '@') + esc(two ? r.replace(/\s+/g, '') : r) + '</div>';
           });
         }
-        // 多个老师只写第一个。`张强,苏博` 在 27px 宽的角落只能显示成
-        // 「张强,...」，还不如干净显示一个；完整名单在详情面板里。
-        const tname = String(main.teacher || '').split(/[,，、]/)[0].trim();
-        if (tname) foot += '<div class="bt">' + esc(tname) + '</div>';
       }
       blk.innerHTML = names + foot;
       // 0.1.7：不再写 data-par（右下角单/双周角标已按用户要求删除）。
@@ -1788,6 +1840,21 @@ function openCourseSheet(courses, day, period, span, week) {
     const w = c.weeks || [];
     const odd = w.length > 1 && w.every((x) => x % 2 === 1);
     const even = w.length > 1 && w.every((x) => x % 2 === 0);
+    // 0.1.13 课表颜色色板：每个课程块一排马卡龙色圆点，第一个是「跟随配色」
+    // （删掉自定义、回到 colorSlot 自动分配）。没有 code 的课没有键可存，不渲染。
+    const hasCode = !!c.code;
+    const cur = hasCode ? ((CFG.courseColors || {})[c.code] || '') : '';
+    const ccrow = hasCode
+      ? '<div class="cclab">课表颜色</div>' +
+        '<div class="ccrow" data-code="' + esc(c.code) + '">' +
+          '<button type="button" class="cc-dot cc-auto' + (cur ? '' : ' on') +
+            '" data-c="" aria-label="跟随配色"></button>' +
+          MACARON.map((h) =>
+            '<button type="button" class="cc-dot' + (cur === h ? ' on' : '') +
+            '" data-c="' + h + '" style="background:' + h + '" aria-label="' + h + '"></button>'
+          ).join('') +
+        '</div>'
+      : '';
     return '<div class="sh-block">' +
       '<div class="sh-title">' + esc(c.name) + '</div>' +
       '<div class="sh-sub">' + esc(c.code || '') + '</div>' +
@@ -1799,6 +1866,7 @@ function openCourseSheet(courses, day, period, span, week) {
         '<div class="sh-row"><span class="k">周次</span><span class="v">' + weeksText(w) +
           (odd ? '（单周）' : (even ? '（双周）' : '')) + '</span></div>' +
       '</div>' +
+      ccrow +
       '<button class="sh-hide" data-code="' + esc(c.code || '') + '">隐藏这门课</button>' +
       '</div>';
   }).join('');
@@ -1811,6 +1879,25 @@ function openCourseSheet(courses, day, period, span, week) {
       setHidden(code, true);
       $('sheetMask').hidden = true;
       toast('已隐藏，可在「我的」里恢复');
+    });
+  });
+
+  // 选色：存 CFG.courseColors[code]、立刻重画课表（弹层不关，能接着选别的课）。
+  // 选中态只刷新这一排按钮 —— 整个 sheetBody 重写会把滚动位置丢掉。
+  $('sheetBody').querySelectorAll('.ccrow').forEach((row) => {
+    const code = row.dataset.code;
+    if (!code) return;
+    row.querySelectorAll('.cc-dot').forEach((dot) => {
+      dot.addEventListener('click', () => {
+        const v = dot.dataset.c || '';
+        if (v) CFG.courseColors[code] = v;
+        else delete CFG.courseColors[code];
+        store.set(KEY.settings, CFG);
+        renderSchedule();
+        row.querySelectorAll('.cc-dot').forEach((d) =>
+          d.classList.toggle('on', (d.dataset.c || '') === v));
+        toast(v ? '这门课的颜色已保存' : '已恢复跟随配色');
+      });
     });
   });
 }
@@ -2083,19 +2170,9 @@ function openWeekSheet() {
     '<button class="btn" data-step="-1">‹ ' + stepLab[0] + '</button>' +
     '<button class="btn" data-step="1">' + stepLab[1] + ' ›</button>' +
     '</div>';
-  // 课程块配色：对所有学期都有效（不像校历只对当前学期），
-  // 所以放在 ttIsNow() 判断外面。
-  // 🔴 0.1.8：文案跟着配色一起改。
-  //   「清爽」→「官网色」（FlClash 官网那组紫/橄榄/陶土/灰蓝莫兰迪四色系）
-  //   「柔和」→「淡彩」（同色相再淡一档）
-  // ⚠️ 内部值仍是 clean / vivid —— vivid 是 0.1.6 的历史内部名，
-  //   老用户本机存着它，改名会让他们的选择悄悄回退。
-  const vivid = CFG.palette === 'vivid';
-  html += '<div class="palrow"><span class="pallab">课程块配色</span>' +
-    '<div class="palopts">' +
-      '<button class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">官网色</button>' +
-      '<button class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">淡彩</button>' +
-    '</div></div>';
+  // 「课程块配色」0.1.13 挪进了「我的 → 显示设置」：显示偏好集中一处，
+  // 跳周弹层只留「跳周 / 翻页 / 只看工作日 / 校历 / 学期设置」这些
+  // 「这一刻就要用」的操作。配色是低频设置，不值得占跳周的注意力。
   // 「只看工作日」也收进这个弹层（2026-11-04）：顶栏原来 6 个控件，
   // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
   if (ttIsNow()) {
@@ -2122,17 +2199,8 @@ function openWeekSheet() {
       toast(CFG.fiveDay ? '已切换为只看工作日' : '已显示整周 7 天');
     });
   }
-  // 0.1.6 配色是纯 CSS class 切换，不用 renderSchedule() 重画格子。
-  // 关掉弹层再切，用户能立刻看到整屏效果；选中态下次打开弹层会重新渲染。
-  $('sheetBody').querySelectorAll('.popt').forEach((b) => {
-    b.addEventListener('click', () => {
-      CFG.palette = b.dataset.pal;
-      store.set(KEY.settings, CFG);
-      applyPalette();
-      $('sheetMask').hidden = true;
-      toast(CFG.palette === 'vivid' ? '已切换为淡彩配色' : '已切换为官网配色');
-    });
-  });
+  // 「课程块配色」0.1.13 挪进了「我的 → 显示设置」（绑定也在那边），
+  // 这里只剩学期切换、跳周格子、翻页和三个快捷入口。
   $('sheetBody').querySelectorAll('.sh-terms .chip').forEach((b) => {
     b.addEventListener('click', () => switchTerm(b.dataset.sid));
   });
@@ -2165,6 +2233,8 @@ function openWeekSheet() {
       覆盖安装时若 WebView 缓存了旧 index.html，直接绑定会抛 null
       让整份 app.js 罢工（0.1.1 白屏同款）。wkPrev/wkNext 是老 id，
       同样换成 boundEl 更稳，代价为零。 */
+/* 0.1.13 定稿：跳周入口只有 wkTitle（左侧标题按钮）；wkJump 收起但绑定保留。
+   两颗弹的是同一个 openWeekSheet，用户要删的是右侧那颗重复的。 */
 boundEl('wkTitle', 'click', openWeekSheet);
 boundEl('wkJump', 'click', openWeekSheet);
 
@@ -4317,6 +4387,8 @@ function renderMe() {
   })();
   $('meSemester').textContent = (gl ? gl + ' · ' : '') +
     mdDot(curStart) + ' 开学 · ' + curWeeks + ' 周';
+  // 0.1.13 显示设置行的摘要：字体档 + 配色名，让用户不点开就知道当前状态
+  $('meDisplay').textContent = displaySummary();
 
   const tt = times();
   const first = tt.find((x) => x[0]);
@@ -4502,6 +4574,11 @@ async function loadTodo(force) {
 
 function renderTodo() {
   const card = $('todoCard');
+  // 0.1.13 「该办的事」暂时隐藏（用户 2026-11-20）。
+  // 🔴 恢复时删掉下面两行短路即可 —— 卡片 DOM、按钮绑定、后面的渲染
+  //    逻辑全部原样保留，不用从 git 里翻。
+  card.hidden = true;
+  return;
   const bound = !!(DATA && DATA.profile && DATA.profile.studentId);
   card.hidden = !bound;
   if (!bound) return;
@@ -4715,6 +4792,70 @@ function openSemesterSheet() {
 $('rowSemester').addEventListener('click', openSemesterSheet);
 $('rowProfile').addEventListener('click', openProfileSheet);
 
+/* ---------------- 显示设置（0.1.13） ----------------
+   「我的 → 显示设置」弹层：字体大小、课程块配色收在这里。
+   🔴 配色从跳周弹层挪过来（用户 2026-11-20 定的）：显示偏好集中一处，
+      跳周弹层只留跳周格子 / 翻页 / 只看工作日 / 校历 / 学期设置。
+      ⚠️ 内部值仍是 clean / vivid —— vivid 是 0.1.6 的历史内部名，
+      老用户本机存着它，改名会让他们的选择悄悄回退。
+   字体大小不影响课表页（格子物理约束），CSS 层整页回退，JS 不用管。 */
+function displaySummary() {
+  const fsLab = { s: '字体小', std: '字体标准', l: '字体大' };
+  return (fsLab[['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std']) +
+    ' · ' + (CFG.palette === 'vivid' ? '淡彩' : '淡茶色');
+}
+
+function openDisplaySheet() {
+  const vivid = CFG.palette === 'vivid';
+  const fs = ['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std';
+  $('sheetBody').innerHTML =
+    '<div class="sh-title">显示设置</div>' +
+    '<div class="palrow"><span class="pallab">字体大小</span>' +
+      '<div class="palopts" id="fsSeg">' +
+        '<button type="button" class="fs-opt' + (fs === 's' ? ' on' : '') + '" data-fs="s">小</button>' +
+        '<button type="button" class="fs-opt' + (fs === 'std' ? ' on' : '') + '" data-fs="std">标准</button>' +
+        '<button type="button" class="fs-opt' + (fs === 'l' ? ' on' : '') + '" data-fs="l">大</button>' +
+      '</div></div>' +
+    '<div class="palrow"><span class="pallab">课程块配色</span>' +
+      '<div class="palopts">' +
+        /* 0.1.13 「官网色」按用户要求改叫「淡茶色」——莫兰迪暖调确实是茶色系，
+           叫官网对用户没有信息量。内部值仍是 clean（历史遗留名不改）。 */
+        '<button type="button" class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">淡茶色</button>' +
+        '<button type="button" class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">淡彩</button>' +
+      '</div></div>' +
+    // 说明放灰字（.sh-sub），不能用 .tip —— 那是红色错误样式（app.css:2281 的规矩）
+    '<p class="sh-sub">字体大小不改变课表格子里的字 —— 格子宽度是固定的，字号跟着变会撑破。' +
+    '单门课的颜色在课表点开课程详情里选。</p>';
+  $('sheetMask').hidden = false;
+
+  $('sheetBody').querySelectorAll('.fs-opt').forEach((b) => {
+    b.addEventListener('click', () => {
+      const v = b.dataset.fs;
+      if (CFG.fontScale === v) return;
+      CFG.fontScale = v;
+      store.set(KEY.settings, CFG);
+      applyFontScale();
+      $('meDisplay').textContent = displaySummary();
+      toast(v === 's' ? '已切换为小字号' : v === 'l' ? '已切换为大字号' : '已恢复标准字号');
+    });
+  });
+  // 配色是纯 CSS class 切换，不用 renderSchedule() 重画格子。
+  // 弹层开着时下面就能看到整屏效果；选中态即时刷新，不用关掉重开。
+  $('sheetBody').querySelectorAll('.popt').forEach((b) => {
+    b.addEventListener('click', () => {
+      CFG.palette = b.dataset.pal;
+      store.set(KEY.settings, CFG);
+      applyPalette();
+      $('meDisplay').textContent = displaySummary();
+      $('sheetBody').querySelectorAll('.popt').forEach((x) =>
+        x.classList.toggle('on', x.dataset.pal === CFG.palette));
+      toast(CFG.palette === 'vivid' ? '已切换为淡彩配色' : '已切换为淡茶色');
+    });
+  });
+}
+
+$('rowDisplay').addEventListener('click', openDisplaySheet);
+
 /* 「我的」里的校历。
    这条是给「不习惯点图标」的人准备的文字路径 —— 课表页顶部已经有入口，
    但校历那条以前是**点标题**，看不出能点。
@@ -4863,10 +5004,14 @@ function accState() {
   };
 }
 
+/* 0.1.13 智慧门户暂时从账号列表里隐藏（用户 2026-11-20）：本校门户本来就
+   尚未适配（/api/portal/* 全部短路，见文件末「校园」一节），这一行挂在这儿
+   只能显示「还没连接」。恢复时把注释里那一条放回数组即可，
+   accState / renderAccounts / 解绑逻辑都没动。 */
 const ACC_SYS = [
   { id: 'jw', k: '教务系统', host: 'jw.shengda.edu.cn' },
   { id: 'cx', k: '学习通', host: 'chaoxing.com' },
-  { id: 'portal', k: '智慧门户', host: 'my.shengda.edu.cn' },
+  // { id: 'portal', k: '智慧门户', host: 'my.shengda.edu.cn' },
 ];
 
 function renderAccounts() {
