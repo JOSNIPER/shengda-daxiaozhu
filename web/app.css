@@ -3113,5 +3113,8 @@ html[data-fs="l"] {
 }
 /* 「跟随配色」圆点：现有四色系转一圈，一眼看出"回到自动分配" */
 .cc-dot.cc-auto {
-  background: conic-gradient(#bebcd9 0 25%, #b7c2b2 0 50%, #d4baa9 0 75%, #b5c0cb 0);
+  /* 0.1.14：环改成马卡龙 10 色等分 —— 「恢复自动」回到的就是这十色 */
+  background: conic-gradient(
+    #f8d1c5 0 10%, #f5c9df 0 20%, #efc2a3 0 30%, #f7de97 0 40%, #e0f5ac 0 50%,
+    #ace2e9 0 60%, #e3c7f9 0 70%, #c1fcd3 0 80%, #d2dcf4 0 90%, #f3b6b4 0);
 }

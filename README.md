@@ -4,7 +4,7 @@
 
 教务系统是青果（KINGOSOFT），走 CAS 单点登录。这不是学校官方客户端，只是把本来要一次次打开教务网页才能看到的东西，收进一个手机上顺手的地方。
 
-当前版本 **0.1.14**（code 74）。两种形态共用同一套界面代码：
+当前版本 **0.1.15**（code 75）。两种形态共用同一套界面代码：
 
 | 形态 | 怎么用 | 谁去连教务 |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ python android/build_apk.py --clean --debug   # 调试包：config/build.json，
 
 默认打的就是可发布的正式包。调试包必须显式加 `--debug`（`__PC_IP__` 会被换成构建机局域网 IP，手机要和电脑同网段）。这个开关是 2026-11-12 加的：以前只看 `config/build.json` 在不在，结果新增了那份模板以后，默认打出来的包会连本机 mock，装到手机上连不上教务。
 
-产物在 `android/dist/daxiaozhu-0.1.14.apk`，同时会重写 `version.json` 里的体积与 sha256。改版本号要同时改 `version.json`、`android/build_apk.py`、`web/app.js`、`MainActivity.java` 四处（`version` / `code` 各两个，加上 UA 后缀共六个值），脚本有一致性校验，对不上会拒绝出包。
+产物在 `android/dist/daxiaozhu-0.1.15.apk`，同时会重写 `version.json` 里的体积与 sha256。改版本号要同时改 `version.json`、`android/build_apk.py`、`web/app.js`、`MainActivity.java` 四处（`version` / `code` 各两个，加上 UA 后缀共六个值），脚本有一致性校验，对不上会拒绝出包。
 
 ### 测试
 

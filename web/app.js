@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.14';
-const APP_CODE = 74;
+const APP_VERSION = '0.1.15';
+const APP_CODE = 75;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -173,8 +173,11 @@ let CFG = Object.assign(
     // 只影响课表以外的页面 —— 课表格子字号是物理约束，见 app.css「字体大小设置」区。
     fontScale: 'std',
     // 每课自定义颜色（0.1.13）：课程 code → 马卡龙色 hex（详情弹层里选）。
-    // 没选过的课走 colorSlot(name) 自动槽位；删键 = 恢复跟随配色。
+    // 0.1.14 定稿：手动色**优先**于自动色；「淡茶色」按钮 = 清空手动 + 重新随机。
     courseColors: {},
+    // 自动分配（0.1.14）：导入时从 MACARON 10 色随机赋予，同一张课表内
+    // 不重复；结果持久化 —— 重新同步不会打乱你记住的颜色。
+    autoColors: {},
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
     seenDay: '',
@@ -547,6 +550,31 @@ function colorSlot(name) {
    （_lab 提色脚本，2026-11-20）。全是浅底，所以选中后的文字恒深（.cc）。 */
 const MACARON = ['#f8d1c5', '#f5c9df', '#efc2a3', '#f7de97', '#e0f5ac',
                  '#ace2e9', '#e3c7f9', '#c1fcd3', '#d2dcf4', '#f3b6b4'];
+
+/* 0.1.14 马卡龙自动分配（用户定稿）：导入时从 10 色里**随机**赋予，
+   同一张课表内不重复 —— 分配前先把「手动色 + 已分配色」全部占住，
+   剩余色池随机取；池耗尽（>10 门课）才允许复用。
+   结果写进 CFG.autoColors 持久化：一次分配终身稳定，重新同步不打乱。
+   🔴 只在 renderSchedule 入口跑；有新分配才写 store，别每次渲染都写盘。 */
+function ensureAutoColors() {
+  const courses = (DATA && DATA.courses) || [];
+  if (!courses.length) return;
+  const auto = CFG.autoColors || (CFG.autoColors = {});
+  const manual = CFG.courseColors || {};
+  const used = new Set(Object.values(manual).concat(Object.values(auto)));
+  let changed = false;
+  for (const c of courses) {
+    const code = String(c.code || '').trim();
+    if (!code || auto[code] || manual[code]) continue;
+    let pool = MACARON.filter((h) => !used.has(h));
+    if (!pool.length) pool = MACARON.slice();
+    const hex = pool[Math.floor(Math.random() * pool.length)];
+    auto[code] = hex;
+    used.add(hex);
+    changed = true;
+  }
+  if (changed) store.set(KEY.settings, CFG);
+}
 
 /** 把 room 拆成「楼栋 / 房间号」两段，**所有教室都返回**。
  *
@@ -1269,6 +1297,7 @@ function renderSchedule() {
   document.querySelector('.weekbar').hidden = !drawable;
   if (!hasData) return;
   if (!drawable) { renderRawCourses(rows); return; }
+  ensureAutoColors();               // 0.1.14：马卡龙自动分配（有新课才写盘）
   if (CFG.view === 'day') renderDay(); else renderWeek();
 }
 
@@ -1572,18 +1601,19 @@ function buildWeekGrid(week) {
       // 翻到别的周 todayIdx 已经是 -1，天然不亮 —— 别让用户以为第 5 周
       // 也有节课正在上。
       const isNow = todayIdx >= 0 && cols[ci] === todayIdx && liveAt(tt, p, q, nowMin);
-      // 0.1.13 每课自定义颜色：详情弹层里选过的马卡龙色优先（按课程 code 存），
-      // 没选过的走 colorSlot 自动槽位。自定义块挂 .cc —— 马卡龙全是浅底，
-      // 文字恒深；不能落进 .c0~c7，那组在深色主题下会换成深底浅字。
-      const custom = main.code ? (CFG.courseColors || {})[main.code] : '';
-      blk.className = 'g-block' + (custom ? ' cc' : ' c' + colorSlot(main.name)) +
-        (here.length > 1 ? ' multi' : '') +
+      // 0.1.14 配色定稿：手动色优先，其次自动分配色；**全部块挂 .cc** ——
+      // 马卡龙全是浅底，文字恒深，c0~c7 灰调槽位退出课表（colorSlot 保留给
+      // 无 code 的课做兜底哈希）。恢复自动色时不清 autoColors，只删手动键。
+      const code = String(main.code || '').trim();
+      const custom = code
+        ? (CFG.courseColors || {})[code] || (CFG.autoColors || {})[code] : '';
+      blk.className = 'g-block cc' + (here.length > 1 ? ' multi' : '') +
         (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
         (isNow ? ' live' : '');
       // 颜色本体走 inline style（马卡龙 hex 来自截图采样，CSS 里没有这些档）。
-      // 恢复跟随配色时必须显式清掉 inline，否则旧颜色会粘在重建的块上。
+      // 无 code 的课（极少）用课名哈希从马卡龙里兜底，保证块底不是透明的。
       if (custom) blk.style.background = custom;
-      else blk.style.background = '';
+      else blk.style.background = MACARON[colorSlot(main.name)];
       blk.style.gridRow = (p + 2) + ' / span ' + span;
       blk.style.gridColumn = (ci + 1);
       const names = here.map((c) => '<div class="bn">' + esc(c.name) + '</div>').join('');
@@ -1838,15 +1868,17 @@ function openCourseSheet(courses, day, period, span, week) {
     const w = c.weeks || [];
     const odd = w.length > 1 && w.every((x) => x % 2 === 1);
     const even = w.length > 1 && w.every((x) => x % 2 === 0);
-    // 0.1.13 课表颜色色板：每个课程块一排马卡龙色圆点，第一个是「跟随配色」
-    // （删掉自定义、回到 colorSlot 自动分配）。没有 code 的课没有键可存，不渲染。
+    // 0.1.14 课表颜色色板：一排马卡龙圆点 + 「恢复自动」圆点。
+    // cur 取色顺序：手动色 > 自动分配色 —— 自动色存在时「恢复自动」那颗
+    // 保持选中（课表显示的就是它）；手动覆盖后对应色圆点亮起。
     const hasCode = !!c.code;
     const cur = hasCode ? ((CFG.courseColors || {})[c.code] || '') : '';
+    const curAuto = hasCode ? ((CFG.autoColors || {})[c.code] || '') : '';
     const ccrow = hasCode
       ? '<div class="cclab">课表颜色</div>' +
         '<div class="ccrow" data-code="' + esc(c.code) + '">' +
           '<button type="button" class="cc-dot cc-auto' + (cur ? '' : ' on') +
-            '" data-c="" aria-label="跟随配色"></button>' +
+            '" data-c="" aria-label="恢复自动分配的颜色"></button>' +
           MACARON.map((h) =>
             '<button type="button" class="cc-dot' + (cur === h ? ' on' : '') +
             '" data-c="' + h + '" style="background:' + h + '" aria-label="' + h + '"></button>'
@@ -1894,7 +1926,7 @@ function openCourseSheet(courses, day, period, span, week) {
         renderSchedule();
         row.querySelectorAll('.cc-dot').forEach((d) =>
           d.classList.toggle('on', (d.dataset.c || '') === v));
-        toast(v ? '这门课的颜色已保存' : '已恢复跟随配色');
+        toast(v ? '这门课的颜色已保存' : '已恢复自动分配的颜色');
       });
     });
   });
@@ -4813,18 +4845,20 @@ $('rowProfile').addEventListener('click', openProfileSheet);
    「我的 → 显示设置」弹层：字体大小、课程块配色收在这里。
    🔴 配色从跳周弹层挪过来（用户 2026-11-20 定的）：显示偏好集中一处，
       跳周弹层只留跳周格子 / 翻页 / 只看工作日 / 校历 / 学期设置。
-      ⚠️ 内部值仍是 clean / vivid —— vivid 是 0.1.6 的历史内部名，
-      老用户本机存着它，改名会让他们的选择悄悄回退。
+   0.1.14 配色定稿：马卡龙自动分配 + 每课手动覆盖，「淡茶色」= 重置回默认分配；
+   CFG.palette / applyPalette / 淡彩（vivid）整套退出 UI —— 代码留着不引用，
+   老用户本机残留的 settings 字段无害。
    字体大小不影响课表页（格子物理约束），CSS 层整页回退，JS 不用管。 */
 function displaySummary() {
   const fsLab = { s: '字体小', std: '字体标准', l: '字体大' };
+  const manual = Object.keys(CFG.courseColors || {}).length;
   return (fsLab[['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std']) +
-    ' · ' + (CFG.palette === 'vivid' ? '淡彩' : '淡茶色');
+    ' · ' + (manual ? '自定义配色' : '淡茶色');
 }
 
 function openDisplaySheet() {
-  const vivid = CFG.palette === 'vivid';
   const fs = ['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std';
+  const hasManual = Object.keys(CFG.courseColors || {}).length > 0;
   $('sheetBody').innerHTML =
     '<div class="sh-title">显示设置</div>' +
     '<div class="palrow"><span class="pallab">字体大小</span>' +
@@ -4833,16 +4867,16 @@ function openDisplaySheet() {
         '<button type="button" class="fs-opt' + (fs === 'std' ? ' on' : '') + '" data-fs="std">标准</button>' +
         '<button type="button" class="fs-opt' + (fs === 'l' ? ' on' : '') + '" data-fs="l">大</button>' +
       '</div></div>' +
-    '<div class="palrow"><span class="pallab">课程块配色</span>' +
+    '<div class="palrow"><span class="pallab">课程块颜色</span>' +
       '<div class="palopts">' +
-        /* 0.1.13 「官网色」按用户要求改叫「淡茶色」——莫兰迪暖调确实是茶色系，
-           叫官网对用户没有信息量。内部值仍是 clean（历史遗留名不改）。 */
-        '<button type="button" class="popt' + (vivid ? '' : ' on') + '" data-pal="clean">淡茶色</button>' +
-        '<button type="button" class="popt' + (vivid ? ' on' : '') + '" data-pal="vivid">淡彩</button>' +
+        // 0.1.14 定稿：只剩「淡茶色」一颗 —— 点它 = 清空全部手动覆盖，
+        // 重新随机分配（覆盖用户改过的每一门课）。马卡龙在导入时自动赋予。
+        '<button type="button" class="popt' + (hasManual ? '' : ' on') + '" id="palTea">淡茶色</button>' +
       '</div></div>' +
     // 说明放灰字（.sh-sub），不能用 .tip —— 那是红色错误样式（app.css:2281 的规矩）
-    '<p class="sh-sub">字体大小不改变课表格子里的字 —— 格子宽度是固定的，字号跟着变会撑破。' +
-    '单门课的颜色在课表点开课程详情里选。</p>';
+    '<p class="sh-sub">导入课表时自动给每门课分配一个颜色，同一张课表里不重复。' +
+    '点「淡茶色」会清掉手动改过的颜色并重新分配；单门课的颜色在课表点开课程详情里选。' +
+    '字体大小不改变课表格子里的字 —— 格子宽度是固定的，字号跟着变会撑破。</p>';
   $('sheetMask').hidden = false;
 
   $('sheetBody').querySelectorAll('.fs-opt').forEach((b) => {
@@ -4856,18 +4890,17 @@ function openDisplaySheet() {
       toast(v === 's' ? '已切换为小字号' : v === 'l' ? '已切换为大字号' : '已恢复标准字号');
     });
   });
-  // 配色是纯 CSS class 切换，不用 renderSchedule() 重画格子。
-  // 弹层开着时下面就能看到整屏效果；选中态即时刷新，不用关掉重开。
-  $('sheetBody').querySelectorAll('.popt').forEach((b) => {
-    b.addEventListener('click', () => {
-      CFG.palette = b.dataset.pal;
-      store.set(KEY.settings, CFG);
-      applyPalette();
-      $('meDisplay').textContent = displaySummary();
-      $('sheetBody').querySelectorAll('.popt').forEach((x) =>
-        x.classList.toggle('on', x.dataset.pal === CFG.palette));
-      toast(CFG.palette === 'vivid' ? '已切换为淡彩配色' : '已切换为淡茶色');
-    });
+  // 「淡茶色」= 全部覆盖：清手动色 + 清自动分配 + 重新随机（ensureAutoColors）。
+  // 弹层开着时下面就能看到整屏效果。
+  $('palTea').addEventListener('click', () => {
+    CFG.courseColors = {};
+    CFG.autoColors = {};
+    store.set(KEY.settings, CFG);
+    ensureAutoColors();
+    renderSchedule();
+    $('meDisplay').textContent = displaySummary();
+    $('palTea').classList.add('on');
+    toast('已重新分配全部课程颜色');
   });
 }
 

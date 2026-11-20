@@ -1,19 +1,17 @@
 {
   "name": "达小助",
-  "version": "0.1.14",
-  "code": 74,
+  "version": "0.1.15",
+  "code": 75,
   "date": "2026-11-20",
   "size": 547216,
-  "sha256": "cdea43ea3a0a89ff090c433f1355d97a5db69718b22064f06d72a34e52f04540",
-  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.14/daxiaozhu-0.1.14.apk",
-  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.14/daxiaozhu-0.1.14.apk",
+  "sha256": "a8dde5c1d588860693627c8e3f02d52fa3828ab47326655faba47dbbb15fcb72",
+  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.15/daxiaozhu-0.1.15.apk",
+  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.15/daxiaozhu-0.1.15.apk",
   "page": "https://JOSNIPER.github.io/shengda-daxiaozhu/",
   "notes": [
-    "课程块按新排版定稿：课名加粗居中，@地点紧跟放大，老师淡灰垫底",
-    "跳周弹层的按钮改成「显示周末 / 隐藏周末」，一眼看懂点下去会怎样",
-    "成绩全部视图里，每门课后面标了学期归属（比如「大三上」）",
-    "绩点低于 2.0 会标红，挂科边缘早知道",
-    "「清除本机缓存」改成红字，提醒这是不可逆操作"
+    "课程块配色换成马卡龙：同步课表时自动给每门课随机分配一个颜色，同一张课表里不重复",
+    "「显示设置」里只剩「淡茶色」，点它会清掉手动改过的颜色并重新分配",
+    "手动改过的课程颜色不会被同步打乱，一直保留"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.12 的 APK 发布到 Releases，apk/apk_cn 指向同一份包。0.1.12 起「检查更新」是纯外链入口，App 不再读取本清单做自更新。"
 }
