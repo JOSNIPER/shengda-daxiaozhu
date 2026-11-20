@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.15';
-const APP_CODE = 75;
+const APP_VERSION = '0.1.16';
+const APP_CODE = 76;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -564,12 +564,16 @@ function ensureAutoColors() {
   const used = new Set(Object.values(manual).concat(Object.values(auto)));
   let changed = false;
   for (const c of courses) {
-    const code = String(c.code || '').trim();
-    if (!code || auto[code] || manual[code]) continue;
+    // 🔴 key 用课程名（同 renderSchedule 的 ckey）：教务把同一门课拆成
+    //    多条记录时 code 各不相同，按 code 分会随机出两块不同色（0.1.15 真机踩到）。
+    //    同名同色；色池耗尽才复用。老用户按 code 存的旧映射自然失效，
+    //    由这里按名重新分配（0.1.15 只发了一天，手动色丢失可接受）。
+    const key = String(c.name || c.code || '').trim();
+    if (!key || auto[key] || manual[key]) continue;
     let pool = MACARON.filter((h) => !used.has(h));
     if (!pool.length) pool = MACARON.slice();
     const hex = pool[Math.floor(Math.random() * pool.length)];
-    auto[code] = hex;
+    auto[key] = hex;
     used.add(hex);
     changed = true;
   }
@@ -1602,18 +1606,21 @@ function buildWeekGrid(week) {
       // 也有节课正在上。
       const isNow = todayIdx >= 0 && cols[ci] === todayIdx && liveAt(tt, p, q, nowMin);
       // 0.1.14 配色定稿：手动色优先，其次自动分配色；**全部块挂 .cc** ——
-      // 马卡龙全是浅底，文字恒深，c0~c7 灰调槽位退出课表（colorSlot 保留给
-      // 无 code 的课做兜底哈希）。恢复自动色时不清 autoColors，只删手动键。
-      const code = String(main.code || '').trim();
-      const custom = code
-        ? (CFG.courseColors || {})[code] || (CFG.autoColors || {})[code] : '';
+      // 马卡龙全是浅底，文字恒深，c0~c7 灰调槽位退出课表。恢复自动色时
+      // 不清 autoColors，只删手动键。
+      // 🔴 key 用**课程名**而不是 code（用户真机发现同一门课两块不同色）：
+      //    教务把同一门课拆成多条记录时 code 各不相同（kch 带班次后缀），
+      //    名字才稳定 —— 「某一课程颜色在全局内生效」按名字保证。
+      const ckey = String(main.name || main.code || '').trim();
+      const custom = ckey
+        ? (CFG.courseColors || {})[ckey] || (CFG.autoColors || {})[ckey] : '';
       blk.className = 'g-block cc' + (here.length > 1 ? ' multi' : '') +
         (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
         (isNow ? ' live' : '');
       // 颜色本体走 inline style（马卡龙 hex 来自截图采样，CSS 里没有这些档）。
-      // 无 code 的课（极少）用课名哈希从马卡龙里兜底，保证块底不是透明的。
+      // 名字和 code 都没有的课（理论不该出现）用哈希兜底，保证块底不透明。
       if (custom) blk.style.background = custom;
-      else blk.style.background = MACARON[colorSlot(main.name)];
+      else blk.style.background = MACARON[colorSlot(main.name || main.code || '?')];
       blk.style.gridRow = (p + 2) + ' / span ' + span;
       blk.style.gridColumn = (ci + 1);
       const names = here.map((c) => '<div class="bn">' + esc(c.name) + '</div>').join('');
@@ -1836,9 +1843,18 @@ function buildDayPage(date) {
     const live = isToday && liveAt(tt, m.p, m.p + m.len, nowMin);
     const main = m.courses[0];
     const extra = m.courses.slice(1);
+    // 0.1.14 日视图接马卡龙（用户：颜色没有全局生效 —— 之前这里还挂着
+    // 灰调 c0~c7）。取色顺序与周视图同一套：手动 > 自动 > 马卡龙哈希兜底，
+    // key 用课程名（同一门课教务可能拆成多条、code 不同，名字才稳定）。
+    // 浅底恒深字（同周视图 .cc 的道理），左边那条 4px 竖线同色。
+    const dvKey = String(main.name || main.code || '').trim();
+    const dvColor = (CFG.courseColors || {})[dvKey] || (CFG.autoColors || {})[dvKey]
+      || MACARON[colorSlot(main.name)];
     return '<div class="dv-item">' +
       '<div class="dv-time"><b>' + (startT || '—') + '</b><i>' + (endT || '') + '</i></div>' +
-      '<div class="dv-card c' + colorSlot(main.name) + (live ? ' live' : '') + '">' +
+      '<div class="dv-card" style="background:' + dvColor +
+        ';border-left-color:' + dvColor + ';color:#262122"' +
+        (live ? ' live' : '') + '">' +
         '<div class="dv-head"><span class="dv-name">' + esc(main.name) + '</span>' +
           '<span class="dv-period">' + periodsText(periods) + '</span></div>' +
         '<div class="dv-meta">' + esc(roomFull(main.room)) +
@@ -1869,14 +1885,16 @@ function openCourseSheet(courses, day, period, span, week) {
     const odd = w.length > 1 && w.every((x) => x % 2 === 1);
     const even = w.length > 1 && w.every((x) => x % 2 === 0);
     // 0.1.14 课表颜色色板：一排马卡龙圆点 + 「恢复自动」圆点。
+    // 🔴 key 与分配/渲染同一套：**课程名**（code 会因教务拆条而不同）。
     // cur 取色顺序：手动色 > 自动分配色 —— 自动色存在时「恢复自动」那颗
     // 保持选中（课表显示的就是它）；手动覆盖后对应色圆点亮起。
-    const hasCode = !!c.code;
-    const cur = hasCode ? ((CFG.courseColors || {})[c.code] || '') : '';
-    const curAuto = hasCode ? ((CFG.autoColors || {})[c.code] || '') : '';
-    const ccrow = hasCode
+    const hasKey = !!(c.name || c.code);
+    const ckey = String(c.name || c.code || '').trim();
+    const cur = hasKey ? ((CFG.courseColors || {})[ckey] || '') : '';
+    const curAuto = hasKey ? ((CFG.autoColors || {})[ckey] || '') : '';
+    const ccrow = hasKey
       ? '<div class="cclab">课表颜色</div>' +
-        '<div class="ccrow" data-code="' + esc(c.code) + '">' +
+        '<div class="ccrow" data-key="' + esc(ckey) + '">' +
           '<button type="button" class="cc-dot cc-auto' + (cur ? '' : ' on') +
             '" data-c="" aria-label="恢复自动分配的颜色"></button>' +
           MACARON.map((h) =>
@@ -1912,16 +1930,17 @@ function openCourseSheet(courses, day, period, span, week) {
     });
   });
 
-  // 选色：存 CFG.courseColors[code]、立刻重画课表（弹层不关，能接着选别的课）。
+  // 选色：按课程名存 CFG.courseColors[key]（与分配/渲染同一套 key）、
+  // 立刻重画课表（弹层不关，能接着选别的课）。
   // 选中态只刷新这一排按钮 —— 整个 sheetBody 重写会把滚动位置丢掉。
   $('sheetBody').querySelectorAll('.ccrow').forEach((row) => {
-    const code = row.dataset.code;
-    if (!code) return;
+    const key = row.dataset.key;
+    if (!key) return;
     row.querySelectorAll('.cc-dot').forEach((dot) => {
       dot.addEventListener('click', () => {
         const v = dot.dataset.c || '';
-        if (v) CFG.courseColors[code] = v;
-        else delete CFG.courseColors[code];
+        if (v) CFG.courseColors[key] = v;
+        else delete CFG.courseColors[key];
         store.set(KEY.settings, CFG);
         renderSchedule();
         row.querySelectorAll('.cc-dot').forEach((d) =>
@@ -4958,14 +4977,17 @@ $('btnTimes').addEventListener('click', () => {
     return h + '</div>';
   };
   const opt = (v, name) =>
+    // 0.1.14 按用户要求重排：按钮只留干净标题，「按日期自动 5.1—9.30 用夏令」
+    // 这句规则移到顶部说明里（原来塞在按钮里挤成一团）。
     '<button class="schedopt' + (mode === v ? ' on' : '') + '" data-mode="' + v + '">' +
-    '<b>' + name + '</b><i>' +
-    (v === 'auto' ? '5 月 1 日 — 9 月 30 日用夏令作息' :
-     v === 'summer' ? '固定用夏令作息' : '固定用标准作息') + '</i></button>';
+    '<b>' + name + '</b></button>';
 
   $('sheetBody').innerHTML =
     '<div class="sh-title">上课时间</div>' +
-    '<div class="sh-sub">两套作息来自学校教务处文件，按日期自动切换；也可以手动锁定一套。</div>' +
+    // 规则前置（用户原话：「把“按日期自动5月1日－9月30日用夏令作息”变成文字
+    // 放在“两套作息来自学校教务处文件…”的前边」）
+    '<div class="sh-sub">按日期自动：5 月 1 日 — 9 月 30 日用夏令作息。' +
+    '两套作息来自学校教务处文件，按日期自动切换；也可以手动锁定一套。</div>' +
     '<div class="schedopts">' + opt('auto', '按日期自动') + opt('standard', '标准作息') +
     opt('summer', '夏令作息') + '</div>' +
     rows(cur, '当前生效的作息');
