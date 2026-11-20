@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.16';
-const APP_CODE = 76;
+const APP_VERSION = '0.1.21';
+const APP_CODE = 81;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -177,7 +177,11 @@ let CFG = Object.assign(
     courseColors: {},
     // 自动分配（0.1.14）：导入时从 MACARON 10 色随机赋予，同一张课表内
     // 不重复；结果持久化 —— 重新同步不会打乱你记住的颜色。
+    // 仅 macaron 主题使用；tea 走 c0~c7 槽位。
     autoColors: {},
+    // 配色主题（0.1.17）：'macaron' 马卡龙 10 色 / 'tea' 淡茶灰调四色系。
+    // 切换主题清空手动单课覆盖（用户 0.1.14 规则：选择即全部覆盖）。
+    colorTheme: 'macaron',
     // 上一次「打开/画课表」是哪一天（YYYY-MM-DD）。
     // 🔴 week / cursor 都存本机，而它们只在**当天**有意义 —— 见 syncToday()。
     seenDay: '',
@@ -557,6 +561,7 @@ const MACARON = ['#f8d1c5', '#f5c9df', '#efc2a3', '#f7de97', '#e0f5ac',
    结果写进 CFG.autoColors 持久化：一次分配终身稳定，重新同步不打乱。
    🔴 只在 renderSchedule 入口跑；有新分配才写 store，别每次渲染都写盘。 */
 function ensureAutoColors() {
+  if (CFG.colorTheme === 'tea') return;   // 淡茶色走 c0~c7 槽位，不需要分配
   const courses = (DATA && DATA.courses) || [];
   if (!courses.length) return;
   const auto = CFG.autoColors || (CFG.autoColors = {});
@@ -1272,11 +1277,26 @@ function fitGridHeight() {
   // 提示条（正在上/课上完了/空白占位）常驻在课表下面，要给它让出高度 ——
   // 不然占位一出现，第 9、10 节就被顶出屏幕（2026-11-03 用户反馈）。
   const dn = $('dayNext');
-  const dnH = (dn && !dn.hidden) ? dn.offsetHeight + 8 : 0;
-  const avail = scroll.clientHeight - 46 - dnH;    // 40 表头 + 6 padding + 提示条
+  // 0.1.20：让出高度 = 提示条高 + 上间距 12（网格与提示条的可见间隙）
+  //          + 下间距 8 —— margin-top 挪进 CSS 后这里同步加。
+  const dnH = (dn && !dn.hidden) ? dn.offsetHeight + 20 : 0;
+  // 🔴 必须扣掉 scroll 自己的 padding-bottom（tabbar 高 + 安全区 ≈ 80px）——
+  //    clientHeight 是含 padding 的，之前没扣，格子每节被多算 ~8px，
+  //    总高超出可视区，课表页就出现了本不该有的上下滚动（0.1.17 真机反馈）。
+  const pb = parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
+  const avail = scroll.clientHeight - pb - 46 - dnH;   // 40 表头 + 6 padding + 提示条
   let cell = Math.floor((avail - (units - 1)) / units);   // 行间还有 1px gap
   cell = Math.max(48, Math.min(110, cell));
   scroll.style.setProperty('--cell-h', cell + 'px');
+}
+
+window.addEventListener('resize', function () { fitGridHeight(); });
+// 0.1.17：容器尺寸一变就重算格子高度 —— rAF 一次不够（字体加载、异步渲染
+// 都会让 .page 的高度在首帧之后再变，headless 和真机都复现过「格子算高、
+// 课表凭空可滚」）。ResizeObserver 兜住一切来源。
+if (window.ResizeObserver) {
+  new ResizeObserver(function () { fitGridHeight(); })
+    .observe(document.getElementById('schScroll'));
 }
 
 function renderSchedule() {
@@ -1418,6 +1438,15 @@ function renderWeek() {
   //    平移量就会多出几十像素：左边漏出上一周的一条、右边第 7 列被裁。
   //    下一帧再核一次，代价是零。
   requestAnimationFrame(function () { centerTrack($('wkTrack')); });
+  // 🔴 0.1.17：fitGridHeight 也要在布局稳定后重校一次 —— 首帧时 .page 的
+  //    flex 还没分完，clientHeight 会偏大 ~100px，格子被算高、课表页凭空
+  //    多出一屏的滚动量（0.1.17 真机反馈「为什么能上下滑动」的根因）。
+  requestAnimationFrame(fitGridHeight);
+  // 再来两发延迟校正（200ms / 600ms）：字体加载、异步数据都会让 .page 高度
+  // 在首帧之后继续变 —— rAF 和 ResizeObserver 在 headless 里都追不齐时序
+  // （0.1.17 反复实测），定时器兜底是最笨但最稳的一招。幂等，多跑无害。
+  setTimeout(fitGridHeight, 200);
+  setTimeout(fitGridHeight, 600);
 }
 
 /** 放不下的单行文本：量一下宽度，放不下就把字号往下压（最低 8px）。
@@ -1581,6 +1610,29 @@ function buildWeekGrid(week) {
     }
   }
 
+  // 0.1.19 当前节次行横带：竖（today 泳道）+ 横（进行中的节）十字定位「现在」。
+  // 只在看今天、且此刻落在某节时间区间内时画；放在 g-cell 之后 = 盖住纸底、
+  // 被课程块盖住 —— 层级天然正确。数据 liveAt/toMin 都是现成的。
+  if (todayIdx >= 0) {
+    for (let bp = 0; bp < units; bp++) {
+      const bs = toMin(tt[bp] && tt[bp][0]);
+      const be = toMin(tt[bp] && tt[bp][1]);
+      if (bs === null || be === null) continue;
+      if (nowMin >= bs && nowMin <= be) {
+        const band = document.createElement('div');
+        band.className = 'g-nowrow';
+        band.style.gridRow = (bp + 2);
+        band.style.gridColumn = '1 / -1';
+        const btag = document.createElement('i');
+        btag.className = 'g-nowrow-tag';
+        btag.textContent = '第 ' + (bp + 1) + ' 节 · 进行中';
+        band.appendChild(btag);
+        frag.appendChild(band);
+        break;
+      }
+    }
+  }
+
   for (let ci = 0; ci < days; ci++) {
     const d = cols[ci];
     let p = 0;
@@ -1612,15 +1664,28 @@ function buildWeekGrid(week) {
       //    教务把同一门课拆成多条记录时 code 各不相同（kch 带班次后缀），
       //    名字才稳定 —— 「某一课程颜色在全局内生效」按名字保证。
       const ckey = String(main.name || main.code || '').trim();
-      const custom = ckey
-        ? (CFG.courseColors || {})[ckey] || (CFG.autoColors || {})[ckey] : '';
-      blk.className = 'g-block cc' + (here.length > 1 ? ' multi' : '') +
-        (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
-        (isNow ? ' live' : '');
-      // 颜色本体走 inline style（马卡龙 hex 来自截图采样，CSS 里没有这些档）。
-      // 名字和 code 都没有的课（理论不该出现）用哈希兜底，保证块底不透明。
-      if (custom) blk.style.background = custom;
-      else blk.style.background = MACARON[colorSlot(main.name || main.code || '?')];
+      const custom = ckey ? (CFG.courseColors || {})[ckey] : '';
+      const tea = CFG.colorTheme === 'tea';
+      // 0.1.17 双主题（用户：淡茶色和马卡龙色自主选择）：
+      // · 手动单课色在两套下都优先 —— 有手动色一律挂 .cc（马卡龙浅底深字，
+      //   不会和 c0~c7 深色模式下的深底浅字打架）+ inline 背景。
+      // · 淡茶色：无手动色的课走 c0~c7 槽位（灰调四色系，深浅 CSS 自带）。
+      // · 马卡龙：无手动色的课走 autoColors 分配（同表不重复），哈希兜底。
+      //   🔴 渲染必须读 autoColors —— 0.1.16 只读了手动色，分配结果
+      //      实际靠哈希兜底在显示，10 门课挤 8 个槽必有两门同色（隐性 bug）。
+      if (custom || !tea) {
+        blk.className = 'g-block cc' + (here.length > 1 ? ' multi' : '') +
+          (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
+          (isNow ? ' live' : '');
+        blk.style.background = custom ||
+          (CFG.autoColors || {})[ckey] || MACARON[colorSlot(main.name || main.code || '?')];
+      } else {
+        blk.className = 'g-block c' + colorSlot(main.name) +
+          (here.length > 1 ? ' multi' : '') +
+          (span >= 4 ? ' tall xtall' : (span >= 2 ? ' tall' : ' one')) +
+          (isNow ? ' live' : '');
+        blk.style.background = '';
+      }
       blk.style.gridRow = (p + 2) + ' / span ' + span;
       blk.style.gridColumn = (ci + 1);
       const names = here.map((c) => '<div class="bn">' + esc(c.name) + '</div>').join('');
@@ -1740,6 +1805,10 @@ function renderDayNextInner(date) {
   const nowMin = nowMinute();
   const toMin = hhmmToMin;
 
+  // 0.1.19 三态日程条（Ardot 设计稿定稿）：上课中 / 课间（下一节）/ 课余（预告）。
+  // 2026-11-03 的两处克制（3 小时外不显示、上完前空白占位）被三态设计**有意推翻**：
+  // 全天候都给「下一步该去哪」的答案；倒计时文案只在 1 小时内出现，
+  // 避免「早上八点弹一条还有 9 小时」的噪音。
   let cur = null, next = null;
   for (let p = 0; p < units; p++) {
     const here = occ[dayIdx + ':' + p];
@@ -1747,43 +1816,87 @@ function renderDayNextInner(date) {
     const s = toMin(tt[p] && tt[p][0]);
     const e = toMin(tt[p] && tt[p][1]);
     if (s === null || e === null) continue;        // 时间没配就别瞎算
-    if (nowMin >= s && nowMin <= e) { cur = { p: p, courses: here, s: s, e: e }; break; }
+    if (nowMin >= s && nowMin <= e) { cur = { p: p, courses: here, s: s, e: e }; continue; }
     if (s > nowMin && !next) { next = { p: p, courses: here, s: s, e: e }; break; }
   }
 
   const hhmm = (m) => pad2(Math.floor(m / 60)) + ':' + pad2(m % 60);
   const main = (c) => c.courses[0];
   const where = (c) => roomFull(main(c).room) || '教室没写';
+  const fit = () => fitGridHeight();   // dn-next 行会改变高度，格子得重算
 
   if (cur) {
     const left = cur.e - nowMin;
+    // 上课中也把「下一节」预告带上 —— 课间要做的决定提前给
+    let nxtHtml = '';
+    if (next) {
+      nxtHtml = '<span class="dn-next">下一节 ' + hhmm(next.s) + ' ' +
+        esc(main(next).name) + ' @' + esc(where(next)) + '</span>';
+    }
     el.className = 'daynext live';
     el.innerHTML = '<span class="dn-tag">正在上</span>' +
       '<span class="dn-main"><b>' + esc(main(cur).name) + '</b>' +
-      '<em>' + esc(where(cur)) + ' · ' + hhmm(cur.s) + '–' + hhmm(cur.e) + '</em></span>' +
-      '<span class="dn-side">还有 ' + left + ' 分钟</span>';
+      '<em>' + esc(where(cur)) + ' · ' + hhmm(cur.s) + '–' + hhmm(cur.e) + ' · 还剩 ' + left + ' 分钟</em>' +
+      nxtHtml + '</span>';
     el.hidden = false;
+    fit();
     return;
   }
-  // 2026-11-03 用户要求：没上完之前就是**空白占位** ——
-  // 提示只在上完之后出现，别让「下一节还有 3 小时」这种话挂着。
-  // 占位用 visibility:hidden 保留高度，课表高度因此可以整体压低。
   if (next) {
-    el.className = 'daynext ph';
-    el.innerHTML = '';
+    const gap = next.s - nowMin;
+    // 倒计时只在 1 小时内出现；再远只报时间，不弹「还有 9 小时」
+    const side = gap <= 60 ? gap + ' 分钟后上课' : '';
+    el.className = 'daynext soon';
+    el.innerHTML = '<span class="dn-tag">下一节</span>' +
+      '<span class="dn-main"><b>' + esc(main(next).name) + '</b>' +
+      '<em>' + hhmm(next.s) + ' – ' + esc(where(next)) + '</em></span>' +
+      (side ? '<span class="dn-side">' + side + '</span>' : '');
     el.hidden = false;
+    fit();
     return;
   }
-  // 今天有课但都上完了 —— 说清楚，别让人盯着空白猜
-  const hasAny = Object.keys(occ).some((k) => k.indexOf(dayIdx + ':') === 0);
-  if (hasAny && !next) {
+  // 今天课上完了 / 今天本来无课 —— 预告下一个有课日的第一节（最多往后扫 14 天）
+  let nd = null;
+  for (let off = 1; off <= 14 && !nd; off++) {
+    const d2 = addDays(date, off);
+    const w2 = weekOf(d2);
+    if (w2 < 1 || w2 > total) break;
+    const occ2 = occupancy(w2);
+    const di2 = (d2.getDay() + 6) % 7;
+    for (let p = 0; p < units; p++) {
+      const here2 = occ2[di2 + ':' + p];
+      if (!here2 || !here2.length) continue;
+      const t2s = toMin(tt[p] && tt[p][0]);
+      nd = {
+        name: here2[0].name,
+        room: roomFull(here2[0].room) || '教室没写',
+        time: t2s !== null ? hhmm(t2s) : '',
+        off: off,
+        dow: di2,
+        date: d2,
+      };
+      break;
+    }
+  }
+  if (nd) {
+    // 0.1.20 tag 带上日期（用户真机反馈「周五为啥预告周二」看不懂）：
+    // 预告跳过没课的日子，可能直接落到下周某天 —— 没日期就没法自证算得对。
+    // 例：周五晚上 + 周六日没课 + 下周一恰好没排课 → 「周二 11.24」。
+    const tag = (nd.off === 1 ? '明天' : '周' + DAY_CN[nd.dow]) + ' ' + mdDot(nd.date);
     el.className = 'daynext done';
-    el.innerHTML = '<span class="dn-tag">今天</span>' +
-      '<span class="dn-main"><b>课上完了</b><em>明天见</em></span>';
+    el.innerHTML = '<span class="dn-tag">' + esc(tag) + '</span>' +
+      '<span class="dn-main"><b>' + esc(nd.time + ' ' + nd.name) + '</b>' +
+      '<em>' + esc(nd.room) + '</em></span>';
     el.hidden = false;
+    fit();
     return;
   }
-  el.hidden = true;
+  // 学期结束，真的没有更多课了
+  el.className = 'daynext done';
+  el.innerHTML = '<span class="dn-tag">今天</span>' +
+    '<span class="dn-main"><b>课上完了</b><em>本学期也快结束了</em></span>';
+  el.hidden = false;
+  fit();
 }
 
 // 每分钟刷一次「还有几分钟」。只在页面可见时算 ——
@@ -1848,12 +1961,24 @@ function buildDayPage(date) {
     // key 用课程名（同一门课教务可能拆成多条、code 不同，名字才稳定）。
     // 浅底恒深字（同周视图 .cc 的道理），左边那条 4px 竖线同色。
     const dvKey = String(main.name || main.code || '').trim();
-    const dvColor = (CFG.courseColors || {})[dvKey] || (CFG.autoColors || {})[dvKey]
-      || MACARON[colorSlot(main.name)];
+    const dvCustom = (CFG.courseColors || {})[dvKey] || '';
+    const dvTea = CFG.colorTheme === 'tea';
+    // 日视图同样双主题：手动色 / 马卡龙 → inline 浅底深字；淡茶无手动 → c0~c7。
+    let dvCls = 'dv-card';
+    let dvStyle = '';
+    if (dvCustom) {
+      dvStyle = 'background:' + dvCustom + ';border-left-color:' + dvCustom +
+        ';color:#262122';
+    } else if (!dvTea) {
+      const dvColor = (CFG.autoColors || {})[dvKey] || MACARON[colorSlot(main.name)];
+      dvStyle = 'background:' + dvColor + ';border-left-color:' + dvColor +
+        ';color:#262122';
+    } else {
+      dvCls += ' c' + colorSlot(main.name);
+    }
     return '<div class="dv-item">' +
       '<div class="dv-time"><b>' + (startT || '—') + '</b><i>' + (endT || '') + '</i></div>' +
-      '<div class="dv-card" style="background:' + dvColor +
-        ';border-left-color:' + dvColor + ';color:#262122"' +
+      '<div class="' + dvCls + '" style="' + dvStyle + '"' +
         (live ? ' live' : '') + '">' +
         '<div class="dv-head"><span class="dv-name">' + esc(main.name) + '</span>' +
           '<span class="dv-period">' + periodsText(periods) + '</span></div>' +
@@ -4871,13 +4996,14 @@ $('rowProfile').addEventListener('click', openProfileSheet);
 function displaySummary() {
   const fsLab = { s: '字体小', std: '字体标准', l: '字体大' };
   const manual = Object.keys(CFG.courseColors || {}).length;
+  const theme = CFG.colorTheme === 'tea' ? '淡茶色' : '马卡龙色';
   return (fsLab[['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std']) +
-    ' · ' + (manual ? '自定义配色' : '淡茶色');
+    ' · ' + (manual ? theme + '（部分自定义）' : theme);
 }
 
 function openDisplaySheet() {
   const fs = ['s', 'std', 'l'].indexOf(CFG.fontScale) >= 0 ? CFG.fontScale : 'std';
-  const hasManual = Object.keys(CFG.courseColors || {}).length > 0;
+  const tea = CFG.colorTheme === 'tea';
   $('sheetBody').innerHTML =
     '<div class="sh-title">显示设置</div>' +
     '<div class="palrow"><span class="pallab">字体大小</span>' +
@@ -4886,15 +5012,17 @@ function openDisplaySheet() {
         '<button type="button" class="fs-opt' + (fs === 'std' ? ' on' : '') + '" data-fs="std">标准</button>' +
         '<button type="button" class="fs-opt' + (fs === 'l' ? ' on' : '') + '" data-fs="l">大</button>' +
       '</div></div>' +
-    '<div class="palrow"><span class="pallab">课程块颜色</span>' +
-      '<div class="palopts">' +
-        // 0.1.14 定稿：只剩「淡茶色」一颗 —— 点它 = 清空全部手动覆盖，
-        // 重新随机分配（覆盖用户改过的每一门课）。马卡龙在导入时自动赋予。
-        '<button type="button" class="popt' + (hasManual ? '' : ' on') + '" id="palTea">淡茶色</button>' +
+    '<div class="palrow"><span class="pallab">课程块配色</span>' +
+      // 0.1.17 双主题（用户：淡茶色和马卡龙色自主选择）。
+      // 切换即清空手动单课覆盖（用户 0.1.14 规则：选择则全部覆盖）。
+      '<div class="palopts" id="themeSeg">' +
+        '<button type="button" class="popt' + (tea ? ' on' : '') + '" data-theme="tea">淡茶色</button>' +
+        '<button type="button" class="popt' + (tea ? '' : ' on') + '" data-theme="macaron">马卡龙色</button>' +
       '</div></div>' +
     // 说明放灰字（.sh-sub），不能用 .tip —— 那是红色错误样式（app.css:2281 的规矩）
-    '<p class="sh-sub">导入课表时自动给每门课分配一个颜色，同一张课表里不重复。' +
-    '点「淡茶色」会清掉手动改过的颜色并重新分配；单门课的颜色在课表点开课程详情里选。' +
+    '<p class="sh-sub">「淡茶色」是灰调四色系；「马卡龙」从十个清亮颜色里给每门课随机' +
+    '分配、同一张课表不重复。切换配色会清掉单门课手动改过的颜色；' +
+    '单门课的颜色在课表点开课程详情里选。' +
     '字体大小不改变课表格子里的字 —— 格子宽度是固定的，字号跟着变会撑破。</p>';
   $('sheetMask').hidden = false;
 
@@ -4909,17 +5037,23 @@ function openDisplaySheet() {
       toast(v === 's' ? '已切换为小字号' : v === 'l' ? '已切换为大字号' : '已恢复标准字号');
     });
   });
-  // 「淡茶色」= 全部覆盖：清手动色 + 清自动分配 + 重新随机（ensureAutoColors）。
-  // 弹层开着时下面就能看到整屏效果。
-  $('palTea').addEventListener('click', () => {
-    CFG.courseColors = {};
-    CFG.autoColors = {};
-    store.set(KEY.settings, CFG);
-    ensureAutoColors();
-    renderSchedule();
-    $('meDisplay').textContent = displaySummary();
-    $('palTea').classList.add('on');
-    toast('已重新分配全部课程颜色');
+  // 切换主题 = 全部覆盖（用户 0.1.14 规则）：清手动色 + 清自动分配，
+  // 马卡龙下重新随机。弹层开着时下面就能看到整屏效果。
+  $('sheetBody').querySelectorAll('#themeSeg .popt').forEach((b) => {
+    b.addEventListener('click', () => {
+      const v = b.dataset.theme;
+      if (CFG.colorTheme === v) return;
+      CFG.colorTheme = v;
+      CFG.courseColors = {};
+      CFG.autoColors = {};
+      store.set(KEY.settings, CFG);
+      ensureAutoColors();
+      renderSchedule();
+      $('meDisplay').textContent = displaySummary();
+      $('sheetBody').querySelectorAll('#themeSeg .popt').forEach((x) =>
+        x.classList.toggle('on', x.dataset.theme === v));
+      toast(v === 'tea' ? '已切换为淡茶色配色' : '已切换为马卡龙配色');
+    });
   });
 }
 

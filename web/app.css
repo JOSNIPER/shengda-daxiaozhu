@@ -848,9 +848,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 .daynext {
   display: flex; align-items: center; gap: 10px;
-  /* 7px + scroll 的 7px = 14px，跟下面 `.dayview` 的卡片对齐。
-     以前是 14px（合计 21px），比卡片多出一截，看着像两套排版。 */
-  margin: 0 8px 8px; padding: 10px 12px;
+  /* 0.1.20：上间距 12px —— 提示条和网格之间要有可见间隙（用户真机反馈
+     「跟课表没有间隙」），之前 margin-top 是 0，紧贴网格底边。 */
+  margin: 12px 8px 8px; padding: 10px 12px;
   background: var(--card); border-radius: var(--r); corner-shape: var(--corner-shape);
   font-size: var(--fs-13);
 }
@@ -1973,8 +1973,9 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-family: inherit; font-size: var(--fs-13); font-weight: 500;
 }
 .popt.on {
-  background: var(--card); color: var(--accent); font-weight: 600;
-  box-shadow: 0 1px 2px rgba(56, 42, 40, .08);
+  /* 0.1.17：选中态改主色渐变覆盖（用户：跟上面的字体按钮一样） */
+  background: var(--accent-grad); color: var(--primary-ink); font-weight: 600;
+  box-shadow: var(--accent-glow);
 }
 /* 0.1.6 方案 2 把顶栏的翻周箭头收起来了，弹层里补一对等宽按钮兜底。
    复用 .btn 的材质，只管两等分、间距和比主按钮矮一档的高度。 */
@@ -3117,4 +3118,32 @@ html[data-fs="l"] {
   background: conic-gradient(
     #f8d1c5 0 10%, #f5c9df 0 20%, #efc2a3 0 30%, #f7de97 0 40%, #e0f5ac 0 50%,
     #ace2e9 0 60%, #e3c7f9 0 70%, #c1fcd3 0 80%, #d2dcf4 0 90%, #f3b6b4 0);
+}
+
+/* ============ 三态日程条 + 当前节次行横带（0.1.19） ============ */
+/* 课间态（下一节）：暖橙底 + 橙 tag，和上课中的蓝态拉开语义 */
+.daynext.soon { background: #FAEEDA; }
+.daynext.soon .dn-tag { background: #BA7517; color: #FBF9F6; }
+.daynext.soon .dn-side { color: #854F0B; font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+  .daynext.soon { background: rgba(250, 238, 218, .12); }
+  .daynext.soon .dn-side { color: #FAC775; }
+}
+/* 上课中态的「下一节」预告小字（dn-main 是 flex column，块级直排） */
+.dn-next {
+  display: block; font-size: var(--fs-11); color: var(--sub);
+  margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 当前节次行横带：竖（today 泳道）+ 横（进行中）十字定位「现在」。
+   opacity 挂在层上 —— 里面的标签自己拉回全不透明。 */
+.g-nowrow {
+  grid-column: 1 / -1;
+  background: var(--accent); opacity: .07;
+  border-radius: 8px; margin: 0 2px;
+}
+.g-nowrow-tag {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: var(--fs-10); font-weight: 600;
+  color: var(--accent); opacity: 1;
+  background: var(--card); padding: 1px 8px; border-radius: var(--r-chip);
 }

@@ -1,17 +1,15 @@
 {
   "name": "达小助",
-  "version": "0.1.16",
-  "code": 76,
+  "version": "0.1.21",
+  "code": 81,
   "date": "2026-11-20",
-  "size": 547216,
-  "sha256": "6b8c6652fbc73b78d6c459819d4a44ab5e4d675a43c820e3db538a4122e77fba",
-  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.16/daxiaozhu-0.1.16.apk",
-  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.16/daxiaozhu-0.1.16.apk",
+  "size": 551312,
+  "sha256": "9ceec34270516545001c391d081bd61d6b2e3fce9fc3cb3349910e4334e632aa",
+  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.21/daxiaozhu-0.1.21.apk",
+  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.21/daxiaozhu-0.1.21.apk",
   "page": "https://JOSNIPER.github.io/shengda-daxiaozhu/",
   "notes": [
-    "修复：日视图的课程颜色和周视图对不上，现在都用同一套马卡龙配色",
-    "修复：同一门课拆成多条记录时颜色不一致 —— 颜色改按课程名生效",
-    "上课时间弹窗：说明文字前置，按钮只留「按日期自动 / 标准作息 / 夏令作息」"
+    "提示条和课程表之间留出间隙，不再贴在一起；课表依然刚好铺满屏幕"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.12 的 APK 发布到 Releases，apk/apk_cn 指向同一份包。0.1.12 起「检查更新」是纯外链入口，App 不再读取本清单做自更新。"
 }
