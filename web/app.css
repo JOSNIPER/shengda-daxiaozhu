@@ -596,10 +596,14 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
 
 .g-block {
   border-radius: var(--r-ctl);
-  /* 四边都收紧：格子本来就窄，留白比字还贵 */
-  padding: 4px 2px 3px;
+  /* 0.1.13 定稿：左右 2→4px（用户：「不要贴边」）。格子本来就窄，
+     6px 一档会把课名每行挤掉一个字，4px 是不贴边和不折行的平衡。 */
+  padding: 4px 4px 3px;
   overflow: hidden;
   display: flex; flex-direction: column; gap: 1px;
+  /* 0.1.13 定稿：块内三行全部水平居中（用户）。折行居中后
+     text-wrap: balance 的「两头一样长」效果也更对称。 */
+  text-align: center;
   min-height: 0;
   position: relative;
   border: 0;
@@ -631,7 +635,10 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
               0 5px 12px -6px rgba(56, 42, 40, .30);
 }
 .g-block .bn {
-  font-size: var(--fs-13); font-weight: 600; line-height: 1.18;
+  /* 0.1.13 定稿（用户规格：课名突出、bold、行高 1.2）：
+     字号 15px 在 44px 格里一行只装 2.5 个字，2 行 clamp 只剩 5 个字 ——
+     「突出课程名」用字重 700 实现，字号保持 fs-13（块内仍是最大的）。 */
+  font-size: var(--fs-13); font-weight: 700; line-height: 1.2;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; word-break: break-all;
   /* 折行尽量「两头一样长」。不写的话「线性代数」会断成「线性代 / 数」，
@@ -654,17 +661,16 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
    margin-top:auto 把教室压到块底，连堂块越高、整列教室号越对齐，
    「下一节去哪」扫一眼就有答案；字号提一档、完全不透明、中字重，跟老师拉开主次。 */
 .g-block .br {
-  margin-top: 0;
-  font-size: var(--fs-11); line-height: 1.15; opacity: 1; font-weight: 500;
+  /* 0.1.13 定稿（用户规格：地点≈课名的 90%、常规偏粗、90% 不透明，
+     与课名紧密排列 margin-top 2px）。@ 前缀保留（用户明确要求）。 */
+  margin-top: 2px;
+  font-size: var(--fs-12); line-height: 1.15; opacity: .9; font-weight: 500;
   /* 🔴 不能用 break-all：`@01B 104` 会被切成「@01B 10 / 4」，
      房间号断在中间比截断还糟。只在空格处折行。 */
   word-break: normal; overflow-wrap: break-word;
   max-height: 2.4em; overflow: hidden;
   flex: 0 0 auto;
 }
-/* 第一间教室（.brf 由 JS 挂）吃 auto —— 贴底的是「教室那一组」整体。
-   🔴 不能每个 .br 都给 auto：flex 会把剩余空间平分成多条缝，两间教室被拆开。 */
-.g-block .br.brf { margin-top: auto; padding-top: 2px; }
 /* 一门课给了两个教室（`02B506(D机房),02B505(C机房)`）时，教室行会变成两行。
    压小半档、行高压紧，两行教室 + 课名 + 老师才塞得进 56px 的单节格。
    两行时楼栋和房间号之间的空格也去掉了（见 buildWeekGrid），所以这里
@@ -673,9 +679,12 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   font-size: var(--fs-10); line-height: 1.08; max-height: 1.2em;
   white-space: nowrap;
 }
-/* 老师再退一档：教室贴底提亮后，老师是三项里最弱的（第三方课表同款层级） */
+/* 0.1.13 定稿（用户规格：老师 70% 字号、50% 灰、垫底）：
+   margin-top:auto —— 连堂块有剩余空间时老师沉到块底，单节格子
+   空间不够时自然紧跟在地点下方（auto 在挤的容器里就是 0）。 */
 .g-block .bt {
-  font-size: var(--fs-10); line-height: 1.15; opacity: .6;
+  margin-top: auto;
+  font-size: var(--fs-10); line-height: 1.15; opacity: .5;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
 }
@@ -2853,6 +2862,8 @@ body { background-image: var(--bg-grad); background-repeat: no-repeat;
   border-bottom: 0;
 }
 .gradeitem + .gradeitem { margin-top: 4px; }
+/* 0.1.14 绩点 < 2.0 挂科边缘预警：只有真正危险才红，平时灰字不抢分数的戏 */
+.gi-score .gpa-warn { color: var(--danger); }
 .gradeitem:first-child { margin-top: 6px; }
 .gradeitem:last-child { margin-bottom: 6px; }
 /* 0.1.12：成绩改成全量铺开，「还有 N 门没显示」按钮连同这条样式一起撤了。

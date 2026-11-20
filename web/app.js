@@ -22,8 +22,8 @@ const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
    build_apk.py 里，两处各写一遍，迟早会出现「软件里显示 0.1.0、装上去是 0.1.1」
    这种没法解释的事。现在 build_apk.py 和 version.json 都从这里读。
    code 是整数，只增不减：比版本号字符串靠谱（"0.10.0" < "0.9.0" 是字符串比较的经典坑）。 */
-const APP_VERSION = '0.1.13';
-const APP_CODE = 73;
+const APP_VERSION = '0.1.14';
+const APP_CODE = 74;
 
 /* 两套运行环境共用这一份界面：
      NATIVE=false  手机浏览器 + 电脑上的 bridge.py（凭据用 Windows DPAPI 存在电脑）
@@ -1590,29 +1590,27 @@ function buildWeekGrid(week) {
       // 撞课（一格两门）时不放教室和教师 —— 分不清哪个属于哪门课，
       // 写了反而误导。单节的格子也照常写：字小一点塞得下，
       // 「这节课在哪个教室」比「课名多显示两个字」重要。
+      // 0.1.13 课程块布局定稿（用户给了明确规格）：
+      // DOM 顺序 课名 → 地点 → 老师；老师 margin-top:auto 垫底 ——
+      // 连堂块高时老师沉到块底（「影子」位），单节格子老师隐藏后地点紧跟课名。
+      // 地点保留 @ 前缀（用户明确要求保留）。多个老师只写第一个：`张强,苏博`
+      // 在 27px 宽的角落只能显示成「张强,...」，完整名单在详情面板里。
       let foot = '';
       if (here.length === 1) {
-        // 0.1.13 教室贴底：老师写在前（贴着课名），教室写在最后（.br 用
-        // margin-top:auto 压到块底）。连堂块越高，整列教室号底部对齐越好认，
-        // 「下一节去哪」扫一眼就有答案。单节格子老师隐藏后教室仍然贴底。
-        // 多个老师只写第一个。`张强,苏博` 在 27px 宽的角落只能显示成
-        // 「张强,...」，还不如干净显示一个；完整名单在详情面板里。
-        const tname = String(main.teacher || '').split(/[,，、]/)[0].trim();
-        if (tname) foot += '<div class="bt">' + esc(tname) + '</div>';
         if (main.room) {
           // 一间一行。两个教室就两行 —— 不能只写第一个（用户 2026-10-19 提的）。
           // 两间时把「楼栋 房间」中间那个空格去掉，**并且不要 @ 前缀**：
           // 格子只有 44px 宽，`@02B506` 在手机 WebView 里正好差几个像素，
           // 末尾的 6 被裁掉一半（用户 2026-10-19 第二次截图）。
-          // 🔴 brf 只给第一间教室：贴底的 margin-top:auto 挂在它身上 ——
-          //    如果两行都吃 auto，flex 会把剩余空间平分成两条缝，教室被拆开。
           const rl = roomList(main.room);
-          rl.forEach((r, i) => {
+          rl.forEach((r) => {
             const two = rl.length > 1;
-            foot += '<div class="br' + (two ? ' br2' : '') + (i === 0 ? ' brf' : '') + '">' +
+            foot += '<div class="br' + (two ? ' br2' : '') + '">' +
               (two ? '' : '@') + esc(two ? r.replace(/\s+/g, '') : r) + '</div>';
           });
         }
+        const tname = String(main.teacher || '').split(/[,，、]/)[0].trim();
+        if (tname) foot += '<div class="bt">' + esc(tname) + '</div>';
       }
       blk.innerHTML = names + foot;
       // 0.1.7：不再写 data-par（右下角单/双周角标已按用户要求删除）。
@@ -2177,8 +2175,10 @@ function openWeekSheet() {
   // 挤得每格只剩 30px。它和「跳周」都是「课表怎么看」的偏好，语义正好放一起。
   if (ttIsNow()) {
     const fd = !!CFG.fiveDay;
+    // 0.1.13 文案（用户）：按钮直接说动作「显示周末 / 隐藏周末」，
+    // 不再带「（当前 5 天）」这类状态回声 —— 按钮旁边就是本周的样子。
     html += '<div class="sheetbtns">' +
-      '<button class="btn" id="wkFiveDay">' + (fd ? '显示 7 天（当前 5 天）' : '只看工作日（5 天）') +
+      '<button class="btn" id="wkFiveDay">' + (fd ? '显示周末' : '隐藏周末') +
       '</button>' +
       '<button class="btn" id="wkToCalendar">看校历</button>' +
       '<button class="btn" id="wkToSemester">学期设置</button></div>';
@@ -2196,7 +2196,7 @@ function openWeekSheet() {
       store.set(KEY.settings, CFG);
       $('sheetMask').hidden = true;
       renderSchedule();
-      toast(CFG.fiveDay ? '已切换为只看工作日' : '已显示整周 7 天');
+      toast(CFG.fiveDay ? '已隐藏周末' : '已显示周末');
     });
   }
   // 「课程块配色」0.1.13 挪进了「我的 → 显示设置」（绑定也在那边），
@@ -2871,10 +2871,27 @@ function renderGrades() {
     }
     const meta = [esc(c.credit) + ' 学分', nature ? esc(nature) : '']
       .filter(Boolean).join(' · ') + tag;
+    // 0.1.13「全部」视图下条目补学期归属（用户选的改进）：筛选了某个学期
+    // 就不需要每条再写一遍。成绩数据是「2025-2026 1」短格式，termParts 只认
+    // 「…学年第 X 学期」长格式 —— 这里兼容两种，解析不出就原样显示。
+    let semTag = '';
+    if (gradeTerm === 'all' && c.term) {
+      const s = String(c.term);
+      const longM = termParts(s);
+      const shortM = /(\d{4})\s*-\s*(\d{4})\s*第?\s*([12一二])/.exec(s);
+      const label = longM ? gradeName(longM.y, longM.s)
+        : (shortM ? gradeName(Number(shortM[1]), (shortM[3] === '一' || shortM[3] === '1') ? 1 : 2) : '');
+      semTag = ' · ' + esc(label || s);
+    }
+    // 绩点 < 2.0 标红：挂科边缘预警 —— 分数本身已有三档色，绩点只在
+    // 真正危险时才红，平时维持灰字，不抢分数的戏。
+    const gpaN = parseFloat(c.gpa);
+    const gpaCls = (!isNaN(gpaN) && gpaN > 0 && gpaN < 2) ? ' class="gpa-warn"' : '';
     return '<div class="gradeitem">' +
       '<div class="gi-main"><div class="gi-name">' + esc(c.name) + '</div>' +
-      '<div class="gi-meta">' + meta + '</div></div>' +
-      '<div class="gi-score' + cls + '"><b>' + esc(score) + '</b><span>绩点 ' + esc(c.gpa) + '</span></div>' +
+      '<div class="gi-meta">' + meta + semTag + '</div></div>' +
+      '<div class="gi-score' + cls + '"><b>' + esc(score) + '</b><span' + gpaCls +
+      '>绩点 ' + esc(c.gpa) + '</span></div>' +
       '</div>';
   }).join('') || ('<div class="gradeitem"><div class="gi-main"><div class="gi-meta">' +
     (q ? '没搜到「' + esc(gradeFind.trim()) + '」' : '这个学期没有成绩记录') +

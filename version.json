@@ -1,22 +1,19 @@
 {
   "name": "达小助",
-  "version": "0.1.13",
-  "code": 73,
+  "version": "0.1.14",
+  "code": 74,
   "date": "2026-11-20",
-  "size": 543120,
-  "sha256": "ea6351dc31bf5b474a1d4e687fb7f58a4f2072453c250491d07dc38ad519f84d",
-  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.13/daxiaozhu-0.1.13.apk",
-  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.13/daxiaozhu-0.1.13.apk",
+  "size": 547216,
+  "sha256": "cdea43ea3a0a89ff090c433f1355d97a5db69718b22064f06d72a34e52f04540",
+  "apk": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.14/daxiaozhu-0.1.14.apk",
+  "apk_cn": "https://github.com/JOSNIPER/shengda-daxiaozhu/releases/download/v0.1.14/daxiaozhu-0.1.14.apk",
   "page": "https://JOSNIPER.github.io/shengda-daxiaozhu/",
   "notes": [
-    "「显示设置」来了：字体大小三档（小/标准/大），课表格子不受影响",
-    "每门课可以自己选颜色：课表里点开课程详情，一排马卡龙色点哪个变哪个",
-    "课程块重排：教室贴到色块底部、更醒目，老师退后，课名照样最重",
-    "课表表头简化：月份写在左上角，日期只写日号，跨月的周也不会看错",
-    "顶栏更干净：刷新按钮收进「我的」，重复的跳周入口删掉",
-    "「我的」页重排：头像置顶，设置按「账号与同步 / 通用」分组",
-    "暂时收起了「该办的事」、账号管理里的智慧门户和底部功能页",
-    "课程块配色「官网色」改叫「淡茶色」"
+    "课程块按新排版定稿：课名加粗居中，@地点紧跟放大，老师淡灰垫底",
+    "跳周弹层的按钮改成「显示周末 / 隐藏周末」，一眼看懂点下去会怎样",
+    "成绩全部视图里，每门课后面标了学期归属（比如「大三上」）",
+    "绩点低于 2.0 会标红，挂科边缘早知道",
+    "「清除本机缓存」改成红字，提醒这是不可逆操作"
   ],
   "_w9": "本文件每次打包由 build_apk.py 重写 size/sha256/date 与三个下载地址；0.1.12 的 APK 发布到 Releases，apk/apk_cn 指向同一份包。0.1.12 起「检查更新」是纯外链入口，App 不再读取本清单做自更新。"
 }
